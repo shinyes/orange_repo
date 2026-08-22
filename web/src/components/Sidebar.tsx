@@ -8,13 +8,13 @@ import {
   FolderIcon,
   FolderPlusIcon,
   ListChecksIcon,
+  LogOutIcon,
   PencilIcon,
   PlusIcon,
   SearchIcon,
   SettingsIcon,
   TrashIcon,
   UploadIcon,
-  XIcon,
 } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
@@ -66,8 +66,9 @@ export function Sidebar({ onLogout, onOpenSettings }: { onLogout: () => void; on
         <Button variant="ghost" size="icon-sm" title="修改密码" onClick={onOpenSettings}>
           <SettingsIcon />
         </Button>
-        <Button variant="ghost" size="icon-sm" title="退出登录" onClick={onLogout}>
-          <XIcon />
+        <Button variant="outline" size="sm" title="退出登录" onClick={onLogout}>
+          <LogOutIcon data-icon="inline-start" />
+          退出
         </Button>
       </div>
 
