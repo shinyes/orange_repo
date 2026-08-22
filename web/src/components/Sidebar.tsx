@@ -137,10 +137,9 @@ export function Sidebar({ onLogout, onOpenSettings }: { onLogout: () => void; on
 
       <Separator className="mt-1" />
 
-      {/* 目录树 + 题目列表 */}
+      {/* 目录树 + 题目列表（未选目录时显示全部题目；点击已选目录可取消筛选） */}
       <ScrollArea className="min-h-0 flex-1">
         <div className="px-2 py-1">
-          <AllProblemsNode />
           <DirectoryTreeView
             level={0}
             onRename={setRenameDir}
@@ -357,35 +356,6 @@ function TagBar() {
 
 // ---------- 目录树 ----------
 
-function AllProblemsNode() {
-  const { filter, patchFilter, goHome, view } = useAppState()
-  const dirsQuery = useQuery({ queryKey: ['directories'], queryFn: api.directories })
-  const total = countTree(dirsQuery.data?.directories ?? [])
-  const active = filter.dirId === null
-  return (
-    <button
-      type="button"
-      onClick={() => {
-        patchFilter({ dirId: null })
-        if (view.kind !== 'empty') goHome()
-      }}
-      className={`mb-0.5 flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-sm ${
-        active ? 'bg-accent font-medium text-accent-foreground' : 'hover:bg-muted'
-      }`}
-    >
-      <FolderIcon className="size-4 shrink-0 text-primary" />
-      <span className="flex-1 truncate">全部题目</span>
-      <span className="text-xs text-muted-foreground">{total}</span>
-    </button>
-  )
-}
-
-function countTree(nodes: DirectoryNode[]): number {
-  let n = nodes.reduce((acc, d) => acc + d.problemCount, 0)
-  for (const d of nodes) n += countTree(d.children)
-  return n
-}
-
 function DirectoryTreeView(props: {
   level: number
   onRename: (d: DirectoryNode) => void
@@ -433,8 +403,9 @@ function DirRow(props: {
         <button
           type="button"
           className="flex min-w-0 flex-1 items-center gap-1.5 py-1.5 text-left text-sm"
+          title={active ? '再次点击取消目录筛选，显示全部题目' : undefined}
           onClick={() => {
-            patchFilter({ dirId: node.id })
+            patchFilter({ dirId: active ? null : node.id })
             if (view.kind !== 'empty') goHome()
           }}
         >
