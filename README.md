@@ -25,6 +25,18 @@ go run . -seed          # 首次可加 -seed 导入示例包
 
 访问 `http://localhost:5173`（开发）或 `http://localhost:8080`（生产）。
 
+## Docker 部署
+
+推送 `v*` 版本标签时，GitHub Actions 自动构建镜像发布到 GHCR，并创建对应 Release。
+
+```bash
+docker compose -f deploy/docker-compose.yml up -d
+# 或手动：
+docker run -d -p 8080:8080 -v orangerepo-data:/app/data ghcr.io/shinyes/orange_repo:v1.0.0
+```
+
+镜像基于 distroless/static、非 root（uid 65532）运行；数据在容器内 `/app/data`。
+
 **首次启动**自动创建单用户密码，默认 `123456`，请登录后在左上角「⚙」中修改。
 数据存储在 `data/` 目录（SQLite + 上传图片），删除该目录即可重置。
 

@@ -1,0 +1,9 @@
+.git
+.github
+data
+docs
+web/node_modules
+web/dist
+*.exe
+*.zip
+*.tar.gz

@@ -1,0 +1,17 @@
+# OrangeRepo 生产部署示例
+# docker compose up -d   →  http://localhost:8080（默认密码 123456）
+services:
+  orangerepo:
+    image: ghcr.io/shinyes/orange_repo:v1.0.0
+    container_name: orangerepo
+    ports:
+      - "8080:8080"
+    volumes:
+      # 使用命名卷：容器以非 root(65532) 运行，命名卷首次挂载会自动继承属主。
+      # 如改用宿主机目录绑定（如 ./data:/app/data），需先执行：
+      #   mkdir -p data && sudo chown -R 65532:65532 data
+      - orangerepo-data:/app/data
+    restart: unless-stopped
+
+volumes:
+  orangerepo-data:
