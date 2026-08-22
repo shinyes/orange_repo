@@ -7,9 +7,11 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      # 使用命名卷：容器以非 root(65532) 运行，命名卷首次挂载会自动继承属主。
-      # 如改用宿主机目录绑定（如 ./data:/app/data），需先执行：
+      # 命名卷（默认）：容器以非 root(65532) 运行，命名卷首次挂载自动继承属主，免配置。
+      # 如要绑定宿主机目录（./data:/app/data），需先让 uid 65532 可写，二选一：
       #   mkdir -p data && sudo chown -R 65532:65532 data
+      #   sudo setfacl -m u:65532:rwx data
+      # Windows/macOS 的 Docker Desktop 文件共享通常无需上述操作。
       - orangerepo-data:/app/data
     restart: unless-stopped
 
