@@ -1,0 +1,18 @@
+# runtime
+data/
+*.db
+*.db-journal
+*.log
+
+# node / vite
+web/node_modules/
+web/dist/
+
+# go
+orange_repo.exe
+*.exe
+*.test
+
+# misc
+.DS_Store
+Thumbs.db
