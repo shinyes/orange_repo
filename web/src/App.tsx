@@ -78,7 +78,7 @@ function RightPane() {
 function EmptyState() {
   const problems = useQuery({ queryKey: ['problems', 'all'], queryFn: () => api.problems({ q: '', tags: [], type: '', dirId: null, recursive: true }) })
   const dirs = useQuery({ queryKey: ['directories'], queryFn: api.directories })
-  const tags = useQuery({ queryKey: ['tags'], queryFn: api.tags })
+  const tags = useQuery({ queryKey: ['tags'], queryFn: () => api.tags() })
   const trainings = useQuery({ queryKey: ['trainings'], queryFn: api.trainings })
   const practices = useQuery({ queryKey: ['practices'], queryFn: api.practices })
 

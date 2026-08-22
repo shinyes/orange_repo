@@ -381,8 +381,8 @@ func scanProblemSummaries(rows *sql.Rows) ([]model.ProblemSummary, error) {
 	return out, rows.Err()
 }
 
-// ListProblems 按过滤条件列出题目摘要。
-func (s *Store) ListProblems(f ProblemFilter) ([]model.ProblemSummary, error) {
+// problemWhere 构造题目过滤 SQL。withTags=false 时忽略标签条件（供 facet 统计使用）。
+func (s *Store) problemWhere(f ProblemFilter, withTags bool) (string, []any, error) {
 	where := []string{"1=1"}
 	var args []any
 	if f.Q != "" {
@@ -390,9 +390,11 @@ func (s *Store) ListProblems(f ProblemFilter) ([]model.ProblemSummary, error) {
 		where = append(where, `(title LIKE ? ESCAPE '\' OR tags_json LIKE ? ESCAPE '\')`)
 		args = append(args, like, like)
 	}
-	for _, t := range f.Tags {
-		where = append(where, `tags_json LIKE ? ESCAPE '\'`)
-		args = append(args, `%"`+escapeLike(t)+`"%`)
+	if withTags {
+		for _, t := range f.Tags {
+			where = append(where, `tags_json LIKE ? ESCAPE '\'`)
+			args = append(args, `%"`+escapeLike(t)+`"%`)
+		}
 	}
 	if f.Type != "" {
 		where = append(where, `type=?`)
@@ -403,7 +405,7 @@ func (s *Store) ListProblems(f ProblemFilter) ([]model.ProblemSummary, error) {
 		if f.Recursive {
 			desc, err := s.descendantIDs(*f.DirID)
 			if err != nil {
-				return nil, err
+				return "", nil, err
 			}
 			ids = append(ids, desc...)
 		}
@@ -420,8 +422,16 @@ func (s *Store) ListProblems(f ProblemFilter) ([]model.ProblemSummary, error) {
 			args = append(args, id)
 		}
 	}
-	rows, err := s.DB.Query(`SELECT `+problemSummaryCols+` FROM problems WHERE `+
-		strings.Join(where, " AND ")+` ORDER BY id DESC`, args...)
+	return strings.Join(where, " AND "), args, nil
+}
+
+// ListProblems 按过滤条件列出题目摘要。
+func (s *Store) ListProblems(f ProblemFilter) ([]model.ProblemSummary, error) {
+	where, args, err := s.problemWhere(f, true)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.DB.Query(`SELECT `+problemSummaryCols+` FROM problems WHERE `+where+` ORDER BY id DESC`, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -521,35 +531,102 @@ func (s *Store) CountProblems() (int, error) {
 
 // ---------- 标签 ----------
 
-// TagCount 标签及使用数。
+// TagCount 标签及动态命中数。
 type TagCount struct {
 	Tag   string `json:"tag"`
 	Count int    `json:"count"`
 }
 
-// ListTags 汇总全部题目标签，按数量降序、名称升序。
-func (s *Store) ListTags() ([]TagCount, error) {
-	rows, err := s.DB.Query(`SELECT tags_json FROM problems`)
+// superset 判断 set 是否为 sub 的超集（sub ⊆ set）。
+func superset(set, sub map[string]bool) bool {
+	for k := range sub {
+		if !set[k] {
+			return false
+		}
+	}
+	return true
+}
+
+// ListTagFacets 动态 facet 统计（电商筛选栏语义）：
+//
+//   - 基底过滤 = f 去掉标签条件后的全部条件（q/类型/目录等）；
+//   - 对候选标签 T：count = 满足基底过滤、且标签集合包含 effectiveTags(T) 的题目数，
+//     其中 T 已选中时 effectiveTags(T) = 选中集去掉 T（预览"取消勾选后还剩几题"），
+//     T 未选中时 effectiveTags(T) = 选中集加上 T（预览"点下去能筛出几题"）；
+//   - total = 满足完整过滤（含全部选中标签，AND）的题目数。
+//
+// 空过滤时退化为全局计数，与旧行为兼容。
+func (s *Store) ListTagFacets(f ProblemFilter) ([]TagCount, int, error) {
+	where, args, err := s.problemWhere(f, false)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
+	}
+	rows, err := s.DB.Query(`SELECT tags_json FROM problems WHERE `+where, args...)
+	if err != nil {
+		return nil, 0, err
 	}
 	defer rows.Close()
-	counter := map[string]int{}
+
+	selected := map[string]bool{}
+	for _, t := range f.Tags {
+		selected[t] = true
+	}
+	candidates := map[string]bool{} // universe ∪ selected
+	tagSets := make([]map[string]bool, 0, 64)
 	for rows.Next() {
 		var tagsJSON string
 		if err := rows.Scan(&tagsJSON); err != nil {
-			return nil, err
+			return nil, 0, err
 		}
+		set := map[string]bool{}
 		for _, t := range decodeTags(tagsJSON) {
-			counter[t]++
+			set[t] = true
+			candidates[t] = true
 		}
+		tagSets = append(tagSets, set)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	out := make([]TagCount, 0, len(counter))
-	for tag, c := range counter {
-		out = append(out, TagCount{Tag: tag, Count: c})
+	for t := range selected {
+		candidates[t] = true
+	}
+
+	counts := map[string]int{}
+	total := 0
+	for _, set := range tagSets {
+		matchAll := superset(set, selected)
+		if matchAll {
+			total++
+		}
+		for t := range candidates {
+			var want map[string]bool
+			if selected[t] {
+				if len(selected) == 1 {
+					want = map[string]bool{}
+				} else {
+					want = map[string]bool{}
+					for k := range selected {
+						if k != t {
+							want[k] = true
+						}
+					}
+				}
+			} else {
+				want = map[string]bool{t: true}
+				for k := range selected {
+					want[k] = true
+				}
+			}
+			if superset(set, want) {
+				counts[t]++
+			}
+		}
+	}
+
+	out := make([]TagCount, 0, len(candidates))
+	for tag := range candidates {
+		out = append(out, TagCount{Tag: tag, Count: counts[tag]})
 	}
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].Count != out[j].Count {
@@ -557,5 +634,5 @@ func (s *Store) ListTags() ([]TagCount, error) {
 		}
 		return out[i].Tag < out[j].Tag
 	})
-	return out, nil
+	return out, total, nil
 }

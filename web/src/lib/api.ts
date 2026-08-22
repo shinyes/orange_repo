@@ -89,8 +89,9 @@ export const api = {
   moveProblem: (id: number, directoryId: number | null) =>
     req<void>(`/api/problems/${id}/directory`, json({ method: 'PUT', body: JSON.stringify({ directoryId }) })),
 
-  // ---- 标签 ----
-  tags: () => req<{ tags: TagCount[] }>('/api/tags'),
+  // ---- 标签（动态 facet 计数，随过滤上下文联动） ----
+  tags: (f?: ProblemFilterState) =>
+    req<{ tags: TagCount[]; total: number }>(`/api/tags${f ? filterQuery(f) : ''}`),
 
   // ---- 图片 ----
   uploadImage: async (file: File): Promise<{ url: string }> => {

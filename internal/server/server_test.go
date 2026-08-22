@@ -167,6 +167,20 @@ func TestProblemCRUDAndFilter(t *testing.T) {
 	if got := len(list["problems"].([]any)); got != 1 {
 		t.Fatalf("search = %d results, want 1", got)
 	}
+	// 标签 facet 端点：基底=全部题；选中「语法」后 total=2，语法预览取消=3，入门需同时含=0
+	resp, ft := doJSON(t, app, "GET", "/api/tags?tags=%E8%AF%AD%E6%B3%95", cookie, nil)
+	if resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("tags facet = %d %v", resp.StatusCode, ft)
+	}
+	fm := map[string]float64{}
+	for _, item := range ft["tags"].([]any) {
+		tc := item.(map[string]any)
+		fm[tc["tag"].(string)] = tc["count"].(float64)
+	}
+	if fm["语法"] != 3 || fm["入门"] != 0 || int(ft["total"].(float64)) != 2 {
+		t.Fatalf("facet result wrong: %v total=%v", fm, ft["total"])
+	}
+
 	// 目录树计数
 	_, tree := doJSON(t, app, "GET", "/api/directories", cookie, nil)
 	dirs := tree["directories"].([]any)

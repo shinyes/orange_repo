@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
   ChevronRightIcon,
@@ -233,31 +233,124 @@ function ExportDropdown() {
   )
 }
 
-// ---------- 标签栏 ----------
+// ---------- 标签栏（多选 AND 筛选 · 动态 facet 计数） ----------
+
+const TAG_SEARCH_THRESHOLD = 20
 
 function TagBar() {
   const { filter, patchFilter } = useAppState()
-  const tagsQuery = useQuery({ queryKey: ['tags'], queryFn: api.tags })
-  const tags = tagsQuery.data?.tags ?? []
-  if (tags.length === 0) return null
+  const [search, setSearch] = useState('')
+  const [sortBy, setSortBy] = useState<'count' | 'name'>('count')
+  const tagsQuery = useQuery({
+    queryKey: ['tags', filter],
+    queryFn: () => api.tags(filter),
+    placeholderData: keepPreviousData,
+  })
+
+  const raw = tagsQuery.data?.tags ?? []
+  const total = tagsQuery.data?.total
+  if (!tagsQuery.isSuccess && raw.length === 0) return null
+  if (raw.length === 0 && filter.tags.length === 0) return null
+
+  // 未选中且计数为 0 的标签不展示，减少噪音；已选中的始终保留（可点 × 取消）
+  const visible = raw
+    .filter((t) => t.count > 0 || filter.tags.includes(t.tag))
+    .filter((t) => !search || t.tag.toLowerCase().includes(search.toLowerCase()))
+    .sort((x, y) =>
+      sortBy === 'name'
+        ? x.tag.localeCompare(y.tag, 'zh-Hans-CN')
+        : y.count - x.count || x.tag.localeCompare(y.tag, 'zh-Hans-CN'),
+    )
+
+  function toggle(tag: string) {
+    patchFilter({ tags: filter.tags.includes(tag) ? filter.tags.filter((x) => x !== tag) : [...filter.tags, tag] })
+  }
+
   return (
-    <div className="max-h-28 overflow-y-auto px-3 pt-2 pb-1">
-      <div className="flex flex-wrap gap-1">
-        {tags.map((t) => {
-          const active = filter.tags.includes(t.tag)
-          return (
+    <div className="px-3 pt-2 pb-1">
+      {/* 头部：标题 + 命中数 + 排序 + 清空 */}
+      <div className="mb-1 flex items-center gap-1.5">
+        <span className="text-xs font-medium text-muted-foreground">标签</span>
+        {typeof total === 'number' && (
+          <Badge variant="secondary" className="h-4 px-1.5 text-[10px] tabular-nums">
+            命中 {total}
+          </Badge>
+        )}
+        <div className="ml-auto flex items-center gap-0.5">
+          {(
+            [
+              ['count', '数量'],
+              ['name', '名称'],
+            ] as ['count' | 'name', string][]
+          ).map(([v, label]) => (
             <button
-              key={t.tag}
+              key={v}
               type="button"
-              onClick={() => patchFilter({ tags: active ? filter.tags.filter((x) => x !== t.tag) : [...filter.tags, t.tag] })}
+              onClick={() => setSortBy(v)}
+              className={`rounded px-1 py-0.5 text-[10px] ${
+                sortBy === v ? 'bg-muted font-medium text-foreground' : 'text-muted-foreground hover:text-foreground'
+              }`}
             >
-              <Badge variant={active ? 'default' : 'outline'} className="cursor-pointer text-xs hover:bg-muted">
-                {t.tag} · {t.count}
-              </Badge>
+              {label}
             </button>
-          )
-        })}
+          ))}
+        </div>
       </div>
+
+      {/* 已选标签置顶：单个 × 移除 */}
+      {filter.tags.length > 0 && (
+        <div className="mb-1.5 flex flex-wrap items-center gap-1">
+          {filter.tags.map((t) => (
+            <Badge key={t} variant="default" className="gap-1 text-xs">
+              {t}
+              <button type="button" className="ml-0.5 rounded-full hover:text-destructive" onClick={() => toggle(t)} title="移除该标签">
+                ×
+              </button>
+            </Badge>
+          ))}
+          <button
+            type="button"
+            className="text-[10px] text-muted-foreground underline-offset-2 hover:text-destructive hover:underline"
+            onClick={() => patchFilter({ tags: [] })}
+          >
+            清空
+          </button>
+        </div>
+      )}
+
+      {/* 标签较多时提供标签内搜索 */}
+      {raw.length > TAG_SEARCH_THRESHOLD && (
+        <div className="relative mb-1.5">
+          <SearchIcon className="pointer-events-none absolute top-1/2 left-2 size-3 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder={`在 ${raw.length} 个标签中查找…`}
+            className="h-7 pl-6 text-xs"
+          />
+        </div>
+      )}
+
+      {/* 候选标签 chips（多选 AND） */}
+      {visible.length === 0 ? (
+        <div className="py-1 text-xs text-muted-foreground">{search ? '没有匹配的标签' : ''}</div>
+      ) : (
+        <div className="flex max-h-40 flex-wrap gap-1 overflow-y-auto">
+          {visible.map((t) => {
+            const active = filter.tags.includes(t.tag)
+            return (
+              <button key={t.tag} type="button" onClick={() => toggle(t.tag)} title={active ? '点击取消选择' : '点击加入筛选'}>
+                <Badge
+                  variant={active ? 'default' : 'outline'}
+                  className={`cursor-pointer text-xs ${!active && t.count === 0 ? 'opacity-50' : 'hover:bg-muted'}`}
+                >
+                  {t.tag} · {t.count}
+                </Badge>
+              </button>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }

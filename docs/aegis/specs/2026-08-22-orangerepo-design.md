@@ -97,7 +97,9 @@ GET  /api/problems?q&tags=a,b&type&dirId&recursive → [{id,type,title,tags,dire
 POST /api/problems（完整 payload，服务端归一化） GET/PUT/DELETE /api/problems/:id
 PUT  /api/problems/:id/solutions {solutions}
 
-GET  /api/tags → [{tag,count}]
+GET  /api/tags[?q&tags&type&dirId&recursive] → {tags:[{tag,count}], total}
+     动态 facet 计数：count=在当前基底过滤（q/类型/目录）下，选中集增删该标签后的可命中题数；
+     total=当前完整过滤（含全部选中标签，AND）的题目数；无过滤参数时退化为全局计数。
 POST /api/images multipart(file) → {url}        GET /api/uploads/* 静态
 
 POST /api/import?mode=problems|training|practice  multipart(zip)
@@ -119,7 +121,7 @@ PUT  /api/practices/:id/items {itemIds}；PUT/DELETE /api/practice-items/:id
 
 两栏布局（左 340px 固定 + 右自适应，移动端左栏可折叠）：
 
-- 左栏：操作区（新建题目/新建目录/导入/导出下拉）→ 搜索框 + 类型过滤 + 标签 chips 多选 → 「全部题目」根节点 + 目录树（展开折叠、重命名/新增子目录/删除）→ 当前范围题目列表（复选框 + 类型徽标 + 标签）→ 底部「训练」「练习」两个分区入口
+- 左栏：操作区（新建题目/新建目录/导入/导出下拉）→ 搜索框 + 类型过滤 + 标签多选面板（已选置顶可单独移除与一键清空、动态 facet 计数随筛选联动、标签多于阈值时提供标签内查找、按数量/名称排序）→ 「全部题目」根节点 + 目录树（展开折叠、重命名/新增子目录/删除）→ 当前范围题目列表（复选框 + 类型徽标 + 标签）→ 底部「训练」「练习」两个分区入口
 - 右栏：空态统计页 / 题目详情（面包屑、标题、类型徽标、标签、时限；Tabs 题面|答案|题解|编辑）/ 训练详情（章节+条目排序增删）/ 练习详情（平铺条目+分值）
 - 批量选择条：加入训练 / 加入练习 / 导出选中 / 删除
 - Markdown 渲染链路与上游一致：marked → DOMPurify → KaTeX auto-render

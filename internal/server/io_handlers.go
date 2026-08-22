@@ -207,33 +207,9 @@ func exportFilename(prefix, name string) string {
 
 // handleExportProblems 导出题目：?ids=1,2 或按过滤参数，无参导出全部。
 func (s *Server) handleExportProblems(c *fiber.Ctx) error {
-	filter := store.ProblemFilter{Q: c.Query("q")}
-	if tags := c.Query("tags"); tags != "" {
-		for _, t := range strings.Split(tags, ",") {
-			if t = strings.TrimSpace(t); t != "" {
-				filter.Tags = append(filter.Tags, t)
-			}
-		}
-	}
-	if t := c.Query("type"); t != "" {
-		filter.Type = t
-	}
-	if v := c.Query("dirId"); v != "" {
-		id, err := strconv.ParseInt(v, 10, 64)
-		if err != nil {
-			return respondError(c, fiber.StatusBadRequest, "invalid dirId")
-		}
-		filter.DirID = &id
-		filter.Recursive = c.Query("recursive") == "1"
-	}
-	if idsParam := c.Query("ids"); idsParam != "" {
-		for _, part := range strings.Split(idsParam, ",") {
-			id, err := strconv.ParseInt(strings.TrimSpace(part), 10, 64)
-			if err != nil || id <= 0 {
-				return respondError(c, fiber.StatusBadRequest, "invalid ids")
-			}
-			filter.IDs = append(filter.IDs, id)
-		}
+	filter, err := parseProblemFilter(c)
+	if err != nil {
+		return respondError(c, fiber.StatusBadRequest, err.Error())
 	}
 	list, err := s.Store.ListProblems(filter)
 	if err != nil {

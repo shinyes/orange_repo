@@ -13,36 +13,43 @@ import (
 	"orangerepo/internal/zipio"
 )
 
-// ---------- 题目 ----------
-
-func (s *Server) handleListProblems(c *fiber.Ctx) error {
-	filter := store.ProblemFilter{Q: c.Query("q")}
+// parseProblemFilter 从查询参数解析题目过滤条件（列表 / 导出 / 标签 facets 共用）。
+func parseProblemFilter(c *fiber.Ctx) (store.ProblemFilter, error) {
+	f := store.ProblemFilter{Q: c.Query("q")}
 	if tags := c.Query("tags"); tags != "" {
 		for _, t := range strings.Split(tags, ",") {
 			if t = strings.TrimSpace(t); t != "" {
-				filter.Tags = append(filter.Tags, t)
+				f.Tags = append(f.Tags, t)
 			}
 		}
 	}
-	if t := c.Query("type"); t != "" {
-		filter.Type = t
-	}
+	f.Type = c.Query("type")
 	if v := c.Query("dirId"); v != "" {
 		id, err := strconv.ParseInt(v, 10, 64)
 		if err != nil {
-			return respondError(c, fiber.StatusBadRequest, "invalid dirId")
+			return f, errors.New("invalid dirId")
 		}
-		filter.DirID = &id
-		filter.Recursive = c.Query("recursive") == "1" || c.Query("recursive") == "true"
+		f.DirID = &id
+		f.Recursive = c.Query("recursive") == "1" || c.Query("recursive") == "true"
 	}
 	if idsParam := c.Query("ids"); idsParam != "" {
 		for _, part := range strings.Split(idsParam, ",") {
 			id, err := strconv.ParseInt(strings.TrimSpace(part), 10, 64)
-			if err != nil {
-				return respondError(c, fiber.StatusBadRequest, "invalid ids")
+			if err != nil || id <= 0 {
+				return f, errors.New("invalid ids")
 			}
-			filter.IDs = append(filter.IDs, id)
+			f.IDs = append(f.IDs, id)
 		}
+	}
+	return f, nil
+}
+
+// ---------- 题目 ----------
+
+func (s *Server) handleListProblems(c *fiber.Ctx) error {
+	filter, err := parseProblemFilter(c)
+	if err != nil {
+		return respondError(c, fiber.StatusBadRequest, err.Error())
 	}
 	list, err := s.Store.ListProblems(filter)
 	if err != nil {
@@ -207,15 +214,21 @@ func (s *Server) handleUpdateSolutions(c *fiber.Ctx) error {
 	return respondData(c, fiber.StatusOK, fiber.Map{"solutions": json.RawMessage(normalized)})
 }
 
-// ---------- 标签 ----------
+// ---------- 标签（动态 facet 计数） ----------
 
+// handleListTags 返回当前过滤上下文下的候选标签命中数与总命中题数。
+// 无过滤参数时等价于全局计数。
 func (s *Server) handleListTags(c *fiber.Ctx) error {
-	tags, err := s.Store.ListTags()
+	filter, err := parseProblemFilter(c)
+	if err != nil {
+		return respondError(c, fiber.StatusBadRequest, err.Error())
+	}
+	tags, total, err := s.Store.ListTagFacets(filter)
 	if err != nil {
 		return err
 	}
 	if tags == nil {
 		tags = []store.TagCount{}
 	}
-	return respondData(c, fiber.StatusOK, fiber.Map{"tags": tags})
+	return respondData(c, fiber.StatusOK, fiber.Map{"tags": tags, "total": total})
 }
