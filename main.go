@@ -20,6 +20,11 @@ func main() {
 	seed := flag.Bool("seed", false, "空库时导入 samples/orangeoj-sample.zip 示例数据")
 	flag.Parse()
 
+	// 容器以 root 启动时（绑定挂载宿主机目录的场景），先修正数据目录属主再降权到 65532。
+	if err := bootstrapDataDir(*dataDir); err != nil {
+		log.Fatalf("[FATAL] 数据目录引导失败: %v", err)
+	}
+
 	st, err := store.Open(*dataDir)
 	if err != nil {
 		log.Fatalf("[FATAL] 打开数据库失败: %v", err)
