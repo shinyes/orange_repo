@@ -22,9 +22,9 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
 # ---------- 运行时：distroless static（无 shell / 无包管理器，含 CA 与 tzdata） ----------
 FROM gcr.io/distroless/static-debian12:nonroot
 WORKDIR /app
-COPY --from=backend-build /out/orangerepo /app/orangerepo
-# 预置属主为 65532 的空数据目录：命名卷首次挂载会继承该属主
-COPY --from=backend-build /out/data /app/data
+COPY --from=backend-build --chown=65532:65532 /out/orangerepo /app/orangerepo
+# 显式声明属主：不依赖 COPY 对源阶段所有权的保留行为，保证任何构建器下卷初始化均可写
+COPY --from=backend-build --chown=65532:65532 /out/data /app/data
 COPY --from=web-build /src/web/dist /app/web/dist
 COPY samples /app/samples
 
