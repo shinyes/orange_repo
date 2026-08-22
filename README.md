@@ -37,6 +37,8 @@ docker run -d -p 8080:8080 -v ./data:/app/data ghcr.io/shinyes/orange_repo:1.0.2
 
 镜像基于 distroless/static。容器启动时若为 root，会自动把数据目录属主修正为运行用户 65532 并**立即降权**后再对外服务——因此 `./data:/app/data` 绑定挂载在 Linux 宿主机上开箱即用，无需手动 chown；命名卷（`-v orangerepo-data:/app/data`）同样免配置。
 
+每个 Release 附件附带离线镜像包 `orangerepo-<版本>-linux-amd64-image.tar.gz`，在无法访问 GHCR 的机器上 `docker load -i <包名>` 导入即可使用。
+
 **首次启动**自动创建单用户密码，默认 `123456`，请登录后在左上角「⚙」中修改。
 数据存储在 `data/` 目录（SQLite + 上传图片），删除该目录即可重置。
 

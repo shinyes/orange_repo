@@ -54,16 +54,37 @@ jobs:
           cache-from: type=gha,scope=release
           cache-to: type=gha,mode=max,scope=release
 
+      - name: Export image tarball
+        env:
+          IMAGE: ${{ steps.vars.outputs.image }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          ASSET="orangerepo-${VERSION}-linux-amd64-image.tar.gz"
+          docker pull "${IMAGE}:${VERSION}"
+          docker image save "${IMAGE}:${VERSION}" -o orangerepo-image.tar
+          gzip -9 orangerepo-image.tar
+          mv orangerepo-image.tar.gz "${ASSET}"
+          echo "ASSET=${ASSET}" >> "$GITHUB_ENV"
+
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           name: ${{ github.ref_name }}
           generate_release_notes: true
+          files: ${{ env.ASSET }}
           body: |
             ## Docker 镜像
 
             ```bash
             docker pull ${{ steps.vars.outputs.image }}:${{ github.ref_name }}
+            ```
+
+            ## 离线安装
+
+            下载附件中的镜像包，在无外网（或无法访问 GHCR）的机器上导入：
+
+            ```bash
+            docker load -i orangerepo-*-linux-amd64-image.tar.gz
             ```
 
             首次启动默认密码 `123456`，请登录后修改。数据持久化目录：容器内 `/app/data`。
