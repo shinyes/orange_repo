@@ -112,11 +112,11 @@ type Practice struct {
 
 // PracticeItem 练习条目。
 type PracticeItem struct {
-	ID           int64   `json:"id"`
-	PracticeID   int64   `json:"practiceId"`
-	ProblemID    int64   `json:"problemId"`
-	OrderNo      int     `json:"orderNo"`
-	Score        int     `json:"score"`
-	ProblemTitle string  `json:"problemTitle,omitempty"`
-	ProblemType  string  `json:"problemType,omitempty"`
+	ID           int64  `json:"id"`
+	PracticeID   int64  `json:"practiceId"`
+	ProblemID    int64  `json:"problemId"`
+	OrderNo      int    `json:"orderNo"`
+	Score        int    `json:"score"`
+	ProblemTitle string `json:"problemTitle,omitempty"`
+	ProblemType  string `json:"problemType,omitempty"`
 }

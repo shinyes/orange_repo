@@ -100,8 +100,8 @@ func TestBuildParseRoundTrip(t *testing.T) {
 			t.Errorf("problem %d tags = %v, want %v", i, got[i].Tags, problems[i].Tags)
 		}
 		for _, field := range []struct {
-			name         string
-			got, want    json.RawMessage
+			name      string
+			got, want json.RawMessage
 		}{
 			{"bodyJson", got[i].BodyJSON, problems[i].BodyJSON},
 			{"answerJson", got[i].AnswerJSON, problems[i].AnswerJSON},
