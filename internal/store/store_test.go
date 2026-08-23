@@ -113,7 +113,7 @@ func TestTagPrefixFiltering(t *testing.T) {
 		{[]string{"数学/代数"}, []string{"P3"}},
 		{[]string{"算法"}, []string{"P3"}},
 		{[]string{"数学", "算法"}, []string{"P3"}}, // AND：同时命中两个子树
-		{[]string{"数学/几何", "算法"}, nil},       // 无交集
+		{[]string{"数学/几何", "算法"}, nil},         // 无交集
 	}
 	for _, tc := range cases {
 		list, err := s.ListProblems(ProblemFilter{Tags: tc.selected})
@@ -247,6 +247,11 @@ func TestRenameTagSubtree(t *testing.T) {
 
 	if _, err := s.RenameTag("a", "/bad/"); err == nil {
 		t.Error("非法路径应报错")
+	}
+	// 同名重命名是空操作
+	n, err = s.RenameTag("Math/代数", "Math/代数")
+	if err != nil || n != 0 {
+		t.Fatalf("rename same: n=%d err=%v, want 0/nil", n, err)
 	}
 }
 

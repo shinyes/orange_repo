@@ -56,7 +56,7 @@ type PlanMeta struct {
 	Chapters    []PlanChapter `json:"chapters,omitempty"`
 }
 
-// ProblemPayload 服务端题目请求体（导出条目 + 目录归属）。
+// ProblemPayload 服务端题目请求体（导出条目 + API 创建/更新共用）。
 type ProblemPayload struct {
 	Type           string          `json:"type"`
 	Title          string          `json:"title"`

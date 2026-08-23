@@ -428,6 +428,9 @@ func (s *Store) RenameTag(from, to string) (int64, error) {
 	if err != nil {
 		return 0, fmt.Errorf("to: %w", err)
 	}
+	if from == to {
+		return 0, nil
+	}
 	return s.rewriteTags(func(t string) ([]string, bool) {
 		switch {
 		case t == from:
