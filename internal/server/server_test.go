@@ -279,6 +279,40 @@ func TestExportImportRoundTrip(t *testing.T) {
 	}
 }
 
+// TestTagOrderSettings 手动排序持久化往返。
+func TestTagOrderSettings(t *testing.T) {
+	app, _ := newTestApp(t)
+	cookie := sessionCookie(t, app)
+
+	resp, out := doJSON(t, app, "GET", "/api/tag-order", cookie, nil)
+	if resp.StatusCode != fiber.StatusOK || len(out["order"].(map[string]any)) != 0 {
+		t.Fatalf("initial tag-order = %d %v", resp.StatusCode, out)
+	}
+
+	resp, _ = doJSON(t, app, "PUT", "/api/tag-order", cookie, map[string]any{
+		"order": map[string]any{"": []string{"算法", "数学"}, "数学": []string{"代数", "几何"}},
+	})
+	if resp.StatusCode != fiber.StatusNoContent {
+		t.Fatalf("set tag-order = %d", resp.StatusCode)
+	}
+
+	resp, out = doJSON(t, app, "GET", "/api/tag-order", cookie, nil)
+	if resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("get tag-order = %d", resp.StatusCode)
+	}
+	order := out["order"].(map[string]any)
+	roots := order[""].([]any)
+	if len(roots) != 2 || roots[0] != "算法" || roots[1] != "数学" {
+		t.Fatalf("order round-trip wrong: %v", order)
+	}
+
+	// 非法请求体 → 400
+	resp, _ = doJSON(t, app, "PUT", "/api/tag-order", cookie, map[string]any{"wrong": 1})
+	if resp.StatusCode != fiber.StatusBadRequest {
+		t.Fatalf("invalid order body = %d, want 400", resp.StatusCode)
+	}
+}
+
 // TestTrainingLayoutReorder 布局接口：章节排序 + 跨章节移动条目 + 完整性校验。
 func TestTrainingLayoutReorder(t *testing.T) {
 	app, _ := newTestApp(t)

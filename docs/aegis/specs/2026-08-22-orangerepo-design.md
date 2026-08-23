@@ -107,6 +107,7 @@ GET  /api/tags[?q&tags&type] → {tags:[{tag,count}], total}
      total=当前完整过滤（含全部选中标签，AND + 前缀规则）的题目数；无过滤参数时退化为全局计数。
 PATCH  /api/tags {from,to} → {updated}   重命名 from→to：精确匹配重写 + `from+"/"` 前缀子树整体搬家；与现存标签重复时去重合并；返回受影响题数
 DELETE /api/tags?tag=… → {updated}       删除该标签及其全部前缀子孙，从所有题目上移除；返回受影响题数
+GET/PUT /api/tag-order →/← {order}       （v1.5.0）手动排序持久化：order 为 {"<父路径>":["子标签",...]}，"" 表示顶层
 
 POST /api/images multipart(file) → {url}        GET /api/uploads/* 静态
 

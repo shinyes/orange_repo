@@ -81,6 +81,9 @@ export const api = {
     req<{ updated: number }>('/api/tags', json({ method: 'PATCH', body: JSON.stringify({ from, to }) })),
   deleteTag: (tag: string) =>
     req<{ updated: number }>(`/api/tags?tag=${encodeURIComponent(tag)}`, { method: 'DELETE' }),
+  getTagOrder: () => req<{ order: Record<string, string[]> }>('/api/tag-order'),
+  setTagOrder: (order: Record<string, string[]>) =>
+    req<void>('/api/tag-order', json({ method: 'PUT', body: JSON.stringify({ order }) })),
 
   // ---- 图片 ----
   uploadImage: async (file: File): Promise<{ url: string }> => {

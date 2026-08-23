@@ -59,6 +59,8 @@ func New(s *store.Store, uploadsDir, webDist string) *fiber.App {
 	api.Get("/tags", srv.handleListTags)
 	api.Patch("/tags", srv.handleRenameTag)
 	api.Delete("/tags", srv.handleDeleteTag)
+	api.Get("/tag-order", srv.handleGetTagOrder)
+	api.Put("/tag-order", srv.handleSetTagOrder)
 
 	api.Post("/images", srv.handleUploadImage)
 	api.Static("/api/uploads", uploadsDir)

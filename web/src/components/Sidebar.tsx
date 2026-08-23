@@ -207,6 +207,18 @@ function ExportDropdown() {
 
 const TAG_SEARCH_THRESHOLD = 20
 
+type TagSortMode = 'count' | 'name' | 'manual'
+type TagDropMode = 'child' | 'before' | 'after'
+const TAG_SORT_KEY = 'orangerepo:tag-sort'
+
+function labelOf(path: string): string {
+  return path.slice(path.lastIndexOf('/') + 1)
+}
+function parentOf(path: string): string {
+  const i = path.lastIndexOf('/')
+  return i === -1 ? '' : path.slice(0, i)
+}
+
 /** 由分面平面列表构建标签树；虚拟祖先节点计数为 0 时由服务端直接给出。 */
 function buildTagTree(items: TagCount[]): TagNode[] {
   const nodes = new Map<string, TagNode>()
@@ -232,13 +244,39 @@ function buildTagTree(items: TagCount[]): TagNode[] {
   return roots
 }
 
-function sortTree(nodes: TagNode[], sortBy: 'count' | 'name') {
+function sortTree(nodes: TagNode[], sortBy: Exclude<TagSortMode, 'manual'>) {
   for (const n of nodes) sortTree(n.children, sortBy)
   nodes.sort((x, y) =>
     sortBy === 'name'
       ? x.label.localeCompare(y.label, 'zh-Hans-CN')
       : y.count - x.count || x.label.localeCompare(y.label, 'zh-Hans-CN'),
   )
+}
+
+/** 手动排序：按保存的同级顺序（缺失的排后面，同序号按名称）。 */
+function applyManualOrder(nodes: TagNode[], parentPath: string, order: Record<string, string[]>) {
+  const saved = order[parentPath] ?? []
+  const rank = new Map(saved.map((l, i) => [l, i] as const))
+  nodes.sort((a, b) => {
+    const ra = rank.get(a.label)
+    const rb = rank.get(b.label)
+    if (ra !== undefined && rb !== undefined) return ra - rb
+    if (ra !== undefined) return -1
+    if (rb !== undefined) return 1
+    return a.label.localeCompare(b.label, 'zh-Hans-CN')
+  })
+  for (const n of nodes) applyManualOrder(n.children, n.tag, order)
+}
+
+/** 在树中定位某父路径下的同级节点数组（parentPath='' 为顶层）。 */
+function findSiblings(tree: TagNode[], parentPath: string): TagNode[] | null {
+  if (parentPath === '') return tree
+  for (const n of tree) {
+    if (n.tag === parentPath) return n.children
+    const hit = findSiblings(n.children, parentPath)
+    if (hit) return hit
+  }
+  return null
 }
 
 /** 树内查找：保留命中节点及其祖先链以维持树形结构。 */
@@ -278,40 +316,77 @@ function TagTreePanel() {
   const { filter, patchFilter, view, goHome } = useAppState()
   const qc = useQueryClient()
   const [search, setSearch] = useState('')
-  const [sortBy, setSortBy] = useState<'count' | 'name'>('count')
+  const [sortBy, setSortByState] = useState<TagSortMode>(
+    () => (localStorage.getItem(TAG_SORT_KEY) as TagSortMode | null) ?? 'count',
+  )
+  function setSortBy(v: TagSortMode) {
+    setSortByState(v)
+    localStorage.setItem(TAG_SORT_KEY, v)
+  }
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const [renaming, setRenaming] = useState<string | null>(null)
   const [deleting, setDeleting] = useState<TagNode | null>(null)
-  // 标签拖拽改层级：拖起节点放到目标节点下成为其子标签（复用重命名接口联动题目）
+  // 标签拖拽：放到节点中间=改为其子标签；放到上下边缘=调整同级顺序（持久化）
   const [tagDragFrom, setTagDragFrom] = useState<string | null>(null)
-  const [tagDropTarget, setTagDropTarget] = useState<string | null>(null)
+  const [tagDropTarget, setTagDropTarget] = useState<{ tag: string; mode: TagDropMode } | null>(null)
 
-  /** 目标是否可放置：不能是自身、也不能落进自己的子树（否则会连带改写目标路径）。 */
+  const orderQuery = useQuery({ queryKey: ['tag-order'], queryFn: api.getTagOrder })
+  const tagOrder = orderQuery.data?.order ?? {}
+
+  /** 目标是否可作为父级放置：不能是自身、也不能落进自己的子树（否则会连带改写目标路径）。 */
   function canDropTag(target: string, from: string): boolean {
     if (!from) return false
-    const to = `${target}/${from.slice(from.lastIndexOf('/') + 1)}`
+    const to = `${target}/${labelOf(from)}`
     return to !== from && !to.startsWith(from + '/')
   }
 
-  function handleTagDragOver(target: string, e: DragEvent) {
+  function handleTagDragOver(target: string, mode: TagDropMode, e: DragEvent) {
     if (!tagDragFrom) return
     e.stopPropagation() // 可否放置都阻断冒泡：无效目标不触发根区“移到顶层”
-    if (!canDropTag(target, tagDragFrom)) return
+    if (mode === 'child') {
+      if (!canDropTag(target, tagDragFrom)) return
+    } else {
+      // 前后插入仅限同父级兄弟
+      if (target === tagDragFrom || parentOf(target) !== parentOf(tagDragFrom)) return
+    }
     e.preventDefault()
     e.dataTransfer.dropEffect = 'move'
-    setTagDropTarget((prev) => (prev === target ? prev : target))
+    setTagDropTarget((prev) => (prev && prev.tag === target && prev.mode === mode ? prev : { tag: target, mode }))
   }
 
-  function handleTagDrop(target: string) {
-    if (!tagDragFrom || !canDropTag(target, tagDragFrom)) return endTagDrag()
-    const to = `${target}/${tagDragFrom.slice(tagDragFrom.lastIndexOf('/') + 1)}`
-    renameMut.mutate({ from: tagDragFrom, to })
+  function handleTagDrop(target: string, mode: TagDropMode) {
+    if (!tagDragFrom) return endTagDrag()
+    if (mode === 'child') {
+      if (!canDropTag(target, tagDragFrom)) return endTagDrag()
+      const to = `${target}/${labelOf(tagDragFrom)}`
+      setSortBy('manual')
+      renameMut.mutate({ from: tagDragFrom, to })
+      endTagDrag()
+      return
+    }
+    if (target === tagDragFrom || parentOf(target) !== parentOf(tagDragFrom)) return endTagDrag()
+    const siblings = findSiblings(tree, parentOf(tagDragFrom))
+    if (!siblings) return endTagDrag()
+    const draggedLabel = labelOf(tagDragFrom)
+    const list = siblings.map((n) => n.label).filter((l) => l !== draggedLabel)
+    const ti = list.indexOf(labelOf(target))
+    if (ti === -1) return endTagDrag()
+    list.splice(mode === 'before' ? ti : ti + 1, 0, draggedLabel)
+    setSortBy('manual')
+    orderMut.mutate({ ...(orderQuery.data?.order ?? {}), [parentOf(tagDragFrom)]: list })
+    endTagDrag()
   }
 
   function endTagDrag() {
     setTagDragFrom(null)
     setTagDropTarget(null)
   }
+
+  const orderMut = useMutation({
+    mutationFn: (order: Record<string, string[]>) => api.setTagOrder(order),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['tag-order'] }),
+    onError: (e) => toast.error(e instanceof Error ? e.message : '保存排序失败'),
+  })
 
   const tagsQuery = useQuery({
     queryKey: ['tags', filter],
@@ -323,10 +398,11 @@ function TagTreePanel() {
 
   const tree = useMemo(() => {
     const roots = buildTagTree(raw)
-    sortTree(roots, sortBy)
+    if (sortBy === 'manual') applyManualOrder(roots, '', tagOrder)
+    else sortTree(roots, sortBy)
     const q = search.trim().toLowerCase()
     return q ? filterTree(roots, q) : roots
-  }, [raw, sortBy, search])
+  }, [raw, sortBy, search, tagOrder])
 
   const allPaths = useMemo(() => collectPaths(tree), [tree])
   const isOpen = (tag: string) => expanded[tag] ?? !tag.includes('/')
@@ -415,7 +491,8 @@ function TagTreePanel() {
             [
               ['count', '数量'],
               ['name', '名称'],
-            ] as ['count' | 'name', string][]
+              ['manual', '手动'],
+            ] as [TagSortMode, string][]
           ).map(([v, label]) => (
             <button
               key={v}
@@ -543,15 +620,15 @@ function TagRow(props: {
   selected: string[]
   expanded: Record<string, boolean>
   tagDragFrom: string | null
-  tagDropTarget: string | null
+  tagDropTarget: { tag: string; mode: TagDropMode } | null
   onToggleExpand: (tag: string) => void
   onToggleSelect: (tag: string) => void
   onRename: (tag: string) => void
   onDelete: (node: TagNode) => void
   onTagDragStart: (from: string) => void
   onTagDragEnd: () => void
-  onTagDragOver: (target: string, e: DragEvent) => void
-  onTagDrop: (target: string) => void
+  onTagDragOver: (target: string, mode: TagDropMode, e: DragEvent) => void
+  onTagDrop: (target: string, mode: TagDropMode) => void
 }) {
   const { node, level } = props
   // 菜单打开期间必须保持触发器可见：portal 菜单在 body 层，
@@ -562,10 +639,14 @@ function TagRow(props: {
   const active = props.selected.includes(node.tag)
   const implied = !active && impliedBySelected(node.tag, props.selected)
   const isDraggedTag = props.tagDragFrom === node.tag
-  const isValidDrop = !!props.tagDragFrom && props.tagDropTarget === node.tag
+  const drop = props.tagDragFrom ? props.tagDropTarget : null
+  const isChildDrop = drop?.tag === node.tag && drop.mode === 'child'
+  const isBeforeDrop = drop?.tag === node.tag && drop.mode === 'before'
+  const isAfterDrop = drop?.tag === node.tag && drop.mode === 'after'
 
   return (
     <div>
+      {isBeforeDrop && <div className="my-0.5 h-0.5 rounded-full bg-primary" />}
       <div
         className={`group flex items-center rounded-md pr-1 ${
           active ? 'bg-accent text-accent-foreground' : 'hover:bg-muted'
@@ -588,16 +669,25 @@ function TagRow(props: {
             props.onTagDragStart(node.tag)
           }}
           onDragEnd={props.onTagDragEnd}
-          onDragOver={(e) => props.onTagDragOver(node.tag, e)}
+          onDragOver={(e) => {
+            // 三区语义：上/下边缘=同级排序插入位，中间=改为子标签
+            const r = e.currentTarget.getBoundingClientRect()
+            const y = (e.clientY - r.top) / Math.max(r.height, 1)
+            const mode: TagDropMode = y < 0.28 ? 'before' : y > 0.72 ? 'after' : 'child'
+            props.onTagDragOver(node.tag, mode, e)
+          }}
           onDrop={(e) => {
             e.preventDefault()
             e.stopPropagation()
-            props.onTagDrop(node.tag)
+            const r = e.currentTarget.getBoundingClientRect()
+            const y = (e.clientY - r.top) / Math.max(r.height, 1)
+            const mode: TagDropMode = y < 0.28 ? 'before' : y > 0.72 ? 'after' : 'child'
+            props.onTagDrop(node.tag, mode)
           }}
           className={`flex min-w-0 flex-1 items-center gap-1.5 rounded-md py-1.5 text-left text-sm ${
-            isValidDrop ? 'bg-primary/10 ring-1 ring-primary' : ''
+            isChildDrop ? 'bg-primary/10 ring-1 ring-primary' : ''
           } ${isDraggedTag ? 'opacity-40' : ''}`}
-          title={`${node.tag}（拖到其他标签上可改为其子标签）${implied ? '（已包含在已选父标签中）' : ''}`}
+          title={`${node.tag}（拖到中间=改为子标签；拖到上下边缘=调整同级顺序）${implied ? '（已包含在已选父标签中）' : ''}`}
           onClick={() => props.onToggleSelect(node.tag)}
         >
           <TagIcon className={`size-3.5 shrink-0 ${implied ? 'text-muted-foreground/50' : 'text-primary/70'}`} />
@@ -626,6 +716,7 @@ function TagRow(props: {
           </DropdownMenu>
         </div>
       </div>
+      {isAfterDrop && <div className="my-0.5 h-0.5 rounded-full bg-primary" />}
       {open &&
         hasChildren &&
         node.children.map((c) => (
