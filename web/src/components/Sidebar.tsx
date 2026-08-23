@@ -481,6 +481,9 @@ function TagRow(props: {
   onDelete: (node: TagNode) => void
 }) {
   const { node, level } = props
+  // 菜单打开期间必须保持触发器可见：portal 菜单在 body 层，
+  // 鼠标移出行的 group-hover 一旦失效，锚点 display:none 会让弹层定位塌缩到左上角
+  const [menuOpen, setMenuOpen] = useState(false)
   const hasChildren = node.children.length > 0
   const open = props.expanded[node.tag] ?? level === 0
   const active = props.selected.includes(node.tag)
@@ -513,8 +516,8 @@ function TagRow(props: {
             {node.count > 0 ? node.count : ''}
           </span>
         </button>
-        <div className="hidden shrink-0 items-center gap-0.5 group-hover:flex">
-          <DropdownMenu>
+        <div className={`shrink-0 items-center gap-0.5 ${menuOpen ? 'flex' : 'hidden group-hover:flex'}`}>
+          <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
             <DropdownMenuTrigger
               className="rounded p-1 hover:bg-background"
               title="标签操作"
