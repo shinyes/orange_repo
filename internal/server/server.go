@@ -2,8 +2,10 @@
 package server
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/logger"
@@ -47,20 +49,16 @@ func New(s *store.Store, uploadsDir, webDist string) *fiber.App {
 
 	api := app.Group("/api", srv.requireSession)
 
-	api.Get("/directories", srv.handleListDirectories)
-	api.Post("/directories", srv.handleCreateDirectory)
-	api.Put("/directories/:id", srv.handleUpdateDirectory)
-	api.Delete("/directories/:id", srv.handleDeleteDirectory)
-
 	api.Get("/problems", srv.handleListProblems)
 	api.Post("/problems", srv.handleCreateProblem)
 	api.Get("/problems/:id", srv.handleGetProblem)
 	api.Put("/problems/:id", srv.handleUpdateProblem)
 	api.Delete("/problems/:id", srv.handleDeleteProblem)
 	api.Put("/problems/:id/solutions", srv.handleUpdateSolutions)
-	api.Put("/problems/:id/directory", srv.handleMoveProblem)
 
 	api.Get("/tags", srv.handleListTags)
+	api.Patch("/tags", srv.handleRenameTag)
+	api.Delete("/tags", srv.handleDeleteTag)
 
 	api.Post("/images", srv.handleUploadImage)
 	api.Static("/api/uploads", uploadsDir)
@@ -112,4 +110,13 @@ func respondData(c *fiber.Ctx, status int, data fiber.Map) error {
 
 func respondError(c *fiber.Ctx, status int, msg string) error {
 	return c.Status(status).JSON(fiber.Map{"error": msg})
+}
+
+// paramID 解析路径参数中的正整数 id。
+func paramID(c *fiber.Ctx, name string) (int64, error) {
+	id, err := strconv.ParseInt(c.Params(name), 10, 64)
+	if err != nil || id <= 0 {
+		return 0, errors.New("invalid id")
+	}
+	return id, nil
 }

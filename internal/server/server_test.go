@@ -107,16 +107,14 @@ func TestProblemCRUDAndFilter(t *testing.T) {
 	app, _ := newTestApp(t)
 	cookie := sessionCookie(t, app)
 
-	// 目录
-	resp, dirResp := doJSON(t, app, "POST", "/api/directories", cookie, map[string]any{"name": "第一章", "parentId": nil})
-	if resp.StatusCode != fiber.StatusCreated {
-		t.Fatalf("create dir = %d", resp.StatusCode)
+	// 目录接口已退役 → 404
+	resp, _ := doJSON(t, app, "GET", "/api/directories", cookie, nil)
+	if resp.StatusCode != fiber.StatusNotFound {
+		t.Fatalf("legacy /api/directories = %d, want 404", resp.StatusCode)
 	}
-	dirID := int64(dirResp["id"].(float64))
 
-	// 三种题型
+	// 三种题型（p2/p3 使用斜杠层级标签）
 	mk := func(payload map[string]any) map[string]any {
-		payload["directoryId"] = dirID
 		resp, data := doJSON(t, app, "POST", "/api/problems", cookie, payload)
 		if resp.StatusCode != fiber.StatusCreated {
 			t.Fatalf("create problem %+v → %d %v", payload, resp.StatusCode, data)
@@ -130,13 +128,13 @@ func TestProblemCRUDAndFilter(t *testing.T) {
 		"bodyJson":    map[string]any{"inputFormat": "一行两个整数", "samples": []any{map[string]string{"input": "1 2", "output": "3"}}},
 	})
 	p2 := mk(map[string]any{
-		"type": "single_choice", "title": "标识符", "tags": []string{"语法"},
+		"type": "single_choice", "title": "标识符", "tags": []string{"语法/基础"},
 		"statementMd": "哪个不合法？",
 		"bodyJson":    map[string]any{"options": []string{"int", "2var"}},
 		"answerJson":  map[string]any{"answer": "2var"},
 	})
 	p3 := mk(map[string]any{
-		"type": "true_false", "title": "判断题", "tags": []string{"语法"},
+		"type": "true_false", "title": "判断题", "tags": []string{"语法/基础"},
 		"answerJson": map[string]any{"value": "false"},
 	})
 
@@ -153,7 +151,7 @@ func TestProblemCRUDAndFilter(t *testing.T) {
 		t.Errorf("true_false answer = %v, want false", ans3["answer"])
 	}
 
-	// 标签筛选
+	// 标签筛选（前缀规则：父标签「语法」命中 语法/基础）
 	resp, list := doJSON(t, app, "GET", "/api/problems?tags=%E8%AF%AD%E6%B3%95", cookie, nil)
 	if resp.StatusCode != fiber.StatusOK {
 		t.Fatalf("filter by tag = %d", resp.StatusCode)
@@ -181,24 +179,27 @@ func TestProblemCRUDAndFilter(t *testing.T) {
 		t.Fatalf("facet result wrong: %v total=%v", fm, ft["total"])
 	}
 
-	// 目录树计数
-	_, tree := doJSON(t, app, "GET", "/api/directories", cookie, nil)
-	dirs := tree["directories"].([]any)
-	if len(dirs) != 1 || dirs[0].(map[string]any)["problemCount"].(float64) != 3 {
-		t.Fatalf("tree = %v", tree)
+	// 标签子树重命名：语法 → Language/语法（两题联动）
+	resp, rn := doJSON(t, app, "PATCH", "/api/tags", cookie, map[string]string{"from": "语法", "to": "Language/语法"})
+	if resp.StatusCode != fiber.StatusOK || rn["updated"].(float64) != 2 {
+		t.Fatalf("rename tag = %d %v", resp.StatusCode, rn)
 	}
-	// 移动题目到根（null）
-	pid := int64(p1["id"].(float64))
-	resp, _ = doJSON(t, app, "PUT", fmt.Sprintf("/api/problems/%d/directory", pid), cookie,
-		map[string]any{"directoryId": nil})
-	if resp.StatusCode != fiber.StatusNoContent {
-		t.Fatalf("move = %d", resp.StatusCode)
+	_, list = doJSON(t, app, "GET", "/api/problems?tags=Language", cookie, nil)
+	if got := len(list["problems"].([]any)); got != 2 {
+		t.Fatalf("after rename prefix filter = %d, want 2", got)
 	}
-	_, tree = doJSON(t, app, "GET", "/api/directories", cookie, nil)
-	if tree["directories"].([]any)[0].(map[string]any)["problemCount"].(float64) != 2 {
-		t.Fatalf("count after move wrong: %v", tree)
+	// 删除子树：Language 从两题上移除
+	resp, del := doJSON(t, app, "DELETE", "/api/tags?tag=Language", cookie, nil)
+	if resp.StatusCode != fiber.StatusOK || del["updated"].(float64) != 2 {
+		t.Fatalf("delete tag = %d %v", resp.StatusCode, del)
 	}
+	_, list = doJSON(t, app, "GET", "/api/problems?tags=Language", cookie, nil)
+	if got := len(list["problems"].([]any)); got != 0 {
+		t.Fatalf("after delete filter = %d, want 0", got)
+	}
+
 	// 删除题目
+	pid := int64(p1["id"].(float64))
 	resp, _ = doJSON(t, app, "DELETE", fmt.Sprintf("/api/problems/%d", pid), cookie, nil)
 	if resp.StatusCode != fiber.StatusNoContent {
 		t.Fatalf("delete = %d", resp.StatusCode)
@@ -209,9 +210,7 @@ func TestExportImportRoundTrip(t *testing.T) {
 	srcApp, srcStore := newTestApp(t)
 	cookie := sessionCookie(t, srcApp)
 
-	// 建目录 + 两道题
-	_, dirResp := doJSON(t, srcApp, "POST", "/api/directories", cookie, map[string]any{"name": "目录A"})
-	dirID := int64(dirResp["id"].(float64))
+	// 两道题
 	doJSON(t, srcApp, "POST", "/api/problems", cookie, map[string]any{
 		"type": "programming", "title": "题目一", "tags": []string{"T"},
 		"statementMd": "内容 (/api/uploads/img_test.png)",
@@ -235,7 +234,6 @@ func TestExportImportRoundTrip(t *testing.T) {
 	}
 
 	// 上传图片并确认存在（导出打包用）
-	_ = dirID
 	writeUpload(t, srcStore, "img_test.png", []byte("PNG"))
 
 	// 导出训练 ZIP

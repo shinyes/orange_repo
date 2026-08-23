@@ -45,7 +45,6 @@ type Problem struct {
 	Solutions      json.RawMessage `json:"solutions"`
 	TimeLimitMS    int             `json:"timeLimitMs"`
 	MemoryLimitMiB int             `json:"memoryLimitMiB"`
-	DirectoryID    *int64          `json:"directoryId"`
 	CreatedAt      time.Time       `json:"createdAt"`
 }
 
@@ -55,20 +54,9 @@ type ProblemSummary struct {
 	Type           ProblemType `json:"type"`
 	Title          string      `json:"title"`
 	Tags           []string    `json:"tags"`
-	DirectoryID    *int64      `json:"directoryId"`
 	TimeLimitMS    int         `json:"timeLimitMs"`
 	MemoryLimitMiB int         `json:"memoryLimitMiB"`
 	CreatedAt      time.Time   `json:"createdAt"`
-}
-
-// DirectoryNode 嵌套目录树节点。
-type DirectoryNode struct {
-	ID           int64           `json:"id"`
-	Name         string          `json:"name"`
-	ParentID     *int64          `json:"parentId"`
-	OrderNo      int             `json:"orderNo"`
-	ProblemCount int             `json:"problemCount"`
-	Children     []DirectoryNode `json:"children"`
 }
 
 // Training 训练计划：章节化的题目编组。

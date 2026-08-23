@@ -1,7 +1,8 @@
-// Package store 封装 SQLite 持久化：迁移、设置、目录树、题目。
+// Package store 封装 SQLite 持久化：迁移、设置、题目与标签（斜杠嵌套层级）。
 package store
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -53,13 +54,6 @@ func (s *Store) migrate() error {
 			key TEXT PRIMARY KEY,
 			value TEXT NOT NULL
 		);`,
-		`CREATE TABLE IF NOT EXISTS directories (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			name TEXT NOT NULL,
-			parent_id INTEGER REFERENCES directories(id) ON DELETE SET NULL,
-			order_no INTEGER NOT NULL DEFAULT 0,
-			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-		);`,
 		`CREATE TABLE IF NOT EXISTS problems (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			type TEXT NOT NULL,
@@ -71,7 +65,6 @@ func (s *Store) migrate() error {
 			solutions_json TEXT NOT NULL DEFAULT '[]',
 			time_limit_ms INTEGER NOT NULL DEFAULT 1000,
 			memory_limit_mib INTEGER NOT NULL DEFAULT 256,
-			directory_id INTEGER REFERENCES directories(id) ON DELETE SET NULL,
 			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 		);`,
 		`CREATE TABLE IF NOT EXISTS trainings (
@@ -113,7 +106,67 @@ func (s *Store) migrate() error {
 			return fmt.Errorf("migrate failed: %w; stmt: %s", err, stmt)
 		}
 	}
-	return nil
+	return s.migrateLegacyDirectories()
+}
+
+// migrateLegacyDirectories 一次性迁移 v1.0 旧库：退役目录结构（用户决策：目录数据丢弃）。
+//
+// 旧 problems 表带指向 directories 的外键列，DROP 前必须在同一连接上临时关闭 foreign_keys
+// （training_items 等子表引用 problems，否则 DROP 会因级联检查失败）。
+func (s *Store) migrateLegacyDirectories() error {
+	var n int
+	if err := s.DB.QueryRow(`SELECT COUNT(1) FROM sqlite_master WHERE type='table' AND name='directories'`).Scan(&n); err != nil {
+		return err
+	}
+	if n == 0 {
+		return nil
+	}
+	ctx := context.Background()
+	conn, err := s.DB.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	if _, err := conn.ExecContext(ctx, `PRAGMA foreign_keys=off`); err != nil {
+		return err
+	}
+	tx, err := conn.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	stmts := []string{
+		`CREATE TABLE problems_new (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			type TEXT NOT NULL,
+			title TEXT NOT NULL,
+			tags_json TEXT NOT NULL DEFAULT '[]',
+			statement_md TEXT NOT NULL DEFAULT '',
+			body_json TEXT NOT NULL DEFAULT '{}',
+			answer_json TEXT NOT NULL DEFAULT '{}',
+			solutions_json TEXT NOT NULL DEFAULT '[]',
+			time_limit_ms INTEGER NOT NULL DEFAULT 1000,
+			memory_limit_mib INTEGER NOT NULL DEFAULT 256,
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		)`,
+		`INSERT INTO problems_new(id,type,title,tags_json,statement_md,body_json,answer_json,solutions_json,time_limit_ms,memory_limit_mib,created_at)
+		 SELECT id,type,title,tags_json,statement_md,body_json,answer_json,solutions_json,time_limit_ms,memory_limit_mib,created_at FROM problems`,
+		`DROP TABLE problems`,
+		`ALTER TABLE problems_new RENAME TO problems`,
+	}
+	for _, stmt := range stmts {
+		if _, err := tx.ExecContext(ctx, stmt); err != nil {
+			return fmt.Errorf("%w; stmt: %s", err, stmt)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	if _, err := conn.ExecContext(ctx, `DROP TABLE IF EXISTS directories`); err != nil {
+		return err
+	}
+	_, err = conn.ExecContext(ctx, `PRAGMA foreign_keys=on`)
+	return err
 }
 
 // ---------- 设置 ----------
@@ -131,204 +184,6 @@ func (s *Store) SetSetting(key, value string) error {
 	_, err := s.DB.Exec(`INSERT INTO settings(key,value) VALUES(?,?)
 		ON CONFLICT(key) DO UPDATE SET value=excluded.value`, key, value)
 	return err
-}
-
-// ---------- 目录 ----------
-
-type flatDir struct {
-	ID       int64
-	Name     string
-	ParentID *int64
-	OrderNo  int
-}
-
-func (s *Store) CreateDirectory(name string, parentID *int64) (int64, error) {
-	if parentID != nil {
-		if _, err := s.GetDirectory(*parentID); err != nil {
-			return 0, err
-		}
-	}
-	var order int
-	_ = s.DB.QueryRow(`SELECT COALESCE(MAX(order_no),0)+1 FROM directories WHERE parent_id IS ?`,
-		parentID).Scan(&order)
-	res, err := s.DB.Exec(`INSERT INTO directories(name,parent_id,order_no) VALUES(?,?,?)`,
-		name, parentID, order)
-	if err != nil {
-		return 0, err
-	}
-	return res.LastInsertId()
-}
-
-func (s *Store) GetDirectory(id int64) (*flatDir, error) {
-	d := &flatDir{}
-	err := s.DB.QueryRow(`SELECT id,name,parent_id,order_no FROM directories WHERE id=?`, id).
-		Scan(&d.ID, &d.Name, &d.ParentID, &d.OrderNo)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, ErrNotFound
-	}
-	return d, err
-}
-
-// UpdateDirectory 更新名称/父级/排序。禁止把目录挂到自己的后代上。
-func (s *Store) UpdateDirectory(id int64, name string, parentID *int64, orderNo int) error {
-	if _, err := s.GetDirectory(id); err != nil {
-		return err
-	}
-	if parentID != nil && *parentID == id {
-		return errors.New("directory cannot be its own parent")
-	}
-	if parentID != nil {
-		descendants, err := s.descendantIDs(id)
-		if err != nil {
-			return err
-		}
-		for _, d := range descendants {
-			if d == *parentID {
-				return errors.New("cannot move directory under its own descendant")
-			}
-		}
-		if _, err := s.GetDirectory(*parentID); err != nil {
-			return err
-		}
-	}
-	_, err := s.DB.Exec(`UPDATE directories SET name=?,parent_id=?,order_no=? WHERE id=?`,
-		name, parentID, orderNo, id)
-	return err
-}
-
-// DeleteDirectory 删除目录；其子目录与题目上移到被删目录的父级。
-func (s *Store) DeleteDirectory(id int64) error {
-	d, err := s.GetDirectory(id)
-	if err != nil {
-		return err
-	}
-	tx, err := s.DB.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	if _, err := tx.Exec(`UPDATE directories SET parent_id=? WHERE parent_id=?`, d.ParentID, id); err != nil {
-		return err
-	}
-	if _, err := tx.Exec(`UPDATE problems SET directory_id=? WHERE directory_id=?`, d.ParentID, id); err != nil {
-		return err
-	}
-	if _, err := tx.Exec(`DELETE FROM directories WHERE id=?`, id); err != nil {
-		return err
-	}
-	return tx.Commit()
-}
-
-func (s *Store) allDirectories() ([]flatDir, error) {
-	rows, err := s.DB.Query(`SELECT id,name,parent_id,order_no FROM directories ORDER BY order_no,id`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []flatDir
-	for rows.Next() {
-		var d flatDir
-		if err := rows.Scan(&d.ID, &d.Name, &d.ParentID, &d.OrderNo); err != nil {
-			return nil, err
-		}
-		out = append(out, d)
-	}
-	return out, rows.Err()
-}
-
-// descendantIDs 返回 id 的全部后代目录 id（不含自身）。
-func (s *Store) descendantIDs(id int64) ([]int64, error) {
-	all, err := s.allDirectories()
-	if err != nil {
-		return nil, err
-	}
-	children := map[int64][]int64{}
-	for _, d := range all {
-		if d.ParentID != nil {
-			children[*d.ParentID] = append(children[*d.ParentID], d.ID)
-		}
-	}
-	var out []int64
-	var walk func(int64)
-	walk = func(pid int64) {
-		for _, c := range children[pid] {
-			out = append(out, c)
-			walk(c)
-		}
-	}
-	walk(id)
-	return out, nil
-}
-
-// DirectoryTree 装配完整目录树（含每目录直接题目数）。
-func (s *Store) DirectoryTree() ([]model.DirectoryNode, error) {
-	all, err := s.allDirectories()
-	if err != nil {
-		return nil, err
-	}
-	counts := map[int64]int{}
-	rows, err := s.DB.Query(`SELECT directory_id, COUNT(*) FROM problems WHERE directory_id IS NOT NULL GROUP BY directory_id`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var id int64
-		var c int
-		if err := rows.Scan(&id, &c); err != nil {
-			return nil, err
-		}
-		counts[id] = c
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	nodes := map[int64]*model.DirectoryNode{}
-	for _, d := range all {
-		nodes[d.ID] = &model.DirectoryNode{ID: d.ID, Name: d.Name, ParentID: d.ParentID, OrderNo: d.OrderNo, ProblemCount: counts[d.ID]}
-	}
-	var roots []*model.DirectoryNode
-	for _, d := range all {
-		n := nodes[d.ID]
-		if d.ParentID != nil {
-			if p, ok := nodes[*d.ParentID]; ok {
-				p.Children = append(p.Children, *n)
-				continue
-			}
-		}
-		roots = append(roots, n)
-	}
-	var toVals func(list []*model.DirectoryNode) []model.DirectoryNode
-	toVals = func(list []*model.DirectoryNode) []model.DirectoryNode {
-		out := make([]model.DirectoryNode, 0, len(list))
-		for _, n := range list {
-			n.Children = toVals(ptrSlice(n.Children))
-			sort.SliceStable(n.Children, func(i, j int) bool {
-				if n.Children[i].OrderNo != n.Children[j].OrderNo {
-					return n.Children[i].OrderNo < n.Children[j].OrderNo
-				}
-				return n.Children[i].ID < n.Children[j].ID
-			})
-			out = append(out, *n)
-		}
-		return out
-	}
-	vals := toVals(roots)
-	sort.SliceStable(vals, func(i, j int) bool {
-		if vals[i].OrderNo != vals[j].OrderNo {
-			return vals[i].OrderNo < vals[j].OrderNo
-		}
-		return vals[i].ID < vals[j].ID
-	})
-	return vals, nil
-}
-
-func ptrSlice(in []model.DirectoryNode) []*model.DirectoryNode {
-	out := make([]*model.DirectoryNode, len(in))
-	for i := range in {
-		out[i] = &in[i]
-	}
-	return out
 }
 
 // ---------- 题目 ----------
@@ -356,15 +211,13 @@ func escapeLike(s string) string {
 
 // ProblemFilter 题目列表过滤条件。
 type ProblemFilter struct {
-	Q         string
-	Tags      []string
-	Type      string
-	DirID     *int64
-	Recursive bool
-	IDs       []int64
+	Q    string
+	Tags []string
+	Type string
+	IDs  []int64
 }
 
-const problemSummaryCols = `id,type,title,tags_json,time_limit_ms,memory_limit_mib,directory_id,created_at`
+const problemSummaryCols = `id,type,title,tags_json,time_limit_ms,memory_limit_mib,created_at`
 
 func scanProblemSummaries(rows *sql.Rows) ([]model.ProblemSummary, error) {
 	defer rows.Close()
@@ -372,7 +225,7 @@ func scanProblemSummaries(rows *sql.Rows) ([]model.ProblemSummary, error) {
 	for rows.Next() {
 		var p model.ProblemSummary
 		var tagsJSON string
-		if err := rows.Scan(&p.ID, &p.Type, &p.Title, &tagsJSON, &p.TimeLimitMS, &p.MemoryLimitMiB, &p.DirectoryID, &p.CreatedAt); err != nil {
+		if err := rows.Scan(&p.ID, &p.Type, &p.Title, &tagsJSON, &p.TimeLimitMS, &p.MemoryLimitMiB, &p.CreatedAt); err != nil {
 			return nil, err
 		}
 		p.Tags = decodeTags(tagsJSON)
@@ -381,8 +234,8 @@ func scanProblemSummaries(rows *sql.Rows) ([]model.ProblemSummary, error) {
 	return out, rows.Err()
 }
 
-// problemWhere 构造题目过滤 SQL。withTags=false 时忽略标签条件（供 facet 统计使用）。
-func (s *Store) problemWhere(f ProblemFilter, withTags bool) (string, []any, error) {
+// problemWhere 构造题目过滤 SQL（q/类型/ids；标签条件在 Go 侧按前缀规则过滤）。
+func (s *Store) problemWhere(f ProblemFilter) (string, []any) {
 	where := []string{"1=1"}
 	var args []any
 	if f.Q != "" {
@@ -390,30 +243,9 @@ func (s *Store) problemWhere(f ProblemFilter, withTags bool) (string, []any, err
 		where = append(where, `(title LIKE ? ESCAPE '\' OR tags_json LIKE ? ESCAPE '\')`)
 		args = append(args, like, like)
 	}
-	if withTags {
-		for _, t := range f.Tags {
-			where = append(where, `tags_json LIKE ? ESCAPE '\'`)
-			args = append(args, `%"`+escapeLike(t)+`"%`)
-		}
-	}
 	if f.Type != "" {
 		where = append(where, `type=?`)
 		args = append(args, f.Type)
-	}
-	if f.DirID != nil {
-		ids := []int64{*f.DirID}
-		if f.Recursive {
-			desc, err := s.descendantIDs(*f.DirID)
-			if err != nil {
-				return "", nil, err
-			}
-			ids = append(ids, desc...)
-		}
-		ph := strings.TrimRight(strings.Repeat("?,", len(ids)), ",")
-		where = append(where, `directory_id IN (`+ph+`)`)
-		for _, id := range ids {
-			args = append(args, id)
-		}
 	}
 	if len(f.IDs) > 0 {
 		ph := strings.TrimRight(strings.Repeat("?,", len(f.IDs)), ",")
@@ -422,30 +254,61 @@ func (s *Store) problemWhere(f ProblemFilter, withTags bool) (string, []any, err
 			args = append(args, id)
 		}
 	}
-	return strings.Join(where, " AND "), args, nil
+	return strings.Join(where, " AND "), args
 }
 
-// ListProblems 按过滤条件列出题目摘要。
-func (s *Store) ListProblems(f ProblemFilter) ([]model.ProblemSummary, error) {
-	where, args, err := s.problemWhere(f, true)
-	if err != nil {
-		return nil, err
+// tagSetMatches 报告 tags 中是否存在 sel 本身或其前缀子孙（t==sel || HasPrefix(t, sel+"/")）。
+func tagSetMatches(tags []string, sel string) bool {
+	prefix := sel + "/"
+	for _, t := range tags {
+		if t == sel || strings.HasPrefix(t, prefix) {
+			return true
+		}
 	}
+	return false
+}
+
+// tagMatchesSelected 前缀 AND 规则：对选中集 S 中每个 s，题目至少有一个标签命中。
+func tagMatchesSelected(tags []string, selected []string) bool {
+	for _, sel := range selected {
+		if !tagSetMatches(tags, sel) {
+			return false
+		}
+	}
+	return true
+}
+
+// ListProblems 按过滤条件列出题目摘要（标签条件走前缀 AND 规则）。
+func (s *Store) ListProblems(f ProblemFilter) ([]model.ProblemSummary, error) {
+	where, args := s.problemWhere(f)
 	rows, err := s.DB.Query(`SELECT `+problemSummaryCols+` FROM problems WHERE `+where+` ORDER BY id DESC`, args...)
 	if err != nil {
 		return nil, err
 	}
-	return scanProblemSummaries(rows)
+	list, err := scanProblemSummaries(rows)
+	if err != nil {
+		return nil, err
+	}
+	if len(f.Tags) == 0 {
+		return list, nil
+	}
+	out := make([]model.ProblemSummary, 0, len(list))
+	for _, p := range list {
+		if tagMatchesSelected(p.Tags, f.Tags) {
+			out = append(out, p)
+		}
+	}
+	return out, nil
 }
 
 // CreateProblem 写入题目，返回新 id。
 func (s *Store) CreateProblem(p model.Problem) (int64, error) {
 	res, err := s.DB.Exec(`INSERT INTO problems
-		(type,title,tags_json,statement_md,body_json,answer_json,solutions_json,time_limit_ms,memory_limit_mib,directory_id)
-		VALUES(?,?,?,?,?,?,?,?,?,?)`,
+		(type,title,tags_json,statement_md,body_json,answer_json,solutions_json,time_limit_ms,memory_limit_mib)
+		VALUES(?,?,?,?,?,?,?,?,?)`,
 		string(p.Type), p.Title, encodeTags(p.Tags), p.StatementMD,
 		string(p.BodyJSON), string(p.AnswerJSON), string(p.Solutions),
-		p.TimeLimitMS, p.MemoryLimitMiB, p.DirectoryID)
+		p.TimeLimitMS, p.MemoryLimitMiB)
 	if err != nil {
 		return 0, err
 	}
@@ -457,9 +320,9 @@ func (s *Store) GetProblem(id int64) (*model.Problem, error) {
 	p := &model.Problem{}
 	var tagsJSON, body, answer, solutions string
 	err := s.DB.QueryRow(`SELECT id,type,title,tags_json,statement_md,body_json,answer_json,solutions_json,
-		time_limit_ms,memory_limit_mib,directory_id,created_at FROM problems WHERE id=?`, id).
+		time_limit_ms,memory_limit_mib,created_at FROM problems WHERE id=?`, id).
 		Scan(&p.ID, &p.Type, &p.Title, &tagsJSON, &p.StatementMD, &body, &answer, &solutions,
-			&p.TimeLimitMS, &p.MemoryLimitMiB, &p.DirectoryID, &p.CreatedAt)
+			&p.TimeLimitMS, &p.MemoryLimitMiB, &p.CreatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -476,10 +339,10 @@ func (s *Store) GetProblem(id int64) (*model.Problem, error) {
 // UpdateProblem 全量更新题目（按 id）。
 func (s *Store) UpdateProblem(p model.Problem) error {
 	res, err := s.DB.Exec(`UPDATE problems SET type=?,title=?,tags_json=?,statement_md=?,body_json=?,
-		answer_json=?,solutions_json=?,time_limit_ms=?,memory_limit_mib=?,directory_id=? WHERE id=?`,
+		answer_json=?,solutions_json=?,time_limit_ms=?,memory_limit_mib=? WHERE id=?`,
 		string(p.Type), p.Title, encodeTags(p.Tags), p.StatementMD,
 		string(p.BodyJSON), string(p.AnswerJSON), string(p.Solutions),
-		p.TimeLimitMS, p.MemoryLimitMiB, p.DirectoryID, p.ID)
+		p.TimeLimitMS, p.MemoryLimitMiB, p.ID)
 	if err != nil {
 		return err
 	}
@@ -537,88 +400,191 @@ type TagCount struct {
 	Count int    `json:"count"`
 }
 
-// superset 判断 set 是否为 sub 的超集（sub ⊆ set）。
-func superset(set, sub map[string]bool) bool {
-	for k := range sub {
-		if !set[k] {
-			return false
+// ValidateTagPath 校验并规范化标签路径：trim 后非空、首尾不得为 /、不得有空层级。
+func ValidateTagPath(s string) (string, error) {
+	t := strings.TrimSpace(s)
+	if t == "" {
+		return "", errors.New("标签不能为空")
+	}
+	if strings.HasPrefix(t, "/") || strings.HasSuffix(t, "/") {
+		return "", fmt.Errorf("标签 %q 不能以 / 开头或结尾", t)
+	}
+	for _, seg := range strings.Split(t, "/") {
+		if strings.TrimSpace(seg) == "" {
+			return "", fmt.Errorf("标签 %q 含空层级", t)
 		}
 	}
-	return true
+	return t, nil
 }
 
-// ListTagFacets 动态 facet 统计（电商筛选栏语义）：
-//
-//   - 基底过滤 = f 去掉标签条件后的全部条件（q/类型/目录等）；
-//   - 对候选标签 T：count = 满足基底过滤、且标签集合包含 effectiveTags(T) 的题目数，
-//     其中 T 已选中时 effectiveTags(T) = 选中集去掉 T（预览"取消勾选后还剩几题"），
-//     T 未选中时 effectiveTags(T) = 选中集加上 T（预览"点下去能筛出几题"）；
-//   - total = 满足完整过滤（含全部选中标签，AND）的题目数。
-//
-// 空过滤时退化为全局计数，与旧行为兼容。
-func (s *Store) ListTagFacets(f ProblemFilter) ([]TagCount, int, error) {
-	where, args, err := s.problemWhere(f, false)
+// RenameTag 重命名标签：精确匹配重写为新值，from 前缀子树整体搬家；与已有标签重复时保序去重合并。
+// 返回受影响的题目数。
+func (s *Store) RenameTag(from, to string) (int64, error) {
+	from, err := ValidateTagPath(from)
 	if err != nil {
-		return nil, 0, err
+		return 0, fmt.Errorf("from: %w", err)
 	}
+	to, err = ValidateTagPath(to)
+	if err != nil {
+		return 0, fmt.Errorf("to: %w", err)
+	}
+	return s.rewriteTags(func(t string) ([]string, bool) {
+		switch {
+		case t == from:
+			return []string{to}, true
+		case strings.HasPrefix(t, from+"/"):
+			return []string{to + t[len(from):]}, true
+		}
+		return nil, false
+	})
+}
+
+// DeleteTag 删除标签及其全部前缀子孙，从所有题目上移除。返回受影响的题目数。
+func (s *Store) DeleteTag(tag string) (int64, error) {
+	tag, err := ValidateTagPath(tag)
+	if err != nil {
+		return 0, err
+	}
+	return s.rewriteTags(func(t string) ([]string, bool) {
+		if t == tag || strings.HasPrefix(t, tag+"/") {
+			return nil, true
+		}
+		return nil, false
+	})
+}
+
+// rewriteTags 对每道题的标签列表应用 rewrite（返回替换列表 + 是否命中），
+// 命中的题目在事务内保序去重后更新。返回发生变化的题目数。
+func (s *Store) rewriteTags(rewrite func(string) ([]string, bool)) (int64, error) {
+	rows, err := s.DB.Query(`SELECT id, tags_json FROM problems`)
+	if err != nil {
+		return 0, err
+	}
+	defer rows.Close()
+	type update struct {
+		id   int64
+		tags []string
+	}
+	var updates []update
+	for rows.Next() {
+		var id int64
+		var tagsJSON string
+		if err := rows.Scan(&id, &tagsJSON); err != nil {
+			return 0, err
+		}
+		tags := decodeTags(tagsJSON)
+		next := make([]string, 0, len(tags))
+		mutated := false
+		for _, t := range tags {
+			if rep, hit := rewrite(t); hit {
+				mutated = true
+				next = append(next, rep...)
+				continue
+			}
+			next = append(next, t)
+		}
+		if mutated {
+			seen := map[string]bool{}
+			dedup := make([]string, 0, len(next))
+			for _, t := range next {
+				if !seen[t] {
+					seen[t] = true
+					dedup = append(dedup, t)
+				}
+			}
+			updates = append(updates, update{id: id, tags: dedup})
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return 0, err
+	}
+	if len(updates) == 0 {
+		return 0, nil
+	}
+	tx, err := s.DB.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+	for _, u := range updates {
+		if _, err := tx.Exec(`UPDATE problems SET tags_json=? WHERE id=?`, encodeTags(u.tags), u.id); err != nil {
+			return 0, err
+		}
+	}
+	return int64(len(updates)), tx.Commit()
+}
+
+// ListTagFacets 动态 facet 统计（前缀层级语义）：
+//
+//   - 基底过滤 = f 去掉标签条件后的全部条件（q/类型等）；
+//   - 候选节点 = 基底命中题目的字面标签 ∪ 其虚拟祖先前缀 ∪ 选中集；
+//   - 对候选 T：count = 满足基底过滤、且按前缀 AND 规则命中 effective(T) 的题目数，
+//     其中 T 已选中时 effective(T) = 选中集去掉 T（预览"取消勾选后还剩几题"），
+//     T 未选中时 effective(T) = 选中集加上 T（预览"点下去能筛出几题"）；
+//   - total = 满足完整选中集（AND + 前缀规则）的题目数。
+//
+// 空过滤时退化为全局计数。
+func (s *Store) ListTagFacets(f ProblemFilter) ([]TagCount, int, error) {
+	where, args := s.problemWhere(f)
 	rows, err := s.DB.Query(`SELECT tags_json FROM problems WHERE `+where, args...)
 	if err != nil {
 		return nil, 0, err
 	}
 	defer rows.Close()
 
-	selected := map[string]bool{}
-	for _, t := range f.Tags {
-		selected[t] = true
+	selected := f.Tags
+	inSelected := func(t string) bool {
+		for _, s := range selected {
+			if s == t {
+				return true
+			}
+		}
+		return false
 	}
-	candidates := map[string]bool{} // universe ∪ selected
-	tagSets := make([]map[string]bool, 0, 64)
+	candidates := map[string]bool{}
+	var tagLists [][]string
 	for rows.Next() {
 		var tagsJSON string
 		if err := rows.Scan(&tagsJSON); err != nil {
 			return nil, 0, err
 		}
-		set := map[string]bool{}
-		for _, t := range decodeTags(tagsJSON) {
-			set[t] = true
+		tags := decodeTags(tagsJSON)
+		tagLists = append(tagLists, tags)
+		for _, t := range tags {
 			candidates[t] = true
+			for i := 0; i < len(t); i++ { // 虚拟祖先：a/b/c → a, a/b
+				if t[i] == '/' {
+					candidates[t[:i]] = true
+				}
+			}
 		}
-		tagSets = append(tagSets, set)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, 0, err
 	}
-	for t := range selected {
+	for _, t := range selected {
 		candidates[t] = true
 	}
 
-	counts := map[string]int{}
+	counts := make(map[string]int, len(candidates))
 	total := 0
-	for _, set := range tagSets {
-		matchAll := superset(set, selected)
-		if matchAll {
+	for _, tags := range tagLists {
+		if tagMatchesSelected(tags, selected) {
 			total++
 		}
 		for t := range candidates {
-			var want map[string]bool
-			if selected[t] {
-				if len(selected) == 1 {
-					want = map[string]bool{}
-				} else {
-					want = map[string]bool{}
-					for k := range selected {
-						if k != t {
-							want[k] = true
-						}
+			want := make([]string, 0, len(selected)+1)
+			if inSelected(t) {
+				for _, s := range selected {
+					if s != t {
+						want = append(want, s)
 					}
 				}
 			} else {
-				want = map[string]bool{t: true}
-				for k := range selected {
-					want[k] = true
-				}
+				want = append(want, selected...)
+				want = append(want, t)
 			}
-			if superset(set, want) {
+			if tagMatchesSelected(tags, want) {
 				counts[t]++
 			}
 		}

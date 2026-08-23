@@ -67,7 +67,6 @@ type ProblemPayload struct {
 	Solutions      json.RawMessage `json:"solutions"`
 	TimeLimitMS    int             `json:"timeLimitMs"`
 	MemoryLimitMiB int             `json:"memoryLimitMiB"`
-	DirectoryID    *int64          `json:"directoryId,omitempty"`
 }
 
 // ---------- 图片引用 ----------

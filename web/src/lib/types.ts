@@ -29,7 +29,6 @@ export interface ProblemSummary {
   type: ProblemType
   title: string
   tags: string[]
-  directoryId: number | null
   timeLimitMs: number
   memoryLimitMiB: number
   createdAt: string
@@ -47,7 +46,6 @@ export interface Problem {
   solutions: Solution[]
   timeLimitMs: number
   memoryLimitMiB: number
-  directoryId: number | null
   createdAt: string
 }
 
@@ -61,16 +59,15 @@ export interface ProblemPayload {
   solutions?: Solution[]
   timeLimitMs?: number
   memoryLimitMiB?: number
-  directoryId?: number | null
 }
 
-export interface DirectoryNode {
-  id: number
-  name: string
-  parentId: number | null
-  orderNo: number
-  problemCount: number
-  children: DirectoryNode[]
+// 标签树节点：tag 为完整路径（如 数学/几何），label 为最后一段。
+// 虚拟父节点由服务端分面接口直接给出计数。
+export interface TagNode {
+  tag: string
+  label: string
+  count: number
+  children: TagNode[]
 }
 
 export interface TagCount {
@@ -127,6 +124,4 @@ export interface ProblemFilterState {
   q: string
   tags: string[]
   type: ProblemType | ''
-  dirId: number | null
-  recursive: boolean
 }

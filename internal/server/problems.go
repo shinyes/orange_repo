@@ -24,14 +24,6 @@ func parseProblemFilter(c *fiber.Ctx) (store.ProblemFilter, error) {
 		}
 	}
 	f.Type = c.Query("type")
-	if v := c.Query("dirId"); v != "" {
-		id, err := strconv.ParseInt(v, 10, 64)
-		if err != nil {
-			return f, errors.New("invalid dirId")
-		}
-		f.DirID = &id
-		f.Recursive = c.Query("recursive") == "1" || c.Query("recursive") == "true"
-	}
 	if idsParam := c.Query("ids"); idsParam != "" {
 		for _, part := range strings.Split(idsParam, ",") {
 			id, err := strconv.ParseInt(strings.TrimSpace(part), 10, 64)
@@ -79,7 +71,6 @@ func (s *Server) handleCreateProblem(c *fiber.Ctx) error {
 		Solutions:      req.Solutions,
 		TimeLimitMS:    req.TimeLimitMS,
 		MemoryLimitMiB: req.MemoryLimitMiB,
-		DirectoryID:    req.DirectoryID,
 	}
 	id, err := s.Store.CreateProblem(p)
 	if err != nil {
@@ -112,8 +103,7 @@ func (s *Server) handleUpdateProblem(c *fiber.Ctx) error {
 	if err != nil {
 		return respondError(c, fiber.StatusBadRequest, err.Error())
 	}
-	existing, err := s.Store.GetProblem(id)
-	if err != nil {
+	if _, err := s.Store.GetProblem(id); err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			return respondError(c, fiber.StatusNotFound, "problem not found")
 		}
@@ -123,8 +113,6 @@ func (s *Server) handleUpdateProblem(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil {
 		return respondError(c, fiber.StatusBadRequest, "invalid request")
 	}
-	// 保留原目录归属（目录移动走独立端点），除非显式携带 directoryId
-	req.DirectoryID = existing.DirectoryID
 	if err := zipio.NormalizeProblemPayload(&req); err != nil {
 		return respondError(c, fiber.StatusBadRequest, err.Error())
 	}
@@ -139,7 +127,6 @@ func (s *Server) handleUpdateProblem(c *fiber.Ctx) error {
 		Solutions:      req.Solutions,
 		TimeLimitMS:    req.TimeLimitMS,
 		MemoryLimitMiB: req.MemoryLimitMiB,
-		DirectoryID:    req.DirectoryID,
 	}
 	if err := s.Store.UpdateProblem(p); err != nil {
 		return err
@@ -157,34 +144,6 @@ func (s *Server) handleDeleteProblem(c *fiber.Ctx) error {
 		return respondError(c, fiber.StatusBadRequest, err.Error())
 	}
 	if err := s.Store.DeleteProblem(id); err != nil {
-		return err
-	}
-	return c.SendStatus(fiber.StatusNoContent)
-}
-
-type movePayload struct {
-	DirectoryID *int64 `json:"directoryId"`
-}
-
-// handleMoveProblem 移动题目到目录（null 表示移到根）。
-func (s *Server) handleMoveProblem(c *fiber.Ctx) error {
-	id, err := paramID(c, "id")
-	if err != nil {
-		return respondError(c, fiber.StatusBadRequest, err.Error())
-	}
-	var req movePayload
-	if err := c.BodyParser(&req); err != nil {
-		return respondError(c, fiber.StatusBadRequest, "invalid request")
-	}
-	p, err := s.Store.GetProblem(id)
-	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			return respondError(c, fiber.StatusNotFound, "problem not found")
-		}
-		return err
-	}
-	p.DirectoryID = req.DirectoryID
-	if err := s.Store.UpdateProblem(*p); err != nil {
 		return err
 	}
 	return c.SendStatus(fiber.StatusNoContent)
