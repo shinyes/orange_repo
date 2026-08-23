@@ -203,6 +203,113 @@ func (s *Store) ReorderChapterItems(chapterID int64, itemIDs []int64) error {
 	return tx.Commit()
 }
 
+// ChapterLayout 单章的条目顺序与归属（用于训练整体布局重排）。
+type ChapterLayout struct {
+	ChapterID int64
+	ItemIDs   []int64
+}
+
+// SetTrainingLayout 原子化重排训练布局：
+//
+//   - chapterIds 必须是该训练全部章节的一个排列，决定章节顺序；
+//   - layout 必须覆盖全部章节，且所有 ItemIDs 的并集必须恰好等于该训练全部条目
+//     （无重复、无遗漏、无外来 id），决定每章条目顺序并支持跨章节移动。
+//
+// 任一校验失败则整 体回滚。
+func (s *Store) SetTrainingLayout(trainingID int64, chapterIDs []int64, layout []ChapterLayout) error {
+	tx, err := s.DB.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	// 章节完整性：chapterIds 与 layout 都必须恰好覆盖该训练的全部章节
+	rows, err := tx.Query(`SELECT id FROM training_chapters WHERE training_id=?`, trainingID)
+	if err != nil {
+		return err
+	}
+	existingChapters := map[int64]bool{}
+	for rows.Next() {
+		var cid int64
+		if err := rows.Scan(&cid); err != nil {
+			rows.Close()
+			return err
+		}
+		existingChapters[cid] = true
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	rows.Close()
+	if len(chapterIDs) != len(existingChapters) || len(layout) != len(existingChapters) {
+		return errors.New("layout must cover all chapters of the training exactly once")
+	}
+	for _, cid := range chapterIDs {
+		if !existingChapters[cid] {
+			return errors.New("chapterIds contains a chapter outside this training")
+		}
+	}
+
+	// 条目完整性：并集必须等于该训练全部条目
+	rows, err = tx.Query(`SELECT ti.id FROM training_items ti
+		JOIN training_chapters tc ON ti.chapter_id=tc.id
+		WHERE tc.training_id=?`, trainingID)
+	if err != nil {
+		return err
+	}
+	existingItems := map[int64]bool{}
+	for rows.Next() {
+		var iid int64
+		if err := rows.Scan(&iid); err != nil {
+			rows.Close()
+			return err
+		}
+		existingItems[iid] = true
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	rows.Close()
+
+	posted := map[int64]bool{}
+	for _, g := range layout {
+		if !existingChapters[g.ChapterID] {
+			return errors.New("layout contains a chapter outside this training")
+		}
+		for _, iid := range g.ItemIDs {
+			if posted[iid] {
+				return errors.New("duplicate itemId in layout")
+			}
+			posted[iid] = true
+		}
+	}
+	if len(posted) != len(existingItems) {
+		return errors.New("itemIds must cover all items of the training exactly once")
+	}
+	for iid := range posted {
+		if !existingItems[iid] {
+			return errors.New("itemIds contains an item outside this training")
+		}
+	}
+
+	// 写入：章节顺序 + 条目归属与顺序
+	for i, cid := range chapterIDs {
+		if _, err := tx.Exec(`UPDATE training_chapters SET order_no=? WHERE id=? AND training_id=?`, i+1, cid, trainingID); err != nil {
+			return err
+		}
+	}
+	for _, g := range layout {
+		for i, iid := range g.ItemIDs {
+			if _, err := tx.Exec(`UPDATE training_items SET chapter_id=?, order_no=? WHERE id=?`, g.ChapterID, i+1, iid); err != nil {
+				return err
+			}
+		}
+	}
+	return tx.Commit()
+}
+
 func (s *Store) DeleteItem(id int64) error {
 	res, err := s.DB.Exec(`DELETE FROM training_items WHERE id=?`, id)
 	if err != nil {

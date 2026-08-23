@@ -78,6 +78,7 @@ func New(s *store.Store, uploadsDir, webDist string) *fiber.App {
 	api.Delete("/chapters/:id", srv.handleDeleteChapter)
 	api.Post("/chapters/:id/items", srv.handleAddChapterItems)
 	api.Put("/chapters/:id/items", srv.handleReorderChapterItems)
+	api.Put("/trainings/:id/layout", srv.handleTrainingLayout)
 	api.Delete("/items/:id", srv.handleDeleteItem)
 
 	api.Get("/practices", srv.handleListPractices)

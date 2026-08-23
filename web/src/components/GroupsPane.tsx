@@ -1,11 +1,13 @@
-import { useState } from 'react'
+import { useState, type DragEvent } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
   ArrowDownIcon,
   ArrowUpIcon,
+  ChevronRightIcon,
   DownloadIcon,
   FolderPlusIcon,
+  GripVerticalIcon,
   PlusIcon,
   TrashIcon,
 } from 'lucide-react'
@@ -20,21 +22,118 @@ import type { Chapter, Item, PracticeItem } from '@/lib/types'
 import { ConfirmDialog } from './dialogs'
 import { Empty } from './ProblemPane'
 
-// 训练详情（章节化）。
+type DragState =
+  | { kind: 'item'; itemId: number; fromChapterId: number }
+  | { kind: 'chapter'; chapterId: number }
+
+// 训练详情（章节化，支持拖拽排序：条目可跨章节移动，章节可整体排序；拖章节时全部折叠）。
 export function TrainingDetail({ id }: { id: number }) {
   const qc = useQueryClient()
   const { checked, goHome } = useAppState()
   const q = useQuery({ queryKey: ['training', id], queryFn: () => api.getTraining(id) })
   const [newChapter, setNewChapter] = useState('')
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [collapsed, setCollapsed] = useState<Record<number, boolean>>({})
+
+  // 拖拽状态提升到详情级：跨章节放置需要全局视野
+  const [drag, setDrag] = useState<DragState | null>(null)
+  const [itemIndicator, setItemIndicator] = useState<{ chapterId: number; index: number } | null>(null)
+  const [chapterIndicator, setChapterIndicator] = useState<number | null>(null)
+
+  const chapters = q.data?.chapters ?? []
+  const draggingChapter = drag?.kind === 'chapter'
 
   async function invalidate() {
     await qc.invalidateQueries({ queryKey: ['training', id] })
     await qc.invalidateQueries({ queryKey: ['trainings'] })
   }
 
-  if (!q.data) return <div className="p-8 text-sm text-muted-foreground">加载中…</div>
-  const { training, chapters } = q.data
+  function endDrag() {
+    setDrag(null)
+    setItemIndicator(null)
+    setChapterIndicator(null)
+  }
+
+  async function commitLayout(next: Chapter[]) {
+    try {
+      await api.updateTrainingLayout(id, {
+        chapterIds: next.map((c) => c.id),
+        chapters: next.map((c) => ({ chapterId: c.id, itemIds: c.items.map((i) => i.id) })),
+      })
+      await invalidate()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : '保存布局失败')
+    } finally {
+      endDrag()
+    }
+  }
+
+  function layoutKey(cs: Chapter[]) {
+    return JSON.stringify(cs.map((c) => [c.id, ...c.items.map((i) => i.id)]))
+  }
+
+  /** 把条目移到 (targetChapterId, targetIndex)；无实际变化返回 null。 */
+  function moveItemTo(itemId: number, fromChapterId: number, targetChapterId: number, targetIndex: number): Chapter[] | null {
+    const before = layoutKey(chapters)
+    const next = chapters.map((c) => ({ ...c, items: [...c.items] }))
+    const src = next.find((c) => c.id === fromChapterId)
+    if (!src) return null
+    const fromIdx = src.items.findIndex((i) => i.id === itemId)
+    if (fromIdx === -1) return null
+    const [moved] = src.items.splice(fromIdx, 1)
+    const dst = next.find((c) => c.id === targetChapterId)
+    if (!dst) return null
+    let idx = targetIndex
+    if (fromChapterId === targetChapterId && fromIdx < idx) idx--
+    idx = Math.max(0, Math.min(idx, dst.items.length))
+    dst.items.splice(idx, 0, moved)
+    if (layoutKey(next) === before) return null
+    return next
+  }
+
+  /** 把章节移到序列的 targetIndex 位置；无实际变化返回 null。 */
+  function moveChapterTo(chapterId: number, targetIndex: number): Chapter[] | null {
+    const ids = chapters.map((c) => c.id)
+    const from = ids.indexOf(chapterId)
+    if (from === -1) return null
+    let idx = targetIndex
+    if (from < idx) idx--
+    if (idx === from) return null
+    ids.splice(from, 1)
+    ids.splice(idx, 0, chapterId)
+    const byId = new Map(chapters.map((c) => [c.id, c]))
+    return ids.map((cid) => byId.get(cid)!)
+  }
+
+  function handleDropItem(targetChapterId: number, targetIndex: number) {
+    if (!drag || drag.kind !== 'item') return endDrag()
+    const next = moveItemTo(drag.itemId, drag.fromChapterId, targetChapterId, targetIndex)
+    if (next) void commitLayout(next)
+    else endDrag()
+  }
+
+  function handleDropChapter() {
+    if (!drag || drag.kind !== 'chapter' || chapterIndicator == null) return endDrag()
+    const next = moveChapterTo(drag.chapterId, chapterIndicator)
+    if (next) void commitLayout(next)
+    else endDrag()
+  }
+
+  function handleItemDragOver(chapterId: number, index: number, e: DragEvent) {
+    if (!drag || drag.kind !== 'item') return
+    e.preventDefault()
+    e.stopPropagation()
+    e.dataTransfer.dropEffect = 'move'
+    setItemIndicator((prev) => (prev?.chapterId === chapterId && prev.index === index ? prev : { chapterId, index }))
+  }
+
+  function handleChapterDragOver(index: number, e: DragEvent) {
+    if (!drag || drag.kind !== 'chapter') return
+    e.preventDefault()
+    e.stopPropagation()
+    e.dataTransfer.dropEffect = 'move'
+    setChapterIndicator((prev) => (prev === index ? prev : index))
+  }
 
   async function addChapter() {
     if (!newChapter.trim()) return
@@ -61,6 +160,9 @@ export function TrainingDetail({ id }: { id: number }) {
     }
   }
 
+  if (!q.data) return <div className="p-8 text-sm text-muted-foreground">加载中…</div>
+  const { training } = q.data
+
   return (
     <div className="mx-auto max-w-4xl px-6 py-5">
       <Header
@@ -73,11 +175,55 @@ export function TrainingDetail({ id }: { id: number }) {
         onDelete={() => setConfirmDelete(true)}
       />
 
-      {/* 章节列表 */}
-      <div className="space-y-4">
-        {chapters.map((ch) => (
-          <ChapterCard key={ch.id} chapter={ch} onChanged={invalidate} onAddChecked={() => addCheckedTo(ch.id)} checkedCount={checked.length} />
+      <p className="mb-3 text-xs text-muted-foreground">
+        拖住 ⋮ 手柄移动题目（可跨章节）；拖住章节手柄调整章节顺序（拖动时章节自动折叠）。
+      </p>
+
+      {/* 章节列表：章节拖放落点在容器层统一处理 */}
+      <div
+        className="space-y-3"
+        onDragEnd={endDrag}
+        onDrop={(e) => {
+          e.preventDefault()
+          handleDropChapter()
+        }}
+      >
+        {chapters.map((ch, i) => (
+          <div key={ch.id}>
+            {draggingChapter && chapterIndicator === i && <IndicatorLine />}
+            <ChapterCard
+              chapter={ch}
+              index={i}
+              collapsed={!!collapsed[ch.id]}
+              forceCollapse={draggingChapter}
+              drag={drag}
+              itemIndicator={itemIndicator}
+              checkedCount={checked.length}
+              onToggleCollapse={() => setCollapsed((p) => ({ ...p, [ch.id]: !p[ch.id] }))}
+              onChanged={invalidate}
+              onAddChecked={() => addCheckedTo(ch.id)}
+              onItemDragStart={(item, chapterId, e) => {
+                e.dataTransfer.effectAllowed = 'move'
+                e.dataTransfer.setData('text/plain', String(item.id))
+                setDrag({ kind: 'item', itemId: item.id, fromChapterId: chapterId })
+              }}
+              onChapterDragStart={(chapterId, e) => {
+                e.dataTransfer.effectAllowed = 'move'
+                e.dataTransfer.setData('text/plain', String(chapterId))
+                setDrag({ kind: 'chapter', chapterId })
+              }}
+              onItemDragOver={handleItemDragOver}
+              onItemDrop={(targetChapterId, targetIndex, ev) => {
+                ev.preventDefault()
+                ev.stopPropagation()
+                handleDropItem(targetChapterId, targetIndex)
+              }}
+              onChapterDragOver={handleChapterDragOver}
+              onChapterBodyDragOver={(chapterId, count, e) => handleItemDragOver(chapterId, count, e)}
+            />
+          </div>
         ))}
+        {draggingChapter && chapterIndicator === chapters.length && <IndicatorLine />}
         {chapters.length === 0 && <Empty>还没有章节，在下方创建第一个章节</Empty>}
       </div>
 
@@ -102,6 +248,10 @@ export function TrainingDetail({ id }: { id: number }) {
       />
     </div>
   )
+}
+
+function IndicatorLine() {
+  return <div className="my-0.5 h-0.5 rounded-full bg-primary" />
 }
 
 // 练习详情（平铺 + 分值）。
@@ -235,12 +385,33 @@ function Header(props: {
   )
 }
 
-// ---------- 章节卡片 ----------
+// ---------- 章节卡片（含拖拽） ----------
 
-function ChapterCard(props: { chapter: Chapter; onChanged: () => void; onAddChecked: () => void; checkedCount: number }) {
-  const { ch } = { ch: props.chapter }
+function ChapterCard(props: {
+  chapter: Chapter
+  index: number
+  collapsed: boolean
+  forceCollapse: boolean
+  drag: DragState | null
+  itemIndicator: { chapterId: number; index: number } | null
+  checkedCount: number
+  onToggleCollapse: () => void
+  onChanged: () => void
+  onAddChecked: () => void
+  onItemDragStart: (item: Item, chapterId: number, e: DragEvent) => void
+  onChapterDragStart: (chapterId: number, e: DragEvent) => void
+  onItemDragOver: (chapterId: number, index: number, e: DragEvent) => void
+  onItemDrop: (chapterId: number, index: number, e: DragEvent) => void
+  onChapterDragOver: (index: number, e: DragEvent) => void
+  onChapterBodyDragOver: (chapterId: number, count: number, e: DragEvent) => void
+}) {
+  const ch = props.chapter
   const [renaming, setRenaming] = useState(false)
   const [name, setName] = useState(ch.title)
+  const showBody = !props.collapsed && !props.forceCollapse
+  const itemDragActive = props.drag?.kind === 'item'
+  const ind = itemDragActive ? props.itemIndicator : null
+  const isDraggedChapter = props.drag?.kind === 'chapter' && props.drag.chapterId === ch.id
 
   async function saveName() {
     if (name.trim() && name.trim() !== ch.title) {
@@ -253,34 +424,52 @@ function ChapterCard(props: { chapter: Chapter; onChanged: () => void; onAddChec
     await api.deleteItem(item.id)
     props.onChanged()
   }
-  async function moveItem(index: number, dir: -1 | 1) {
-    const items = ch.items
-    const j = index + dir
-    if (j < 0 || j >= items.length) return
-    const ids = items.map((x) => x.id)
-    ;[ids[index], ids[j]] = [ids[j], ids[index]]
-    await api.reorderChapterItems(ch.id, ids)
-    props.onChanged()
-  }
   async function removeChapter() {
     await api.deleteChapter(ch.id)
     props.onChanged()
   }
 
   return (
-    <div className="rounded-xl border">
-      <div className="flex items-center gap-2 border-b bg-muted/50 px-3 py-2">
+    <div className={`rounded-xl border ${isDraggedChapter ? 'opacity-60' : ''}`}>
+      {/* 章节头部：手柄拖拽排序；拖拽经过时按上下半区决定插入位 */}
+      <div
+        className={`flex items-center gap-2 border-b bg-muted/50 px-2 py-2 ${
+          props.drag?.kind === 'chapter' && !isDraggedChapter ? 'hover:bg-muted' : ''
+        }`}
+        onDragOver={(e) =>
+          props.onChapterDragOver(
+            e.clientY > e.currentTarget.getBoundingClientRect().top + e.currentTarget.offsetHeight / 2 ? props.index + 1 : props.index,
+            e,
+          )
+        }
+      >
+        <span
+          draggable
+          onDragStart={(e) => props.onChapterDragStart(ch.id, e)}
+          title="拖动调整章节顺序"
+          className="flex shrink-0 cursor-grab items-center justify-center text-muted-foreground hover:text-foreground active:cursor-grabbing"
+        >
+          <GripVerticalIcon className="size-4" />
+        </span>
+        <button
+          type="button"
+          className="flex size-5 shrink-0 items-center justify-center"
+          onClick={props.onToggleCollapse}
+          title={props.collapsed ? '展开' : '折叠'}
+        >
+          <ChevronRightIcon className={`size-3.5 text-muted-foreground transition-transform ${showBody ? 'rotate-90' : ''}`} />
+        </button>
         {renaming ? (
           <Input value={name} onChange={(e) => setName(e.target.value)} onBlur={saveName} onKeyDown={(e) => e.key === 'Enter' && saveName()} className="h-7 max-w-xs" autoFocus />
         ) : (
-          <button type="button" className="text-sm font-medium hover:underline" onClick={() => setRenaming(true)} title="点击重命名">
+          <button type="button" className="min-w-0 flex-1 truncate text-left text-sm font-medium hover:underline" onClick={() => setRenaming(true)} title="点击重命名">
             {ch.title}
           </button>
         )}
-        <Badge variant="outline" className="text-[10px]">
+        <Badge variant="outline" className="shrink-0 text-[10px]">
           {ch.items.length} 题
         </Badge>
-        <div className="ml-auto flex items-center gap-1">
+        <div className="ml-auto flex shrink-0 items-center gap-1">
           <Button size="xs" variant="outline" onClick={props.onAddChecked} disabled={props.checkedCount === 0}>
             <PlusIcon data-icon="inline-start" /> 加入勾选（{props.checkedCount}）
           </Button>
@@ -289,24 +478,49 @@ function ChapterCard(props: { chapter: Chapter; onChanged: () => void; onAddChec
           </Button>
         </div>
       </div>
-      <div className="divide-y">
-        {ch.items.map((it, i) => (
-          <div key={it.id} className="flex items-center gap-2 px-3 py-1.5">
-            <span className="w-6 text-center text-xs text-muted-foreground">{i + 1}</span>
-            <span className="min-w-0 flex-1 truncate text-sm">{it.problemTitle || `#${it.problemId}`}</span>
-            <Button size="icon-xs" variant="ghost" disabled={i === 0} onClick={() => moveItem(i, -1)}>
-              <ArrowUpIcon />
-            </Button>
-            <Button size="icon-xs" variant="ghost" disabled={i === ch.items.length - 1} onClick={() => moveItem(i, 1)}>
-              <ArrowDownIcon />
-            </Button>
-            <Button size="icon-xs" variant="ghost" className="text-destructive" onClick={() => removeItem(it)}>
-              <TrashIcon />
-            </Button>
-          </div>
-        ))}
-        {ch.items.length === 0 && <div className="px-3 py-2 text-xs text-muted-foreground">空章节，勾选题目后点「加入勾选」</div>}
-      </div>
+
+      {/* 条目列表：拖动章节时整体隐藏 */}
+      {showBody && (
+        <div
+          className="divide-y"
+          onDragOver={(e) => props.onChapterBodyDragOver(ch.id, ch.items.length, e)}
+          onDrop={(e) => props.onItemDrop(ch.id, ch.items.length, e)}
+        >
+          {ind?.chapterId === ch.id && ind.index === 0 && <IndicatorLine />}
+          {ch.items.map((it, i) => (
+            <div key={it.id}>
+              {ind?.chapterId === ch.id && ind.index === i + 1 && <IndicatorLine />}
+              <div
+                draggable
+                onDragStart={(e) => props.onItemDragStart(it, ch.id, e)}
+                onDragOver={(e) => props.onItemDragOver(ch.id, i, e)}
+                onDrop={(e) => props.onItemDrop(ch.id, i, e)}
+                className={`group flex cursor-grab items-center gap-2 px-3 py-1.5 active:cursor-grabbing ${
+                  props.drag?.kind === 'item' && props.drag.itemId === it.id ? 'opacity-40' : 'hover:bg-muted/60'
+                }`}
+              >
+                <GripVerticalIcon className="size-3.5 shrink-0 text-muted-foreground/60" />
+                <span className="w-6 text-center text-xs text-muted-foreground">{i + 1}</span>
+                <span className="min-w-0 flex-1 truncate text-sm">{it.problemTitle || `#${it.problemId}`}</span>
+                <Button
+                  size="icon-xs"
+                  variant="ghost"
+                  className="opacity-0 transition-opacity group-hover:opacity-100"
+                  onClick={() => removeItem(it)}
+                  title="从章节移除"
+                >
+                  <TrashIcon />
+                </Button>
+              </div>
+            </div>
+          ))}
+          {ch.items.length === 0 && (
+            <div className={`px-3 py-2 text-xs text-muted-foreground ${itemDragActive ? 'bg-primary/5' : ''}`}>
+              空章节：拖入题目或勾选后点「加入勾选」
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }

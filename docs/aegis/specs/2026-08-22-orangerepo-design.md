@@ -117,6 +117,9 @@ GET  /api/export/trainings/:id                  GET /api/export/practices/:id
 CRUD /api/trainings[/:id]；POST /api/trainings/:id/chapters {title}
 PUT/DELETE /api/chapters/:id；POST /api/chapters/:id/items {problemIds}（追加）
 PUT  /api/chapters/:id/items {itemIds}（整表重排）；DELETE /api/items/:id
+PUT  /api/trainings/:id/layout {chapterIds:[…], chapters:[{chapterId,itemIds:[…]}]}
+     → {chapters}（v1.3.0：拖拽布局原子提交；chapterIds 须为章节全排列，
+       chapters 须覆盖全部章节且条目并集恰为该训练全部条目，否则 400）
 CRUD /api/practices[/:id]；POST /api/practices/:id/items {problemIds,score?}
 PUT  /api/practices/:id/items {itemIds}；PUT/DELETE /api/practice-items/:id
 ```

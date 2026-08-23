@@ -279,6 +279,84 @@ func TestExportImportRoundTrip(t *testing.T) {
 	}
 }
 
+// TestTrainingLayoutReorder 布局接口：章节排序 + 跨章节移动条目 + 完整性校验。
+func TestTrainingLayoutReorder(t *testing.T) {
+	app, _ := newTestApp(t)
+	cookie := sessionCookie(t, app)
+
+	_, trResp := doJSON(t, app, "POST", "/api/trainings", cookie, map[string]any{"title": "布局训练"})
+	trainingID := int64(trResp["id"].(float64))
+	mkChapter := func(title string) int64 {
+		_, r := doJSON(t, app, "POST", fmt.Sprintf("/api/trainings/%d/chapters", trainingID), cookie, map[string]string{"title": title})
+		return int64(r["id"].(float64))
+	}
+	chA := mkChapter("甲")
+	chB := mkChapter("乙")
+	mkProblem := func(title string) int64 {
+		_, r := doJSON(t, app, "POST", "/api/problems", cookie,
+			map[string]any{"type": "programming", "title": title, "bodyJson": map[string]any{}, "answerJson": map[string]any{}})
+		return int64(r["problem"].(map[string]any)["id"].(float64))
+	}
+	p1 := mkProblem("题目一")
+	p2 := mkProblem("题目二")
+	if resp, _ := doJSON(t, app, "POST", fmt.Sprintf("/api/chapters/%d/items", chA), cookie, map[string]any{"problemIds": []int64{p1, p2}}); resp.StatusCode != fiber.StatusCreated {
+		t.Fatalf("add items = %d", resp.StatusCode)
+	}
+
+	// 读取条目 id（甲在先）
+	_, detail := doJSON(t, app, "GET", fmt.Sprintf("/api/trainings/%d", trainingID), cookie, nil)
+	chs := detail["chapters"].([]any)
+	itemsA := chs[0].(map[string]any)["items"].([]any)
+	i1 := int64(itemsA[0].(map[string]any)["id"].(float64))
+	i2 := int64(itemsA[1].(map[string]any)["id"].(float64))
+
+	// 布局：乙在前、甲在后；把 i1（题目一）跨章节移入乙
+	resp, out := doJSON(t, app, "PUT", fmt.Sprintf("/api/trainings/%d/layout", trainingID), cookie, map[string]any{
+		"chapterIds": []int64{chB, chA},
+		"chapters": []any{
+			map[string]any{"chapterId": chB, "itemIds": []int64{i1}},
+			map[string]any{"chapterId": chA, "itemIds": []int64{i2}},
+		},
+	})
+	if resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("layout = %d %v", resp.StatusCode, out)
+	}
+	newChs := out["chapters"].([]any)
+	first := newChs[0].(map[string]any)
+	second := newChs[1].(map[string]any)
+	if first["title"] != "乙" {
+		t.Fatalf("chapter order wrong: %v", newChs)
+	}
+	fb := first["items"].([]any)
+	if len(fb) != 1 || fb[0].(map[string]any)["problemTitle"] != "题目一" {
+		t.Fatalf("moved item wrong: %v", fb)
+	}
+	sb := second["items"].([]any)
+	if len(sb) != 1 || sb[0].(map[string]any)["problemTitle"] != "题目二" {
+		t.Fatalf("remaining item wrong: %v", sb)
+	}
+
+	// 完整性：缺条目 → 400
+	resp, _ = doJSON(t, app, "PUT", fmt.Sprintf("/api/trainings/%d/layout", trainingID), cookie, map[string]any{
+		"chapterIds": []int64{chB, chA},
+		"chapters": []any{
+			map[string]any{"chapterId": chB, "itemIds": []int64{}},
+			map[string]any{"chapterId": chA, "itemIds": []int64{i2}},
+		},
+	})
+	if resp.StatusCode != fiber.StatusBadRequest {
+		t.Fatalf("incomplete layout = %d, want 400", resp.StatusCode)
+	}
+	// 外来章节 → 400
+	resp, _ = doJSON(t, app, "PUT", fmt.Sprintf("/api/trainings/%d/layout", trainingID), cookie, map[string]any{
+		"chapterIds": []int64{99999},
+		"chapters":   []any{map[string]any{"chapterId": 99999, "itemIds": []int64{}}},
+	})
+	if resp.StatusCode != fiber.StatusBadRequest {
+		t.Fatalf("foreign chapter layout = %d, want 400", resp.StatusCode)
+	}
+}
+
 func doListIDs(t *testing.T, app *fiber.App, cookie string) []int64 {
 	t.Helper()
 	_, list := doJSON(t, app, "GET", "/api/problems", cookie, nil)

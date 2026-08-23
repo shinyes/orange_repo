@@ -355,3 +355,45 @@ func (s *Server) handleDeletePracticeItem(c *fiber.Ctx) error {
 	}
 	return c.SendStatus(fiber.StatusNoContent)
 }
+
+// ---------- 训练布局（拖拽排序的原子提交） ----------
+
+type trainingLayoutPayload struct {
+	ChapterIDs []int64 `json:"chapterIds"`
+	Chapters   []struct {
+		ChapterID int64   `json:"chapterId"`
+		ItemIDs   []int64 `json:"itemIds"`
+	} `json:"chapters"`
+}
+
+// handleTrainingLayout PUT /api/trainings/:id/layout
+// chapterIds = 章节全排列；chapters = 每章条目的完整顺序（并集须覆盖全部条目）。
+// 支持章内重排、跨章节移动与章节排序，单事务原子生效。
+func (s *Server) handleTrainingLayout(c *fiber.Ctx) error {
+	id, err := paramID(c, "id")
+	if err != nil {
+		return respondError(c, fiber.StatusBadRequest, err.Error())
+	}
+	var req trainingLayoutPayload
+	if err := c.BodyParser(&req); err != nil {
+		return respondError(c, fiber.StatusBadRequest, "invalid request")
+	}
+	layout := make([]store.ChapterLayout, len(req.Chapters))
+	for i, g := range req.Chapters {
+		layout[i] = store.ChapterLayout{ChapterID: g.ChapterID, ItemIDs: g.ItemIDs}
+	}
+	if err := s.Store.SetTrainingLayout(id, req.ChapterIDs, layout); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			return respondError(c, fiber.StatusNotFound, "training not found")
+		}
+		return respondError(c, fiber.StatusBadRequest, err.Error())
+	}
+	chapters, err := s.Store.ListChapters(id)
+	if err != nil {
+		return err
+	}
+	if chapters == nil {
+		chapters = []model.Chapter{}
+	}
+	return respondData(c, fiber.StatusOK, fiber.Map{"chapters": chapters})
+}

@@ -119,6 +119,11 @@ export const api = {
     req<{ itemIds: number[] }>(`/api/chapters/${chapterId}/items`, json({ method: 'POST', body: JSON.stringify({ problemIds }) })),
   reorderChapterItems: (chapterId: number, itemIds: number[]) =>
     req<void>(`/api/chapters/${chapterId}/items`, json({ method: 'PUT', body: JSON.stringify({ itemIds }) })),
+  updateTrainingLayout: (
+    id: number,
+    payload: { chapterIds: number[]; chapters: { chapterId: number; itemIds: number[] }[] },
+  ) =>
+    req<{ chapters: Chapter[] }>(`/api/trainings/${id}/layout`, json({ method: 'PUT', body: JSON.stringify(payload) })),
   deleteItem: (id: number) => req<void>(`/api/items/${id}`, { method: 'DELETE' }),
 
   // ---- 练习 ----
