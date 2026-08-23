@@ -7,7 +7,7 @@ import { api } from '@/lib/api'
 import { AppStateProvider, useAppState } from '@/lib/app-context'
 import { Login } from '@/components/Login'
 import { PasswordDialog } from '@/components/PasswordDialog'
-import { Sidebar } from '@/components/Sidebar'
+import { ProblemListColumn, TagFilterColumn } from '@/components/Sidebar'
 import { ProblemPane } from '@/components/ProblemPane'
 import { PracticeDetail, TrainingDetail } from '@/components/GroupsPane'
 
@@ -49,8 +49,11 @@ function Main({ onLogout }: { onLogout: () => void }) {
   const [pwOpen, setPwOpen] = useState(false)
   return (
     <div className="flex h-screen overflow-hidden">
-      <aside className="w-[340px] shrink-0 border-r">
-        <Sidebar onLogout={onLogout} onOpenSettings={() => setPwOpen(true)} />
+      <aside className="w-[270px] shrink-0 border-r">
+        <TagFilterColumn onLogout={onLogout} onOpenSettings={() => setPwOpen(true)} />
+      </aside>
+      <aside className="w-[320px] shrink-0 border-r">
+        <ProblemListColumn />
       </aside>
       <main className="min-w-0 flex-1 overflow-y-auto">
         <RightPane />

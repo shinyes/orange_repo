@@ -7,7 +7,6 @@ import {
   ChevronsUpDownIcon,
   DownloadIcon,
   FileCodeIcon,
-  FolderIcon,
   ListChecksIcon,
   LogOutIcon,
   MoreVerticalIcon,
@@ -24,7 +23,6 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Separator } from '@/components/ui/separator'
 import {
   Dialog,
   DialogContent,
@@ -45,12 +43,9 @@ import { AddToGroupDialog, ConfirmDialog, ImportDialog, NewProblemDialog } from 
 
 const TYPE_LABEL: Record<ProblemType, string> = { programming: '编程', single_choice: '单选', true_false: '判断' }
 
-// 左栏：管理（新建/导入导出/搜索/类型过滤/标签树/题目列表/训练练习入口）。
-export function Sidebar({ onLogout, onOpenSettings }: { onLogout: () => void; onOpenSettings: () => void }) {
-  const { filter, patchFilter, checked, clearChecked } = useAppState()
-  const [newProblem, setNewProblem] = useState(false)
-  const [importOpen, setImportOpen] = useState(false)
-  const [addToGroup, setAddToGroup] = useState<'training' | 'practice' | null>(null)
+// 第一栏：标签筛选（搜索 / 类型 / 标签树）。
+export function TagFilterColumn({ onLogout, onOpenSettings }: { onLogout: () => void; onOpenSettings: () => void }) {
+  const { filter, patchFilter } = useAppState()
 
   return (
     <div className="flex h-full flex-col bg-sidebar">
@@ -59,7 +54,7 @@ export function Sidebar({ onLogout, onOpenSettings }: { onLogout: () => void; on
         <span className="flex size-8 items-center justify-center rounded-lg bg-primary text-lg text-primary-foreground">🍊</span>
         <div className="min-w-0 flex-1 leading-tight">
           <div className="truncate text-sm font-semibold">OrangeRepo</div>
-          <div className="text-[10px] text-muted-foreground">题库管理 · OrangeOJ 兼容</div>
+          <div className="text-[10px] text-muted-foreground">标签筛选</div>
         </div>
         <Button variant="ghost" size="icon-sm" title="修改密码" onClick={onOpenSettings}>
           <SettingsIcon />
@@ -70,27 +65,8 @@ export function Sidebar({ onLogout, onOpenSettings }: { onLogout: () => void; on
         </Button>
       </div>
 
-      {/* 操作区 */}
-      <div className="flex items-center gap-1.5 px-3 pt-3">
-        <Button size="sm" className="flex-1" onClick={() => setNewProblem(true)}>
-          <PlusIcon data-icon="inline-start" /> 题目
-        </Button>
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            className="inline-flex size-8 items-center justify-center rounded-lg border border-input bg-transparent text-sm transition-colors hover:bg-muted"
-            title="导入 ZIP"
-          >
-            <UploadIcon className="size-4" />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start">
-            <DropdownMenuItem onClick={() => setImportOpen(true)}>导入 OrangeOJ ZIP…</DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-        <ExportDropdown />
-      </div>
-
       {/* 搜索 */}
-      <div className="relative px-3 pt-2">
+      <div className="relative px-3 pt-3">
         <SearchIcon className="pointer-events-none absolute top-1/2 left-5 size-4 -translate-y-1/2 text-muted-foreground" />
         <Input
           value={filter.q}
@@ -123,10 +99,44 @@ export function Sidebar({ onLogout, onOpenSettings }: { onLogout: () => void; on
         ))}
       </div>
 
-      {/* 标签树 + 题目列表 */}
+      {/* 标签树 */}
       <ScrollArea className="min-h-0 flex-1">
         <TagTreePanel />
-        <Separator className="my-1" />
+      </ScrollArea>
+    </div>
+  )
+}
+
+// 第二栏：题目查看（操作 / 批量 / 题目列表 / 训练练习）。
+export function ProblemListColumn() {
+  const { checked, clearChecked } = useAppState()
+  const [newProblem, setNewProblem] = useState(false)
+  const [importOpen, setImportOpen] = useState(false)
+  const [addToGroup, setAddToGroup] = useState<'training' | 'practice' | null>(null)
+
+  return (
+    <div className="flex h-full flex-col bg-background">
+      {/* 操作区 */}
+      <div className="flex items-center gap-1.5 px-3 pt-3">
+        <Button size="sm" className="flex-1" onClick={() => setNewProblem(true)}>
+          <PlusIcon data-icon="inline-start" /> 题目
+        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            className="inline-flex size-8 items-center justify-center rounded-lg border border-input bg-transparent text-sm transition-colors hover:bg-muted"
+            title="导入 ZIP"
+          >
+            <UploadIcon className="size-4" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            <DropdownMenuItem onClick={() => setImportOpen(true)}>导入 OrangeOJ ZIP…</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <ExportDropdown />
+      </div>
+
+      {/* 题目列表 */}
+      <ScrollArea className="min-h-0 flex-1">
         <ProblemList />
       </ScrollArea>
 
@@ -148,7 +158,7 @@ export function Sidebar({ onLogout, onOpenSettings }: { onLogout: () => void; on
         </div>
       )}
 
-      {/* 训练 / 练习 分区 */}
+      {/* 训练 / 练习 分区（可折叠） */}
       <GroupSection kind="training" />
       <GroupSection kind="practice" />
 
@@ -651,20 +661,30 @@ function ProblemRow({ problem }: { problem: ProblemSummary }) {
   )
 }
 
-// ---------- 训练 / 练习 分区 ----------
+// ---------- 训练 / 练习 分区（可折叠，状态持久化） ----------
 
 function GroupSection({ kind }: { kind: 'training' | 'practice' }) {
   const isTraining = kind === 'training'
+  const storageKey = `orangerepo:collapse:${kind}`
   const { view, openTraining, openPractice } = useAppState()
   const qc = useQueryClient()
   const [creating, setCreating] = useState(false)
   const [title, setTitle] = useState('')
+  const [collapsed, setCollapsed] = useState(() => localStorage.getItem(storageKey) === '1')
   const listQuery = useQuery({
     queryKey: ['group-section', kind],
     queryFn: async (): Promise<{ trainings?: Training[]; practices?: Practice[] }> =>
       isTraining ? await api.trainings() : await api.practices(),
   })
   const groups = isTraining ? listQuery.data?.trainings : listQuery.data?.practices
+
+  function toggleCollapsed() {
+    setCollapsed((v) => {
+      localStorage.setItem(storageKey, v ? '0' : '1')
+      return !v
+    })
+    setCreating(false)
+  }
 
   async function create() {
     if (!title.trim()) return
@@ -682,56 +702,75 @@ function GroupSection({ kind }: { kind: 'training' | 'practice' }) {
 
   return (
     <div className="border-t">
-      <div className="flex items-center gap-1 px-3 py-1.5">
-        {isTraining ? (
-          <FolderIcon className="size-3.5 text-muted-foreground" />
-        ) : (
-          <ListChecksIcon className="size-3.5 text-muted-foreground" />
-        )}
-        <span className="text-xs font-medium text-muted-foreground">{isTraining ? '训练计划' : '练习'}</span>
+      <div className="flex items-center gap-1 px-2 py-1.5">
         <button
           type="button"
-          className="ml-auto rounded p-0.5 hover:bg-muted"
+          className="flex min-w-0 flex-1 items-center gap-1 rounded-md py-0.5 text-left hover:bg-muted"
+          onClick={toggleCollapsed}
+          title={collapsed ? '展开' : '折叠'}
+        >
+          <ChevronRightIcon className={`size-3.5 shrink-0 text-muted-foreground transition-transform ${collapsed ? '' : 'rotate-90'}`} />
+          {isTraining ? (
+            <FileCodeIcon className="size-3.5 shrink-0 text-muted-foreground" />
+          ) : (
+            <ListChecksIcon className="size-3.5 shrink-0 text-muted-foreground" />
+          )}
+          <span className="truncate text-xs font-medium text-muted-foreground">
+            {isTraining ? '训练计划' : '练习'}
+            {groups && groups.length > 0 && `（${groups.length}）`}
+          </span>
+        </button>
+        <button
+          type="button"
+          className="rounded p-0.5 hover:bg-muted"
           title={`新建${isTraining ? '训练' : '练习'}`}
-          onClick={() => setCreating(!creating)}
+          onClick={() => {
+            setCollapsed(false)
+            localStorage.setItem(storageKey, '0')
+            setCreating((v) => !v)
+          }}
         >
           <PlusIcon className="size-3.5" />
         </button>
       </div>
-      {creating && (
-        <div className="flex gap-1 px-3 pb-1.5">
-          <Input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder={`${isTraining ? '训练' : '练习'}名称`}
-            className="h-7 text-xs"
-            autoFocus
-            onKeyDown={(e) => e.key === 'Enter' && create()}
-          />
-          <Button size="xs" onClick={create}>
-            确定
-          </Button>
-        </div>
+      {!collapsed && (
+        <>
+          {creating && (
+            <div className="flex gap-1 px-3 pb-1.5">
+              <Input
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder={`${isTraining ? '训练' : '练习'}名称`}
+                className="h-7 text-xs"
+                autoFocus
+                onKeyDown={(e) => e.key === 'Enter' && create()}
+              />
+              <Button size="xs" onClick={create}>
+                确定
+              </Button>
+            </div>
+          )}
+          <div className="max-h-32 overflow-y-auto px-2 pb-2">
+            {(groups ?? []).map((g) => {
+              const active = view.kind === kind && view.id === g.id
+              return (
+                <button
+                  key={g.id}
+                  type="button"
+                  className={`flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-left text-xs ${
+                    active ? 'bg-accent font-medium text-accent-foreground' : 'hover:bg-muted'
+                  }`}
+                  onClick={() => (isTraining ? openTraining(g.id) : openPractice(g.id))}
+                >
+                  <FileCodeIcon className="size-3 shrink-0 text-muted-foreground" />
+                  <span className="min-w-0 flex-1 truncate">{g.title}</span>
+                  <span className="shrink-0 text-muted-foreground">{g.problemCount}</span>
+                </button>
+              )
+            })}
+          </div>
+        </>
       )}
-      <div className="max-h-32 overflow-y-auto px-2 pb-2">
-        {(groups ?? []).map((g) => {
-          const active = view.kind === kind && view.id === g.id
-          return (
-            <button
-              key={g.id}
-              type="button"
-              className={`flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-left text-xs ${
-                active ? 'bg-accent font-medium text-accent-foreground' : 'hover:bg-muted'
-              }`}
-              onClick={() => (isTraining ? openTraining(g.id) : openPractice(g.id))}
-            >
-              <FileCodeIcon className="size-3 shrink-0 text-muted-foreground" />
-              <span className="min-w-0 flex-1 truncate">{g.title}</span>
-              <span className="shrink-0 text-muted-foreground">{g.problemCount}</span>
-            </button>
-          )
-        })}
-      </div>
     </div>
   )
 }

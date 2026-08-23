@@ -37,7 +37,7 @@ export function ProblemPane({ id }: { id: number }) {
   const { goHome } = useAppState()
   const qc = useQueryClient()
   const problemQuery = useQuery({ queryKey: ['problem', id], queryFn: () => api.getProblem(id) })
-  const [tab, setTab] = useState('statement')
+  const [tab, setTab] = useState('problem')
   const [confirmDelete, setConfirmDelete] = useState(false)
 
   const problem = problemQuery.data?.problem
@@ -82,22 +82,26 @@ export function ProblemPane({ id }: { id: number }) {
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as string)}>
         <TabsList>
-          <TabsTrigger value="statement">题面</TabsTrigger>
-          <TabsTrigger value="answer">答案</TabsTrigger>
+          <TabsTrigger value="problem">题目</TabsTrigger>
           <TabsTrigger value="solutions">题解 {problem.solutions.length > 0 && `(${problem.solutions.length})`}</TabsTrigger>
           <TabsTrigger value="edit">编辑</TabsTrigger>
         </TabsList>
-        <TabsContent value="statement">
-          <StatementView problem={problem} />
-        </TabsContent>
-        <TabsContent value="answer">
-          <AnswerView problem={problem} />
+        <TabsContent value="problem" className="space-y-5">
+          <section>
+            <h2 className="mb-2 text-xs font-medium tracking-wide text-muted-foreground">题面</h2>
+            <StatementView problem={problem} />
+          </section>
+          <Separator />
+          <section>
+            <h2 className="mb-2 text-xs font-medium tracking-wide text-muted-foreground">答案</h2>
+            <AnswerView problem={problem} />
+          </section>
         </TabsContent>
         <TabsContent value="solutions">
           <SolutionsView solutions={problem.solutions} />
         </TabsContent>
         <TabsContent value="edit">
-          <ProblemEditor problem={problem} onSaved={() => setTab('statement')} />
+          <ProblemEditor problem={problem} onSaved={() => setTab('problem')} />
         </TabsContent>
       </Tabs>
 
