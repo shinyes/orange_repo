@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type DragEvent } from 'react'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
@@ -282,6 +282,36 @@ function TagTreePanel() {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const [renaming, setRenaming] = useState<string | null>(null)
   const [deleting, setDeleting] = useState<TagNode | null>(null)
+  // 标签拖拽改层级：拖起节点放到目标节点下成为其子标签（复用重命名接口联动题目）
+  const [tagDragFrom, setTagDragFrom] = useState<string | null>(null)
+  const [tagDropTarget, setTagDropTarget] = useState<string | null>(null)
+
+  /** 目标是否可放置：不能是自身、也不能落进自己的子树（否则会连带改写目标路径）。 */
+  function canDropTag(target: string, from: string): boolean {
+    if (!from) return false
+    const to = `${target}/${from.slice(from.lastIndexOf('/') + 1)}`
+    return to !== from && !to.startsWith(from + '/')
+  }
+
+  function handleTagDragOver(target: string, e: DragEvent) {
+    if (!tagDragFrom) return
+    e.stopPropagation() // 可否放置都阻断冒泡：无效目标不触发根区“移到顶层”
+    if (!canDropTag(target, tagDragFrom)) return
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    setTagDropTarget((prev) => (prev === target ? prev : target))
+  }
+
+  function handleTagDrop(target: string) {
+    if (!tagDragFrom || !canDropTag(target, tagDragFrom)) return endTagDrag()
+    const to = `${target}/${tagDragFrom.slice(tagDragFrom.lastIndexOf('/') + 1)}`
+    renameMut.mutate({ from: tagDragFrom, to })
+  }
+
+  function endTagDrag() {
+    setTagDragFrom(null)
+    setTagDropTarget(null)
+  }
 
   const tagsQuery = useQuery({
     queryKey: ['tags', filter],
@@ -435,23 +465,50 @@ function TagTreePanel() {
         </div>
       )}
 
-      {/* 树体 */}
+      {/* 树体：根区作为“移到顶层”的落点 */}
       {tree.length === 0 ? (
         <div className="px-2 py-1 text-xs text-muted-foreground">{search ? '没有匹配的标签' : ''}</div>
       ) : (
-        tree.map((n) => (
-          <TagRow
-            key={n.tag}
-            node={n}
-            level={0}
-            selected={filter.tags}
-            expanded={expanded}
-            onToggleExpand={(tag) => setExpanded((prev) => ({ ...prev, [tag]: !isOpen(tag) }))}
-            onToggleSelect={toggleSelect}
-            onRename={setRenaming}
-            onDelete={setDeleting}
-          />
-        ))
+        <div
+          onDragOver={(e) => {
+            if (!tagDragFrom) return
+            e.preventDefault()
+            e.dataTransfer.dropEffect = 'move'
+          }}
+          onDrop={(e) => {
+            e.preventDefault()
+            if (!tagDragFrom) return endTagDrag()
+            const to = tagDragFrom.slice(tagDragFrom.lastIndexOf('/') + 1)
+            setTagDragFrom(null)
+            setTagDropTarget(null)
+            if (to !== tagDragFrom) renameMut.mutate({ from: tagDragFrom, to })
+          }}
+        >
+          {tree.map((n) => (
+            <TagRow
+              key={n.tag}
+              node={n}
+              level={0}
+              selected={filter.tags}
+              expanded={expanded}
+              tagDragFrom={tagDragFrom}
+              tagDropTarget={tagDropTarget}
+              onToggleExpand={(tag) => setExpanded((prev) => ({ ...prev, [tag]: !isOpen(tag) }))}
+              onToggleSelect={toggleSelect}
+              onRename={setRenaming}
+              onDelete={setDeleting}
+              onTagDragStart={setTagDragFrom}
+              onTagDragEnd={endTagDrag}
+              onTagDragOver={handleTagDragOver}
+              onTagDrop={handleTagDrop}
+            />
+          ))}
+          {tagDragFrom && !tagDropTarget && (
+            <div className="mt-1 rounded-md border border-dashed px-2 py-1.5 text-center text-[10px] text-muted-foreground">
+              拖到此处移到顶层
+            </div>
+          )}
+        </div>
       )}
 
       {/* 重命名对话框 */}
@@ -485,10 +542,16 @@ function TagRow(props: {
   level: number
   selected: string[]
   expanded: Record<string, boolean>
+  tagDragFrom: string | null
+  tagDropTarget: string | null
   onToggleExpand: (tag: string) => void
   onToggleSelect: (tag: string) => void
   onRename: (tag: string) => void
   onDelete: (node: TagNode) => void
+  onTagDragStart: (from: string) => void
+  onTagDragEnd: () => void
+  onTagDragOver: (target: string, e: DragEvent) => void
+  onTagDrop: (target: string) => void
 }) {
   const { node, level } = props
   // 菜单打开期间必须保持触发器可见：portal 菜单在 body 层，
@@ -498,6 +561,8 @@ function TagRow(props: {
   const open = props.expanded[node.tag] ?? level === 0
   const active = props.selected.includes(node.tag)
   const implied = !active && impliedBySelected(node.tag, props.selected)
+  const isDraggedTag = props.tagDragFrom === node.tag
+  const isValidDrop = !!props.tagDragFrom && props.tagDropTarget === node.tag
 
   return (
     <div>
@@ -516,8 +581,23 @@ function TagRow(props: {
         </button>
         <button
           type="button"
-          className="flex min-w-0 flex-1 items-center gap-1.5 py-1.5 text-left text-sm"
-          title={`${node.tag}${implied ? '（已包含在已选父标签中）' : ''}`}
+          draggable={props.tagDragFrom !== node.tag}
+          onDragStart={(e) => {
+            e.dataTransfer.effectAllowed = 'move'
+            e.dataTransfer.setData('text/plain', node.tag)
+            props.onTagDragStart(node.tag)
+          }}
+          onDragEnd={props.onTagDragEnd}
+          onDragOver={(e) => props.onTagDragOver(node.tag, e)}
+          onDrop={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            props.onTagDrop(node.tag)
+          }}
+          className={`flex min-w-0 flex-1 items-center gap-1.5 rounded-md py-1.5 text-left text-sm ${
+            isValidDrop ? 'bg-primary/10 ring-1 ring-primary' : ''
+          } ${isDraggedTag ? 'opacity-40' : ''}`}
+          title={`${node.tag}（拖到其他标签上可改为其子标签）${implied ? '（已包含在已选父标签中）' : ''}`}
           onClick={() => props.onToggleSelect(node.tag)}
         >
           <TagIcon className={`size-3.5 shrink-0 ${implied ? 'text-muted-foreground/50' : 'text-primary/70'}`} />
@@ -555,10 +635,16 @@ function TagRow(props: {
             level={level + 1}
             selected={props.selected}
             expanded={props.expanded}
+            tagDragFrom={props.tagDragFrom}
+            tagDropTarget={props.tagDropTarget}
             onToggleExpand={props.onToggleExpand}
             onToggleSelect={props.onToggleSelect}
             onRename={props.onRename}
             onDelete={props.onDelete}
+            onTagDragStart={props.onTagDragStart}
+            onTagDragEnd={props.onTagDragEnd}
+            onTagDragOver={props.onTagDragOver}
+            onTagDrop={props.onTagDrop}
           />
         ))}
     </div>

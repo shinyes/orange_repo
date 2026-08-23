@@ -86,7 +86,7 @@ export function ProblemPane({ id }: { id: number }) {
           <TabsTrigger value="solutions">题解 {problem.solutions.length > 0 && `(${problem.solutions.length})`}</TabsTrigger>
           <TabsTrigger value="edit">编辑</TabsTrigger>
         </TabsList>
-        <TabsContent value="problem" className="space-y-5">
+        <TabsContent value="problem" className="space-y-5 text-[17px] leading-relaxed">
           <section>
             <h2 className="mb-2 text-xs font-medium tracking-wide text-muted-foreground">题面</h2>
             <StatementView problem={problem} />
@@ -164,7 +164,7 @@ function CaseBlock({ label, text }: { label: string; text: string }) {
   return (
     <div className="overflow-hidden rounded-lg border">
       <div className="border-b bg-muted px-3 py-1 text-xs text-muted-foreground">{label}</div>
-      <pre className="overflow-x-auto p-3 text-xs">{text}</pre>
+      <pre className="overflow-x-auto p-3 text-sm">{text}</pre>
     </div>
   )
 }
