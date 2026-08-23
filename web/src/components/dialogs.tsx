@@ -26,8 +26,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { api } from '@/lib/api'
-import { flattenDirectories, useAppState } from '@/lib/app-context'
-import type { DirectoryNode, Practice, ProblemType, Training } from '@/lib/types'
+import { useAppState } from '@/lib/app-context'
+import type { Practice, ProblemType, Training } from '@/lib/types'
 
 // ---------- 删除确认 ----------
 
@@ -57,11 +57,9 @@ export function ConfirmDialog(props: {
 // ---------- 新建题目 ----------
 
 export function NewProblemDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
-  const { directories } = useDirectoryData()
-  const { openProblem, filter } = useAppState()
+  const { openProblem } = useAppState()
   const [title, setTitle] = useState('')
   const [type, setType] = useState<ProblemType>('programming')
-  const [dirId, setDirId] = useState<string>(filter.dirId != null ? String(filter.dirId) : 'root')
   const qc = useQueryClient()
 
   const create = useMutation({
@@ -73,11 +71,10 @@ export function NewProblemDialog({ open, onOpenChange }: { open: boolean; onOpen
         statementMd: '',
         bodyJson: {},
         answerJson: {},
-        directoryId: dirId === 'root' ? null : Number(dirId),
       }),
     onSuccess: async (data) => {
       await qc.invalidateQueries({ queryKey: ['problems'] })
-      await qc.invalidateQueries({ queryKey: ['directories'] })
+      await qc.invalidateQueries({ queryKey: ['tags'] })
       toast.success('题目已创建')
       onOpenChange(false)
       setTitle('')
@@ -86,8 +83,6 @@ export function NewProblemDialog({ open, onOpenChange }: { open: boolean; onOpen
     onError: (e) => toast.error(e.message),
   })
 
-  const dirs = flattenDirectories(directories)
-  const dirItems = [{ value: 'root', label: '（根目录）' }, ...dirs.map((d) => ({ value: String(d.id), label: '　'.repeat(d.depth) + d.name }))]
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-sm">
@@ -121,21 +116,6 @@ export function NewProblemDialog({ open, onOpenChange }: { open: boolean; onOpen
               </SelectContent>
             </Select>
           </div>
-          <div className="space-y-1.5">
-            <Label>所属目录</Label>
-            <Select items={dirItems} value={dirId} onValueChange={(v) => setDirId(v as string)}>
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {dirItems.map((d) => (
-                  <SelectItem key={d.value} value={d.value}>
-                    {d.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
@@ -143,74 +123,6 @@ export function NewProblemDialog({ open, onOpenChange }: { open: boolean; onOpen
           </Button>
           <Button onClick={() => create.mutate()} disabled={!title.trim() || create.isPending}>
             创建
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-// ---------- 新建目录 / 重命名目录 ----------
-
-export function DirectoryDialog(props: {
-  open: boolean
-  onOpenChange: (v: boolean) => void
-  mode: 'create' | 'rename'
-  parent?: number | null
-  target?: DirectoryNode | null
-}) {
-  const qc = useQueryClient()
-  const [name, setName] = useState(props.target?.name ?? '')
-
-  // 打开时同步名称
-  const [lastOpen, setLastOpen] = useState(false)
-  if (props.open && !lastOpen) {
-    setLastOpen(true)
-    setName(props.target?.name ?? '')
-  } else if (!props.open && lastOpen) {
-    setLastOpen(false)
-  }
-
-  async function submit() {
-    if (!name.trim()) return
-    try {
-      if (props.mode === 'create') {
-        await api.createDirectory(name.trim(), props.parent ?? null)
-        toast.success('目录已创建')
-      } else if (props.target) {
-        await api.updateDirectory(props.target.id, {
-          name: name.trim(),
-          parentId: props.target.parentId,
-          orderNo: props.target.orderNo,
-        })
-        toast.success('目录已重命名')
-      }
-      await qc.invalidateQueries({ queryKey: ['directories'] })
-      props.onOpenChange(false)
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : '操作失败')
-    }
-  }
-
-  return (
-    <Dialog open={props.open} onOpenChange={props.onOpenChange}>
-      <DialogContent className="sm:max-w-xs">
-        <DialogHeader>
-          <DialogTitle>{props.mode === 'create' ? '新建目录' : '重命名目录'}</DialogTitle>
-        </DialogHeader>
-        <Input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="目录名称"
-          autoFocus
-          onKeyDown={(e) => e.key === 'Enter' && submit()}
-        />
-        <DialogFooter>
-          <Button variant="outline" onClick={() => props.onOpenChange(false)}>
-            取消
-          </Button>
-          <Button onClick={submit} disabled={!name.trim()}>
-            确定
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -412,10 +324,3 @@ export function AddToGroupDialog(props: {
   )
 }
 
-// 小工具：读取目录数据（供新建题目对话框选择目录）
-function useDirectoryData() {
-  const q = useQuery({ queryKey: ['directories'], queryFn: api.directories })
-  return {
-    directories: q.data?.directories ?? [],
-  }
-}

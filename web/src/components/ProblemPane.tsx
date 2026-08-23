@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
@@ -23,7 +23,6 @@ import { api } from '@/lib/api'
 import { useAppState } from '@/lib/app-context'
 import { Markdown } from '@/lib/markdown'
 import type {
-  DirectoryNode,
   Problem,
   ProblemType,
   ProgrammingBody,
@@ -34,30 +33,14 @@ import { ConfirmDialog } from './dialogs'
 
 export const TYPE_LABEL: Record<ProblemType, string> = { programming: '编程题', single_choice: '单选题', true_false: '判断题' }
 
-// 在目录树中查找题目所在路径（面包屑用）。
-function findPath(nodes: DirectoryNode[], id: number, trail: DirectoryNode[] = []): DirectoryNode[] | null {
-  for (const n of nodes) {
-    const next = [...trail, n]
-    if (n.id === id) return next
-    const found = findPath(n.children, id, next)
-    if (found) return found
-  }
-  return null
-}
-
 export function ProblemPane({ id }: { id: number }) {
   const { goHome } = useAppState()
   const qc = useQueryClient()
   const problemQuery = useQuery({ queryKey: ['problem', id], queryFn: () => api.getProblem(id) })
-  const dirsQuery = useQuery({ queryKey: ['directories'], queryFn: api.directories })
   const [tab, setTab] = useState('statement')
   const [confirmDelete, setConfirmDelete] = useState(false)
 
   const problem = problemQuery.data?.problem
-  const breadcrumb = useMemo(() => {
-    if (!problem?.directoryId) return null
-    return findPath(dirsQuery.data?.directories ?? [], problem.directoryId)
-  }, [problem?.directoryId, dirsQuery.data])
 
   const del = useMutation({
     mutationFn: () => api.deleteProblem(id),
@@ -76,11 +59,6 @@ export function ProblemPane({ id }: { id: number }) {
     <div className="mx-auto max-w-4xl px-6 py-5">
       {/* 头部 */}
       <div className="mb-4">
-        {breadcrumb && (
-          <div className="mb-1 text-xs text-muted-foreground">
-            {breadcrumb.map((d) => d.name).join(' / ')}
-          </div>
-        )}
         <div className="flex items-start gap-2">
           <h1 className="min-w-0 flex-1 text-xl font-semibold">{problem.title}</h1>
           <Button variant="ghost" size="sm" className="text-destructive" onClick={() => setConfirmDelete(true)}>
@@ -284,7 +262,6 @@ interface EditState {
   type: ProblemType
   title: string
   tags: string[]
-  directoryId: number | null
   statementMd: string
   limits: { time: number; memory: number }
   inputFormat: string
@@ -304,7 +281,6 @@ function fromProblem(p: Problem): EditState {
     type: p.type,
     title: p.title,
     tags: p.tags,
-    directoryId: p.directoryId,
     statementMd: p.statementMd,
     limits: { time: p.timeLimitMs || 1000, memory: p.memoryLimitMiB || 256 },
     inputFormat: body.inputFormat ?? '',
@@ -320,7 +296,6 @@ function fromProblem(p: Problem): EditState {
 
 function ProblemEditor({ problem, onSaved }: { problem: Problem; onSaved: () => void }) {
   const qc = useQueryClient()
-  const dirsQuery = useQuery({ queryKey: ['directories'], queryFn: api.directories })
   const [s, setS] = useState<EditState>(() => fromProblem(problem))
   const [tagInput, setTagInput] = useState('')
   const [previewStatement, setPreviewStatement] = useState(false)
@@ -352,7 +327,6 @@ function ProblemEditor({ problem, onSaved }: { problem: Problem; onSaved: () => 
         solutions: s.solutions,
         timeLimitMs: s.type === 'programming' ? s.limits.time : undefined,
         memoryLimitMiB: s.type === 'programming' ? s.limits.memory : undefined,
-        directoryId: s.directoryId,
       })
     },
     onSuccess: async () => {
@@ -360,7 +334,6 @@ function ProblemEditor({ problem, onSaved }: { problem: Problem; onSaved: () => 
       await qc.invalidateQueries({ queryKey: ['problem', problem.id] })
       await qc.invalidateQueries({ queryKey: ['problems'] })
       await qc.invalidateQueries({ queryKey: ['tags'] })
-      await qc.invalidateQueries({ queryKey: ['directories'] })
       onSaved()
     },
     onError: (e) => toast.error(e.message),
@@ -390,46 +363,29 @@ function ProblemEditor({ problem, onSaved }: { problem: Problem; onSaved: () => 
   }
 
   function addTag() {
-    const t = tagInput.trim()
+    const t = tagInput.trim().replace(/,+$/, '')
     if (t && !s.tags.includes(t)) patch({ tags: [...s.tags, t] })
     setTagInput('')
   }
 
-  const dirs = flattenDirs(dirsQuery.data?.directories ?? [])
+  // 现存标签作为输入建议（datalist）
+  const suggestions = useQuery({
+    queryKey: ['tags', 'suggestions'],
+    queryFn: () => api.tags(),
+    staleTime: 30_000,
+  })
 
   return (
     <div className="space-y-4">
       {/* 基础信息 */}
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div className="space-y-1.5">
-          <Label>标题</Label>
-          <Input value={s.title} onChange={(e) => patch({ title: e.target.value })} />
-        </div>
-        <div className="space-y-1.5">
-          <Label>所属目录</Label>
-          <Select
-            items={[{ value: 'root', label: '（根目录）' }, ...dirs.map((d) => ({ value: String(d.id), label: '　'.repeat(d.depth) + d.name }))]}
-            value={s.directoryId != null ? String(s.directoryId) : 'root'}
-            onValueChange={(v) => patch({ directoryId: v === 'root' ? null : Number(v) })}
-          >
-            <SelectTrigger className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="root">（根目录）</SelectItem>
-              {dirs.map((d) => (
-                <SelectItem key={d.id} value={String(d.id)}>
-                  {'　'.repeat(d.depth) + d.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+      <div className="space-y-1.5">
+        <Label>标题</Label>
+        <Input value={s.title} onChange={(e) => patch({ title: e.target.value })} />
       </div>
 
-      {/* 标签 */}
+      {/* 标签：chip 式输入，支持斜杠层级 */}
       <div className="space-y-1.5">
-        <Label>标签</Label>
+        <Label>标签（支持 / 层级，如 数学/几何；回车或逗号添加）</Label>
         <div className="flex flex-wrap items-center gap-1.5">
           {s.tags.map((t) => (
             <Badge key={t} variant="secondary" className="gap-1">
@@ -442,14 +398,38 @@ function ProblemEditor({ problem, onSaved }: { problem: Problem; onSaved: () => 
           <div className="flex gap-1">
             <Input
               value={tagInput}
-              onChange={(e) => setTagInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addTag())}
-              placeholder="添加标签后回车"
-              className="h-7 w-36 text-xs"
+              list="existing-tags"
+              onChange={(e) => {
+                // 逗号即添加，支持连续输入多个
+                if (e.target.value.includes(',')) {
+                  const parts = e.target.value.split(',').map((x) => x.trim()).filter(Boolean)
+                  const next = [...s.tags]
+                  for (const p of parts) if (!next.includes(p)) next.push(p)
+                  patch({ tags: next })
+                  setTagInput('')
+                } else {
+                  setTagInput(e.target.value)
+                }
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  addTag()
+                } else if (e.key === 'Backspace' && tagInput === '' && s.tags.length > 0) {
+                  patch({ tags: s.tags.slice(0, -1) })
+                }
+              }}
+              placeholder="例如 数学/几何"
+              className="h-7 w-44 text-xs"
             />
             <Button size="xs" variant="outline" onClick={addTag}>
               添加
             </Button>
+            <datalist id="existing-tags">
+              {(suggestions.data?.tags ?? []).map((t) => (
+                <option key={t.tag} value={t.tag} />
+              ))}
+            </datalist>
           </div>
         </div>
       </div>
@@ -527,20 +507,6 @@ function ProblemEditor({ problem, onSaved }: { problem: Problem; onSaved: () => 
       </div>
     </div>
   )
-}
-
-interface FlatDir {
-  id: number
-  name: string
-  depth: number
-}
-function flattenDirs(nodes: DirectoryNode[], depth = 0): FlatDir[] {
-  const out: FlatDir[] = []
-  for (const n of nodes) {
-    out.push({ id: n.id, name: n.name, depth })
-    if (n.children?.length) out.push(...flattenDirs(n.children, depth + 1))
-  }
-  return out
 }
 
 // ---------- 编程题编辑 ----------

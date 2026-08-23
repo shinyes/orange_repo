@@ -1,18 +1,21 @@
-import { useState } from 'react'
-import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMemo, useState } from 'react'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
   ChevronRightIcon,
+  ChevronsDownUpIcon,
+  ChevronsUpDownIcon,
   DownloadIcon,
   FileCodeIcon,
   FolderIcon,
-  FolderPlusIcon,
   ListChecksIcon,
   LogOutIcon,
+  MoreVerticalIcon,
   PencilIcon,
   PlusIcon,
   SearchIcon,
   SettingsIcon,
+  TagIcon,
   TrashIcon,
   UploadIcon,
 } from 'lucide-react'
@@ -23,6 +26,13 @@ import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -30,29 +40,17 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { api } from '@/lib/api'
 import { useAppState } from '@/lib/app-context'
-import type { DirectoryNode, ProblemSummary, ProblemType, Practice, Training } from '@/lib/types'
-import { AddToGroupDialog, ConfirmDialog, DirectoryDialog, ImportDialog, NewProblemDialog } from './dialogs'
+import type { ProblemSummary, ProblemType, Practice, TagCount, TagNode, Training } from '@/lib/types'
+import { AddToGroupDialog, ConfirmDialog, ImportDialog, NewProblemDialog } from './dialogs'
 
 const TYPE_LABEL: Record<ProblemType, string> = { programming: '编程', single_choice: '单选', true_false: '判断' }
 
-// 左栏：管理（新建/上传/下载/搜索/目录树/题目列表/训练练习入口）。
+// 左栏：管理（新建/导入导出/搜索/类型过滤/标签树/题目列表/训练练习入口）。
 export function Sidebar({ onLogout, onOpenSettings }: { onLogout: () => void; onOpenSettings: () => void }) {
   const { filter, patchFilter, checked, clearChecked } = useAppState()
   const [newProblem, setNewProblem] = useState(false)
-  const [newDirParent, setNewDirParent] = useState<{ open: boolean; parent: number | null }>({ open: false, parent: null })
-  const [renameDir, setRenameDir] = useState<DirectoryNode | null>(null)
-  const [deleteDir, setDeleteDir] = useState<DirectoryNode | null>(null)
   const [importOpen, setImportOpen] = useState(false)
   const [addToGroup, setAddToGroup] = useState<'training' | 'practice' | null>(null)
-
-  async function deleteDirectory(dir: DirectoryNode) {
-    try {
-      await api.deleteDirectory(dir.id)
-      toast.success('目录已删除')
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : '删除失败')
-    }
-  }
 
   return (
     <div className="flex h-full flex-col bg-sidebar">
@@ -76,14 +74,6 @@ export function Sidebar({ onLogout, onOpenSettings }: { onLogout: () => void; on
       <div className="flex items-center gap-1.5 px-3 pt-3">
         <Button size="sm" className="flex-1" onClick={() => setNewProblem(true)}>
           <PlusIcon data-icon="inline-start" /> 题目
-        </Button>
-        <Button
-          size="sm"
-          variant="outline"
-          className="flex-1"
-          onClick={() => setNewDirParent({ open: true, parent: filter.dirId })}
-        >
-          <FolderPlusIcon data-icon="inline-start" /> 目录
         </Button>
         <DropdownMenu>
           <DropdownMenuTrigger
@@ -133,21 +123,10 @@ export function Sidebar({ onLogout, onOpenSettings }: { onLogout: () => void; on
         ))}
       </div>
 
-      {/* 标签 */}
-      <TagBar />
-
-      <Separator className="mt-1" />
-
-      {/* 目录树 + 题目列表（未选目录时显示全部题目；点击已选目录可取消筛选） */}
+      {/* 标签树 + 题目列表 */}
       <ScrollArea className="min-h-0 flex-1">
-        <div className="px-2 py-1">
-          <DirectoryTreeView
-            level={0}
-            onRename={setRenameDir}
-            onDelete={setDeleteDir}
-            onAddChild={(parent) => setNewDirParent({ open: true, parent })}
-          />
-        </div>
+        <TagTreePanel />
+        <Separator className="my-1" />
         <ProblemList />
       </ScrollArea>
 
@@ -175,25 +154,6 @@ export function Sidebar({ onLogout, onOpenSettings }: { onLogout: () => void; on
 
       {/* 对话框 */}
       <NewProblemDialog open={newProblem} onOpenChange={setNewProblem} />
-      <DirectoryDialog
-        mode="create"
-        parent={newDirParent.parent}
-        open={newDirParent.open}
-        onOpenChange={(v) => setNewDirParent({ open: v, parent: v ? newDirParent.parent : null })}
-      />
-      {renameDir && (
-        <DirectoryDialog mode="rename" target={renameDir} open={!!renameDir} onOpenChange={(v) => !v && setRenameDir(null)} />
-      )}
-      <ConfirmDialog
-        open={!!deleteDir}
-        onOpenChange={(v) => !v && setDeleteDir(null)}
-        title={`删除目录「${deleteDir?.name ?? ''}」？`}
-        description="子目录与其中题目将上移到上级目录，不会删除题目。"
-        onConfirm={() => {
-          if (deleteDir) void deleteDirectory(deleteDir)
-          setDeleteDir(null)
-        }}
-      />
       <ImportDialog open={importOpen} onOpenChange={setImportOpen} />
       <AddToGroupDialog
         open={addToGroup !== null}
@@ -233,43 +193,161 @@ function ExportDropdown() {
   )
 }
 
-// ---------- 标签栏（多选 AND 筛选 · 动态 facet 计数） ----------
+// ---------- 标签树（多选 AND 前缀筛选 · 动态 facet 计数 · 子树重命名/删除） ----------
 
 const TAG_SEARCH_THRESHOLD = 20
 
-function TagBar() {
-  const { filter, patchFilter } = useAppState()
+/** 由分面平面列表构建标签树；虚拟祖先节点计数为 0 时由服务端直接给出。 */
+function buildTagTree(items: TagCount[]): TagNode[] {
+  const nodes = new Map<string, TagNode>()
+  const ensure = (tag: string): TagNode => {
+    let n = nodes.get(tag)
+    if (!n) {
+      n = { tag, label: tag.slice(tag.lastIndexOf('/') + 1), count: 0, children: [] }
+      nodes.set(tag, n)
+    }
+    return n
+  }
+  for (const it of items) {
+    ensure(it.tag).count = it.count
+    const parts = it.tag.split('/')
+    for (let i = 1; i < parts.length; i++) ensure(parts.slice(0, i).join('/'))
+  }
+  const roots: TagNode[] = []
+  for (const n of nodes.values()) {
+    const idx = n.tag.lastIndexOf('/')
+    if (idx === -1) roots.push(n)
+    else nodes.get(n.tag.slice(0, idx))!.children.push(n)
+  }
+  return roots
+}
+
+function sortTree(nodes: TagNode[], sortBy: 'count' | 'name') {
+  for (const n of nodes) sortTree(n.children, sortBy)
+  nodes.sort((x, y) =>
+    sortBy === 'name'
+      ? x.label.localeCompare(y.label, 'zh-Hans-CN')
+      : y.count - x.count || x.label.localeCompare(y.label, 'zh-Hans-CN'),
+  )
+}
+
+/** 树内查找：保留命中节点及其祖先链以维持树形结构。 */
+function filterTree(nodes: TagNode[], q: string): TagNode[] {
+  const out: TagNode[] = []
+  for (const n of nodes) {
+    const children = filterTree(n.children, q)
+    if (n.tag.toLowerCase().includes(q) || children.length > 0) {
+      out.push({ ...n, children })
+    }
+  }
+  return out
+}
+
+function collectPaths(nodes: TagNode[], out: string[] = []): string[] {
+  for (const n of nodes) {
+    out.push(n.tag)
+    collectPaths(n.children, out)
+  }
+  return out
+}
+
+function subtreeSize(node: TagNode): number {
+  return 1 + node.children.reduce((acc, c) => acc + subtreeSize(c), 0)
+}
+
+/** 该节点是否已被某个严格祖先标签隐含（前缀规则下点不点都命中）。 */
+function impliedBySelected(tag: string, selected: string[]): boolean {
+  const parts = tag.split('/')
+  for (let i = 1; i < parts.length; i++) {
+    if (selected.includes(parts.slice(0, i).join('/'))) return true
+  }
+  return false
+}
+
+function TagTreePanel() {
+  const { filter, patchFilter, view, goHome } = useAppState()
+  const qc = useQueryClient()
   const [search, setSearch] = useState('')
   const [sortBy, setSortBy] = useState<'count' | 'name'>('count')
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({})
+  const [renaming, setRenaming] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState<TagNode | null>(null)
+
   const tagsQuery = useQuery({
     queryKey: ['tags', filter],
     queryFn: () => api.tags(filter),
     placeholderData: keepPreviousData,
   })
-
   const raw = tagsQuery.data?.tags ?? []
   const total = tagsQuery.data?.total
+
+  const tree = useMemo(() => {
+    const roots = buildTagTree(raw)
+    sortTree(roots, sortBy)
+    const q = search.trim().toLowerCase()
+    return q ? filterTree(roots, q) : roots
+  }, [raw, sortBy, search])
+
+  const allPaths = useMemo(() => collectPaths(tree), [tree])
+  const isOpen = (tag: string) => expanded[tag] ?? !tag.includes('/')
+
+  function toggleSelect(tag: string) {
+    patchFilter({
+      tags: filter.tags.includes(tag) ? filter.tags.filter((x) => x !== tag) : [...filter.tags, tag],
+    })
+    if (view.kind !== 'empty') goHome()
+  }
+
+  async function invalidateAfterTagChange() {
+    await Promise.all([
+      qc.invalidateQueries({ queryKey: ['tags'] }),
+      qc.invalidateQueries({ queryKey: ['problems'] }),
+    ])
+  }
+
+  const renameMut = useMutation({
+    mutationFn: ({ from, to }: { from: string; to: string }) => api.renameTag(from, to),
+    onSuccess: async (_d, v) => {
+      toast.success(`已重命名为「${v.to}」，涉及题目同步更新`)
+      // 选中集与展开状态里的旧路径一并改写
+      patchFilter({
+        tags: filter.tags.map((t) =>
+          t === v.from || t.startsWith(v.from + '/') ? v.to + t.slice(v.from.length) : t,
+        ),
+      })
+      setExpanded((prev) =>
+        Object.fromEntries(
+          Object.entries(prev).map(([k, val]) => [
+            k === v.from || k.startsWith(v.from + '/') ? v.to + k.slice(v.from.length) : k,
+            val,
+          ]),
+        ),
+      )
+      await invalidateAfterTagChange()
+      setRenaming(null)
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : '重命名失败'),
+  })
+
+  const deleteMut = useMutation({
+    mutationFn: (tag: string) => api.deleteTag(tag),
+    onSuccess: async (d, tag) => {
+      toast.success(`已从 ${d.updated} 道题目上移除该标签及子标签`)
+      patchFilter({ tags: filter.tags.filter((t) => t !== tag && !t.startsWith(tag + '/')) })
+      await invalidateAfterTagChange()
+      setDeleting(null)
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : '删除失败'),
+  })
+
+  // 无任何标签且无选中时整块隐藏，减少噪音
   if (!tagsQuery.isSuccess && raw.length === 0) return null
   if (raw.length === 0 && filter.tags.length === 0) return null
 
-  // 未选中且计数为 0 的标签不展示，减少噪音；已选中的始终保留（可点 × 取消）
-  const visible = raw
-    .filter((t) => t.count > 0 || filter.tags.includes(t.tag))
-    .filter((t) => !search || t.tag.toLowerCase().includes(search.toLowerCase()))
-    .sort((x, y) =>
-      sortBy === 'name'
-        ? x.tag.localeCompare(y.tag, 'zh-Hans-CN')
-        : y.count - x.count || x.tag.localeCompare(y.tag, 'zh-Hans-CN'),
-    )
-
-  function toggle(tag: string) {
-    patchFilter({ tags: filter.tags.includes(tag) ? filter.tags.filter((x) => x !== tag) : [...filter.tags, tag] })
-  }
-
   return (
-    <div className="px-3 pt-2 pb-1">
-      {/* 头部：标题 + 命中数 + 排序 + 清空 */}
-      <div className="mb-1 flex items-center gap-1.5">
+    <div className="px-2 py-2">
+      {/* 头部：标题 + 命中数 + 展开/折叠 + 排序 */}
+      <div className="mb-1 flex items-center gap-1 px-1">
         <span className="text-xs font-medium text-muted-foreground">标签</span>
         {typeof total === 'number' && (
           <Badge variant="secondary" className="h-4 px-1.5 text-[10px] tabular-nums">
@@ -277,6 +355,22 @@ function TagBar() {
           </Badge>
         )}
         <div className="ml-auto flex items-center gap-0.5">
+          <button
+            type="button"
+            title="展开全部"
+            className="rounded p-0.5 text-muted-foreground hover:text-foreground"
+            onClick={() => setExpanded(Object.fromEntries(allPaths.map((t) => [t, true])))}
+          >
+            <ChevronsUpDownIcon className="size-3.5" />
+          </button>
+          <button
+            type="button"
+            title="折叠全部"
+            className="rounded p-0.5 text-muted-foreground hover:text-foreground"
+            onClick={() => setExpanded(Object.fromEntries(allPaths.map((t) => [t, false])))}
+          >
+            <ChevronsDownUpIcon className="size-3.5" />
+          </button>
           {(
             [
               ['count', '数量'],
@@ -297,13 +391,13 @@ function TagBar() {
         </div>
       </div>
 
-      {/* 已选标签置顶：单个 × 移除 */}
+      {/* 已选标签置顶：完整路径 chips + 单个移除 + 一键清空 */}
       {filter.tags.length > 0 && (
-        <div className="mb-1.5 flex flex-wrap items-center gap-1">
+        <div className="mb-1.5 flex flex-wrap items-center gap-1 px-1">
           {filter.tags.map((t) => (
             <Badge key={t} variant="default" className="gap-1 text-xs">
               {t}
-              <button type="button" className="ml-0.5 rounded-full hover:text-destructive" onClick={() => toggle(t)} title="移除该标签">
+              <button type="button" className="ml-0.5 rounded-full hover:text-destructive" onClick={() => toggleSelect(t)} title="移除该标签">
                 ×
               </button>
             </Badge>
@@ -318,141 +412,187 @@ function TagBar() {
         </div>
       )}
 
-      {/* 标签较多时提供标签内搜索 */}
-      {raw.length > TAG_SEARCH_THRESHOLD && (
-        <div className="relative mb-1.5">
-          <SearchIcon className="pointer-events-none absolute top-1/2 left-2 size-3 -translate-y-1/2 text-muted-foreground" />
+      {/* 标签较多时提供树内查找 */}
+      {allPaths.length > TAG_SEARCH_THRESHOLD && (
+        <div className="relative mb-1.5 px-1">
+          <SearchIcon className="pointer-events-none absolute top-1/2 left-3.5 size-3 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder={`在 ${raw.length} 个标签中查找…`}
+            placeholder={`在 ${allPaths.length} 个标签中查找…`}
             className="h-7 pl-6 text-xs"
           />
         </div>
       )}
 
-      {/* 候选标签 chips（多选 AND） */}
-      {visible.length === 0 ? (
-        <div className="py-1 text-xs text-muted-foreground">{search ? '没有匹配的标签' : ''}</div>
+      {/* 树体 */}
+      {tree.length === 0 ? (
+        <div className="px-2 py-1 text-xs text-muted-foreground">{search ? '没有匹配的标签' : ''}</div>
       ) : (
-        <div className="flex max-h-40 flex-wrap gap-1 overflow-y-auto">
-          {visible.map((t) => {
-            const active = filter.tags.includes(t.tag)
-            return (
-              <button key={t.tag} type="button" onClick={() => toggle(t.tag)} title={active ? '点击取消选择' : '点击加入筛选'}>
-                <Badge
-                  variant={active ? 'default' : 'outline'}
-                  className={`cursor-pointer text-xs ${!active && t.count === 0 ? 'opacity-50' : 'hover:bg-muted'}`}
-                >
-                  {t.tag} · {t.count}
-                </Badge>
-              </button>
-            )
-          })}
-        </div>
+        tree.map((n) => (
+          <TagRow
+            key={n.tag}
+            node={n}
+            level={0}
+            selected={filter.tags}
+            expanded={expanded}
+            onToggleExpand={(tag) => setExpanded((prev) => ({ ...prev, [tag]: !isOpen(tag) }))}
+            onToggleSelect={toggleSelect}
+            onRename={setRenaming}
+            onDelete={setDeleting}
+          />
+        ))
       )}
+
+      {/* 重命名对话框 */}
+      {renaming !== null && (
+        <RenameTagDialog
+          tag={renaming}
+          open
+          onOpenChange={(v) => !v && setRenaming(null)}
+          onSubmit={(to) => renameMut.mutate({ from: renaming, to })}
+          pending={renameMut.isPending}
+        />
+      )}
+      {/* 删除确认 */}
+      <ConfirmDialog
+        open={deleting !== null}
+        onOpenChange={(v) => !v && setDeleting(null)}
+        title={`删除标签「${deleting?.tag ?? ''}」？`}
+        description={
+          deleting && deleting.children.length > 0
+            ? `将从所有题目上移除该标签及其 ${subtreeSize(deleting) - 1} 个子标签，涉及题目会同步更新。`
+            : '将从所有题目上移除该标签，涉及题目会同步更新。'
+        }
+        onConfirm={() => deleting && deleteMut.mutate(deleting.tag)}
+      />
     </div>
   )
 }
 
-// ---------- 目录树 ----------
-
-function DirectoryTreeView(props: {
+function TagRow(props: {
+  node: TagNode
   level: number
-  onRename: (d: DirectoryNode) => void
-  onDelete: (d: DirectoryNode) => void
-  onAddChild: (parent: number) => void
-}) {
-  const dirsQuery = useQuery({ queryKey: ['directories'], queryFn: api.directories })
-  return (
-    <>
-      {(dirsQuery.data?.directories ?? []).map((d) => (
-        <DirRow
-          key={d.id}
-          node={d}
-          level={props.level}
-          onRename={props.onRename}
-          onDelete={props.onDelete}
-          onAddChild={props.onAddChild}
-        />
-      ))}
-    </>
-  )
-}
-
-function DirRow(props: {
-  node: DirectoryNode
-  level: number
-  onRename: (d: DirectoryNode) => void
-  onDelete: (d: DirectoryNode) => void
-  onAddChild: (parent: number) => void
+  selected: string[]
+  expanded: Record<string, boolean>
+  onToggleExpand: (tag: string) => void
+  onToggleSelect: (tag: string) => void
+  onRename: (tag: string) => void
+  onDelete: (node: TagNode) => void
 }) {
   const { node, level } = props
-  const [expanded, setExpanded] = useState(level < 1)
-  const { filter, patchFilter, goHome, view } = useAppState()
-  const active = filter.dirId === node.id
+  const hasChildren = node.children.length > 0
+  const open = props.expanded[node.tag] ?? level === 0
+  const active = props.selected.includes(node.tag)
+  const implied = !active && impliedBySelected(node.tag, props.selected)
 
   return (
     <div>
       <div
-        className={`group flex items-center rounded-md pr-1 ${active ? 'bg-accent text-accent-foreground' : 'hover:bg-muted'}`}
+        className={`group flex items-center rounded-md pr-1 ${
+          active ? 'bg-accent text-accent-foreground' : 'hover:bg-muted'
+        }`}
         style={{ paddingLeft: `${level * 14}px` }}
       >
-        <button type="button" className="flex size-5 shrink-0 items-center justify-center" onClick={() => setExpanded(!expanded)}>
-          <ChevronRightIcon className={`size-3.5 text-muted-foreground transition-transform ${expanded ? 'rotate-90' : ''}`} />
+        <button
+          type="button"
+          className={`flex size-5 shrink-0 items-center justify-center ${hasChildren ? '' : 'invisible'}`}
+          onClick={() => props.onToggleExpand(node.tag)}
+        >
+          <ChevronRightIcon className={`size-3.5 text-muted-foreground transition-transform ${open ? 'rotate-90' : ''}`} />
         </button>
         <button
           type="button"
           className="flex min-w-0 flex-1 items-center gap-1.5 py-1.5 text-left text-sm"
-          title={active ? '再次点击取消目录筛选，显示全部题目' : undefined}
-          onClick={() => {
-            patchFilter({ dirId: active ? null : node.id })
-            if (view.kind !== 'empty') goHome()
-          }}
+          title={`${node.tag}${implied ? '（已包含在已选父标签中）' : ''}`}
+          onClick={() => props.onToggleSelect(node.tag)}
         >
-          <FolderIcon className="size-4 shrink-0 text-primary/70" />
-          <span className="flex-1 truncate">{node.name}</span>
-          <span className="text-xs text-muted-foreground group-hover:hidden">
-            {node.problemCount > 0 ? node.problemCount : ''}
+          <TagIcon className={`size-3.5 shrink-0 ${implied ? 'text-muted-foreground/50' : 'text-primary/70'}`} />
+          <span className={`flex-1 truncate ${implied ? 'text-muted-foreground/60' : ''}`}>{node.label}</span>
+          <span className={`shrink-0 text-xs tabular-nums ${implied ? 'text-muted-foreground/50' : 'text-muted-foreground group-hover:hidden'}`}>
+            {node.count > 0 ? node.count : ''}
           </span>
         </button>
         <div className="hidden shrink-0 items-center gap-0.5 group-hover:flex">
-          <button
-            type="button"
-            title="新增子目录"
-            className="rounded p-1 hover:bg-background"
-            onClick={() => props.onAddChild(node.id)}
-          >
-            <PlusIcon className="size-3.5" />
-          </button>
-          <button type="button" title="重命名" className="rounded p-1 hover:bg-background" onClick={() => props.onRename(node)}>
-            <PencilIcon className="size-3.5" />
-          </button>
-          <button type="button" title="删除" className="rounded p-1 hover:bg-background" onClick={() => props.onDelete(node)}>
-            <TrashIcon className="size-3.5 text-destructive" />
-          </button>
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              className="rounded p-1 hover:bg-background"
+              title="标签操作"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <MoreVerticalIcon className="size-3.5" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => props.onRename(node.tag)}>
+                <PencilIcon className="size-3.5" /> 重命名（子树联动）
+              </DropdownMenuItem>
+              <DropdownMenuItem variant="destructive" onClick={() => props.onDelete(node)}>
+                <TrashIcon className="size-3.5" /> 删除（含子标签）
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
-      {expanded && (
-        <>
-          {node.children.map((c) => (
-            <DirRow
-              key={c.id}
-              node={c}
-              level={level + 1}
-              onRename={props.onRename}
-              onDelete={props.onDelete}
-              onAddChild={props.onAddChild}
-            />
-          ))}
-          {node.children.length === 0 && (
-            <div className="py-1 text-xs text-muted-foreground" style={{ paddingLeft: `${(level + 1) * 14 + 22}px` }}>
-              （空目录）
-            </div>
-          )}
-        </>
-      )}
+      {open &&
+        hasChildren &&
+        node.children.map((c) => (
+          <TagRow
+            key={c.tag}
+            node={c}
+            level={level + 1}
+            selected={props.selected}
+            expanded={props.expanded}
+            onToggleExpand={props.onToggleExpand}
+            onToggleSelect={props.onToggleSelect}
+            onRename={props.onRename}
+            onDelete={props.onDelete}
+          />
+        ))}
     </div>
+  )
+}
+
+function RenameTagDialog(props: {
+  tag: string
+  open: boolean
+  onOpenChange: (v: boolean) => void
+  onSubmit: (to: string) => void
+  pending: boolean
+}) {
+  const [value, setValue] = useState(props.tag)
+  // 打开时同步预填值
+  const [lastOpen, setLastOpen] = useState(false)
+  if (props.open && !lastOpen) {
+    setLastOpen(true)
+    setValue(props.tag)
+  } else if (!props.open && lastOpen) {
+    setLastOpen(false)
+  }
+
+  return (
+    <Dialog open={props.open} onOpenChange={props.onOpenChange}>
+      <DialogContent className="sm:max-w-xs">
+        <DialogHeader>
+          <DialogTitle>重命名标签</DialogTitle>
+        </DialogHeader>
+        <Input
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          placeholder="完整路径，可用 / 分隔层级"
+          autoFocus
+          onKeyDown={(e) => e.key === 'Enter' && value.trim() && value !== props.tag && props.onSubmit(value.trim())}
+        />
+        <p className="text-xs text-muted-foreground">子标签将随前缀一起搬家，涉及题目自动更新。</p>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => props.onOpenChange(false)}>
+            取消
+          </Button>
+          <Button onClick={() => props.onSubmit(value.trim())} disabled={!value.trim() || value.trim() === props.tag || props.pending}>
+            {props.pending ? '提交中…' : '确定'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 

@@ -1,6 +1,5 @@
 import type {
   Chapter,
-  DirectoryNode,
   Practice,
   PracticeItem,
   Problem,
@@ -52,10 +51,6 @@ export function filterQuery(f: ProblemFilterState, extra?: Record<string, string
   if (f.q) p.set('q', f.q)
   if (f.tags.length) p.set('tags', f.tags.join(','))
   if (f.type) p.set('type', f.type)
-  if (f.dirId != null) {
-    p.set('dirId', String(f.dirId))
-    if (f.recursive) p.set('recursive', '1')
-  }
   for (const [k, v] of Object.entries(extra ?? {})) p.set(k, v)
   const s = p.toString()
   return s ? `?${s}` : ''
@@ -69,14 +64,6 @@ export const api = {
   changePassword: (oldPassword: string, newPassword: string) =>
     req<void>('/api/auth/password', json({ method: 'PUT', body: JSON.stringify({ oldPassword, newPassword }) })),
 
-  // ---- 目录 ----
-  directories: () => req<{ directories: DirectoryNode[] }>('/api/directories'),
-  createDirectory: (name: string, parentId: number | null) =>
-    req<{ id: number }>('/api/directories', json({ method: 'POST', body: JSON.stringify({ name, parentId }) })),
-  updateDirectory: (id: number, payload: { name: string; parentId: number | null; orderNo?: number }) =>
-    req<void>(`/api/directories/${id}`, json({ method: 'PUT', body: JSON.stringify(payload) })),
-  deleteDirectory: (id: number) => req<void>(`/api/directories/${id}`, { method: 'DELETE' }),
-
   // ---- 题目 ----
   problems: (f: ProblemFilterState) =>
     req<{ problems: ProblemSummary[] }>(`/api/problems${filterQuery(f)}`),
@@ -86,12 +73,14 @@ export const api = {
   updateProblem: (id: number, payload: ProblemPayload) =>
     req<{ problem: Problem }>(`/api/problems/${id}`, json({ method: 'PUT', body: JSON.stringify(payload) })),
   deleteProblem: (id: number) => req<void>(`/api/problems/${id}`, { method: 'DELETE' }),
-  moveProblem: (id: number, directoryId: number | null) =>
-    req<void>(`/api/problems/${id}/directory`, json({ method: 'PUT', body: JSON.stringify({ directoryId }) })),
 
-  // ---- 标签（动态 facet 计数，随过滤上下文联动） ----
+  // ---- 标签（动态 facet 计数随过滤上下文联动；子树整体重命名/删除） ----
   tags: (f?: ProblemFilterState) =>
     req<{ tags: TagCount[]; total: number }>(`/api/tags${f ? filterQuery(f) : ''}`),
+  renameTag: (from: string, to: string) =>
+    req<{ updated: number }>('/api/tags', json({ method: 'PATCH', body: JSON.stringify({ from, to }) })),
+  deleteTag: (tag: string) =>
+    req<{ updated: number }>(`/api/tags?tag=${encodeURIComponent(tag)}`, { method: 'DELETE' }),
 
   // ---- 图片 ----
   uploadImage: async (file: File): Promise<{ url: string }> => {

@@ -23,7 +23,7 @@ interface AppState {
 
 const Ctx = createContext<AppState | null>(null)
 
-const DEFAULT_FILTER: ProblemFilterState = { q: '', tags: [], type: '', dirId: null, recursive: true }
+const DEFAULT_FILTER: ProblemFilterState = { q: '', tags: [], type: '' }
 
 export function AppStateProvider({ children }: { children: ReactNode }) {
   const [view, setView] = useState<View>({ kind: 'empty' })
@@ -53,24 +53,4 @@ export function useAppState(): AppState {
   const v = useContext(Ctx)
   if (!v) throw new Error('useAppState must be used within AppStateProvider')
   return v
-}
-
-// 将目录树展平为带缩进层级的选项列表。
-export interface FlatDir {
-  id: number
-  name: string
-  depth: number
-}
-export function flattenDirectories(nodes: { id: number; name: string; children: DirectoryNodeLike[] }[], depth = 0): FlatDir[] {
-  const out: FlatDir[] = []
-  for (const n of nodes) {
-    out.push({ id: n.id, name: n.name, depth })
-    if (n.children?.length) out.push(...flattenDirectories(n.children, depth + 1))
-  }
-  return out
-}
-interface DirectoryNodeLike {
-  id: number
-  name: string
-  children: DirectoryNodeLike[]
 }
