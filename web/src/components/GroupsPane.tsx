@@ -444,7 +444,7 @@ function Header(props: {
             props.editMode ? 'bg-primary/10 text-primary' : 'hover:bg-muted'
           }`}
         >
-          <EyeIcon className="size-4" />
+          {props.editMode ? <PencilIcon className="size-4" /> : <EyeIcon className="size-4" />}
         </button>
         {props.editMode && (
           <Button variant="ghost" size="sm" className="text-destructive" onClick={props.onDelete}>

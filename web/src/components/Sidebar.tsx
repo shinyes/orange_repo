@@ -513,10 +513,10 @@ function TagTreePanel() {
         </div>
       </div>
 
-      {/* 已选标签置顶：完整路径 chips + 单个移除 + 一键清空 */}
-      {filter.tags.length > 0 && (
+      {/* 已选标签置顶：过滤掉 __none__ 哨兵值（NoneNode 已展示） */}
+      {filter.tags.filter((t) => t !== '__none__').length > 0 && (
         <div className="mb-1.5 flex flex-wrap items-center gap-1 px-1">
-          {filter.tags.map((t) => (
+          {filter.tags.filter((t) => t !== '__none__').map((t) => (
             <Badge key={t} variant="default" className="gap-1 text-xs">
               {t}
               <button type="button" className="ml-0.5 rounded-full hover:text-destructive" onClick={() => toggleSelect(t)} title="移除该标签">

@@ -6,6 +6,7 @@ import {
   ArrowUpIcon,
   EyeIcon,
   ImageIcon,
+  PencilIcon,
   PlusIcon,
   SaveIcon,
   TrashIcon,
@@ -70,7 +71,7 @@ export function ProblemPane({ id }: { id: number }) {
               editMode ? 'bg-primary/10 text-primary' : 'hover:bg-muted'
             }`}
           >
-            <EyeIcon className="size-4" />
+            {editMode ? <PencilIcon className="size-4" /> : <EyeIcon className="size-4" />}
           </button>
           {editMode && (
             <Button variant="ghost" size="sm" className="text-destructive" onClick={() => setConfirmDelete(true)}>
