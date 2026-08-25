@@ -159,7 +159,6 @@ export function TrainingDetail({ id }: { id: number }) {
   function handleChapterDragOver(index: number, e: DragEvent) {
     if (!drag || drag.kind !== 'chapter') return
     e.preventDefault()
-    e.stopPropagation()
     e.dataTransfer.dropEffect = 'move'
     setChapterIndicator((prev) => (prev === index ? prev : index))
   }
@@ -215,11 +214,17 @@ export function TrainingDetail({ id }: { id: number }) {
       {/* 章节列表：章节拖放落点在容器层统一处理 */}
       <div
         className="space-y-3"
-        onDragEnd={endDrag}
+        onDragOver={(e) => {
+          if (drag?.kind === 'chapter') {
+            e.preventDefault()
+            e.dataTransfer.dropEffect = 'move'
+          }
+        }}
         onDrop={(e) => {
           e.preventDefault()
           handleDropChapter()
         }}
+        onDragEnd={endDrag}
       >
         {chapters.map((ch, i) => (
           <div key={ch.id}>

@@ -236,6 +236,7 @@ function buildTagTree(items: TagCount[]): TagNode[] {
     return n
   }
   for (const it of items) {
+    if (it.tag === '__none__') continue // NoneNode 单独处理
     ensure(it.tag).count = it.count
     const parts = it.tag.split('/')
     for (let i = 1; i < parts.length; i++) ensure(parts.slice(0, i).join('/'))
