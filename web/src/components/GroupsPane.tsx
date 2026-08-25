@@ -16,9 +16,7 @@ import {
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import { api } from '@/lib/api'
 import { useAppState } from '@/lib/app-context'
@@ -39,7 +37,9 @@ export function TrainingDetail({ id }: { id: number }) {
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [collapsed, setCollapsed] = useState<Record<number, boolean>>({})
   const [editMode, setEditMode] = useState(true)
-  const [editGroup, setEditGroup] = useState(false)
+  const [localTitle, setLocalTitle] = useState('')
+  const [localDescription, setLocalDescription] = useState('')
+  const [lastTrainingId, setLastTrainingId] = useState(0)
 
   // 拖拽状态提升到详情级：跨章节放置需要全局视野
   const [drag, setDrag] = useState<DragState | null>(null)
@@ -48,6 +48,29 @@ export function TrainingDetail({ id }: { id: number }) {
 
   const chapters = q.data?.chapters ?? []
   const draggingChapter = drag?.kind === 'chapter'
+
+  // 加载训练数据后同步本地标题/描述
+  if (q.data && lastTrainingId !== id) {
+    setLastTrainingId(id)
+    setLocalTitle(q.data.training.title)
+    setLocalDescription(q.data.training.description)
+  }
+
+  const saveMeta = useMutation({
+    mutationFn: (patch: { title?: string; description?: string }) =>
+      api.updateTraining(id, { ...patch, tags: q.data?.training.tags ?? [] } as any),
+    onSuccess: () => invalidate(),
+    onError: () => toast.error('保存失败'),
+  })
+
+  function handleTitleChange(v: string) {
+    setLocalTitle(v)
+    saveMeta.mutate({ title: v })
+  }
+  function handleDescriptionChange(v: string) {
+    setLocalDescription(v)
+    saveMeta.mutate({ description: v })
+  }
 
   async function invalidate() {
     await qc.invalidateQueries({ queryKey: ['training', id] })
@@ -172,8 +195,8 @@ export function TrainingDetail({ id }: { id: number }) {
   return (
     <div className="mx-auto max-w-4xl px-6 py-5">
       <Header
-        title={training.title}
-        description={training.description}
+        title={localTitle}
+        description={localDescription}
         tags={training.tags}
         count={training.problemCount}
         kindLabel="训练"
@@ -181,7 +204,8 @@ export function TrainingDetail({ id }: { id: number }) {
         onDelete={() => setConfirmDelete(true)}
         editMode={editMode}
         onToggleMode={() => setEditMode((v) => !v)}
-        onEdit={() => setEditGroup(true)}
+        onTitleChange={handleTitleChange}
+        onDescriptionChange={handleDescriptionChange}
       />
 
       <p className="mb-3 text-xs text-muted-foreground">
@@ -256,17 +280,6 @@ export function TrainingDetail({ id }: { id: number }) {
         </>
       )}
 
-      <EditGroupDialog
-        open={editGroup}
-        onOpenChange={setEditGroup}
-        kind="training"
-        id={id}
-        initialTitle={training.title}
-        initialDescription={training.description}
-        initialTags={training.tags}
-        onSaved={invalidate}
-      />
-
       <ConfirmDialog
         open={confirmDelete}
         onOpenChange={setConfirmDelete}
@@ -293,7 +306,9 @@ export function PracticeDetail({ id }: { id: number }) {
   const q = useQuery({ queryKey: ['practice', id], queryFn: () => api.getPractice(id) })
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [editMode, setEditMode] = useState(true)
-  const [editGroup, setEditGroup] = useState(false)
+  const [localTitle, setLocalTitle] = useState('')
+  const [localDescription, setLocalDescription] = useState('')
+  const [lastPracticeId, setLastPracticeId] = useState(0)
 
   if (!q.data) return <div className="p-8 text-sm text-muted-foreground">加载中…</div>
   const { practice, items } = q.data
@@ -301,6 +316,29 @@ export function PracticeDetail({ id }: { id: number }) {
   async function invalidate() {
     await qc.invalidateQueries({ queryKey: ['practice', id] })
     await qc.invalidateQueries({ queryKey: ['practices'] })
+  }
+
+  // 加载练习数据后同步本地标题/描述
+  if (q.data && lastPracticeId !== id) {
+    setLastPracticeId(id)
+    setLocalTitle(q.data.practice.title)
+    setLocalDescription(q.data.practice.description)
+  }
+
+  const saveMeta = useMutation({
+    mutationFn: (patch: { title?: string; description?: string }) =>
+      api.updatePractice(id, { ...patch, tags: q.data?.practice.tags ?? [] } as any),
+    onSuccess: () => invalidate(),
+    onError: () => toast.error('保存失败'),
+  })
+
+  function handleTitleChange(v: string) {
+    setLocalTitle(v)
+    saveMeta.mutate({ title: v })
+  }
+  function handleDescriptionChange(v: string) {
+    setLocalDescription(v)
+    saveMeta.mutate({ description: v })
   }
 
   async function updateItem(item: PracticeItem, score: number) {
@@ -323,8 +361,8 @@ export function PracticeDetail({ id }: { id: number }) {
   return (
     <div className="mx-auto max-w-4xl px-6 py-5">
       <Header
-        title={practice.title}
-        description={practice.description}
+        title={localTitle}
+        description={localDescription}
         tags={practice.tags}
         count={practice.problemCount}
         kindLabel="练习"
@@ -332,7 +370,8 @@ export function PracticeDetail({ id }: { id: number }) {
         onDelete={() => setConfirmDelete(true)}
         editMode={editMode}
         onToggleMode={() => setEditMode((v) => !v)}
-        onEdit={() => setEditGroup(true)}
+        onTitleChange={handleTitleChange}
+        onDescriptionChange={handleDescriptionChange}
       />
       <div className="space-y-1.5">
         {items.map((it, i) => (
@@ -383,17 +422,6 @@ export function PracticeDetail({ id }: { id: number }) {
         </div>
       )}
 
-      <EditGroupDialog
-        open={editGroup}
-        onOpenChange={setEditGroup}
-        kind="practice"
-        id={id}
-        initialTitle={practice.title}
-        initialDescription={practice.description}
-        initialTags={practice.tags}
-        onSaved={invalidate}
-      />
-
       <ConfirmDialog
         open={confirmDelete}
         onOpenChange={setConfirmDelete}
@@ -421,16 +449,22 @@ function Header(props: {
   onDelete: () => void
   editMode: boolean
   onToggleMode: () => void
-  onEdit: () => void
+  onTitleChange?: (v: string) => void
+  onDescriptionChange?: (v: string) => void
 }) {
   return (
     <div className="mb-4">
       <div className="mb-1 text-xs text-muted-foreground">{props.kindLabel}</div>
       <div className="flex items-start gap-2">
-        <h1 className="min-w-0 flex-1 text-xl font-semibold">{props.title}</h1>
-        <Button variant="ghost" size="icon-sm" title="编辑名称/描述" onClick={props.onEdit}>
-          <PencilIcon />
-        </Button>
+        {props.editMode ? (
+          <Input
+            value={props.title}
+            onChange={(e) => props.onTitleChange?.(e.target.value)}
+            className="min-w-0 flex-1 text-xl font-semibold h-auto py-1 px-2"
+          />
+        ) : (
+          <h1 className="min-w-0 flex-1 text-xl font-semibold">{props.title}</h1>
+        )}
         <a href={props.exportUrl}>
           <Button variant="outline" size="sm">
             <DownloadIcon data-icon="inline-start" /> 导出 OrangeOJ ZIP
@@ -452,6 +486,18 @@ function Header(props: {
           </Button>
         )}
       </div>
+      {props.editMode && props.onDescriptionChange && (
+        <textarea
+          value={props.description ?? ''}
+          onChange={(e) => props.onDescriptionChange!(e.target.value)}
+          placeholder="描述（可选）"
+          rows={2}
+          className="mt-2 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/20"
+        />
+      )}
+      {!props.editMode && props.description && (
+        <p className="mt-2 text-sm text-muted-foreground whitespace-pre-wrap">{props.description}</p>
+      )}
       <div className="mt-2 flex flex-wrap items-center gap-1.5">
         <Badge variant="outline">{props.count} 题</Badge>
         {props.tags.map((t) => (
@@ -615,77 +661,3 @@ function ChapterCard(props: {
 
 // ---------- 编辑题册名称/描述对话框 ----------
 
-function EditGroupDialog(props: {
-  open: boolean
-  onOpenChange: (v: boolean) => void
-  kind: 'training' | 'practice'
-  id: number
-  initialTitle: string
-  initialDescription: string
-  initialTags: string[]
-  onSaved: () => void
-}) {
-  const isTraining = props.kind === 'training'
-  const [title, setTitle] = useState(props.initialTitle)
-  const [description, setDescription] = useState(props.initialDescription)
-
-  // 打开时同步预填值
-  const [lastOpen, setLastOpen] = useState(false)
-  if (props.open && !lastOpen) {
-    setLastOpen(true)
-    setTitle(props.initialTitle)
-    setDescription(props.initialDescription)
-  } else if (!props.open && lastOpen) {
-    setLastOpen(false)
-  }
-
-  const save = useMutation({
-    mutationFn: async () => {
-      if (isTraining) {
-        await api.updateTraining(props.id, { title, description, tags: props.initialTags })
-      } else {
-        await api.updatePractice(props.id, { title, description, tags: props.initialTags })
-      }
-    },
-    onSuccess: async () => {
-      toast.success('已保存')
-      await props.onSaved()
-      props.onOpenChange(false)
-    },
-    onError: (e) => toast.error(e instanceof Error ? e.message : '保存失败'),
-  })
-
-  return (
-    <Dialog open={props.open} onOpenChange={props.onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>编辑{isTraining ? '训练' : '练习'}</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-3">
-          <div className="space-y-1.5">
-            <Label>名称</Label>
-            <Input value={title} onChange={(e) => setTitle(e.target.value)} />
-          </div>
-          <div className="space-y-1.5">
-            <Label>描述</Label>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="可选描述"
-              rows={4}
-              className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/20"
-            />
-          </div>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => props.onOpenChange(false)}>
-            取消
-          </Button>
-          <Button onClick={() => save.mutate()} disabled={!title.trim() || save.isPending}>
-            {save.isPending ? '保存中…' : '保存'}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  )
-}
