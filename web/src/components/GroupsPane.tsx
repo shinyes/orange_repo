@@ -1,4 +1,4 @@
-import { useEffect, useState, type DragEvent } from 'react'
+import { useEffect, useRef, useState, type DragEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
@@ -49,6 +49,19 @@ export function TrainingDetail({ id }: { id: number }) {
   const chapters = q.data?.chapters ?? []
   const draggingChapter = drag?.kind === 'chapter'
 
+  const titleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const descTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const localTitleRef = useRef(localTitle)
+  const localDescRef = useRef(localDescription)
+  useEffect(() => { localTitleRef.current = localTitle }, [localTitle])
+  useEffect(() => { localDescRef.current = localDescription }, [localDescription])
+  useEffect(() => {
+    return () => {
+      if (titleTimerRef.current) clearTimeout(titleTimerRef.current)
+      if (descTimerRef.current) clearTimeout(descTimerRef.current)
+    }
+  }, [])
+
   useEffect(() => {
     if (q.data && lastTrainingId !== id) {
       setLastTrainingId(id)
@@ -58,19 +71,25 @@ export function TrainingDetail({ id }: { id: number }) {
   }, [q.data, id, lastTrainingId])
 
   const saveMeta = useMutation({
-    mutationFn: (patch: { title?: string; description?: string }) =>
-      api.updateTraining(id, { ...patch, tags: q.data?.training.tags ?? [] } as any),
+    mutationFn: (payload: { title: string; description: string }) =>
+      api.updateTraining(id, { ...payload, tags: q.data?.training.tags ?? [] }),
     onSuccess: () => invalidate(),
     onError: () => toast.error('保存失败'),
   })
 
   function handleTitleChange(v: string) {
     setLocalTitle(v)
-    saveMeta.mutate({ title: v })
+    if (titleTimerRef.current) clearTimeout(titleTimerRef.current)
+    titleTimerRef.current = setTimeout(() => {
+      saveMeta.mutate({ title: v, description: localDescRef.current })
+    }, 600)
   }
   function handleDescriptionChange(v: string) {
     setLocalDescription(v)
-    saveMeta.mutate({ description: v })
+    if (descTimerRef.current) clearTimeout(descTimerRef.current)
+    descTimerRef.current = setTimeout(() => {
+      saveMeta.mutate({ title: localTitleRef.current, description: v })
+    }, 600)
   }
 
   async function invalidate() {
@@ -330,14 +349,27 @@ export function PracticeDetail({ id }: { id: number }) {
   const [localDescription, setLocalDescription] = useState('')
   const [lastPracticeId, setLastPracticeId] = useState(0)
 
+  const titleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const descTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const localTitleRef = useRef(localTitle)
+  const localDescRef = useRef(localDescription)
+  useEffect(() => { localTitleRef.current = localTitle }, [localTitle])
+  useEffect(() => { localDescRef.current = localDescription }, [localDescription])
+  useEffect(() => {
+    return () => {
+      if (titleTimerRef.current) clearTimeout(titleTimerRef.current)
+      if (descTimerRef.current) clearTimeout(descTimerRef.current)
+    }
+  }, [])
+
   async function invalidate() {
     await qc.invalidateQueries({ queryKey: ['practice', id] })
     await qc.invalidateQueries({ queryKey: ['practices'] })
   }
 
   const saveMeta = useMutation({
-    mutationFn: (patch: { title?: string; description?: string }) =>
-      api.updatePractice(id, { ...patch, tags: q.data?.practice.tags ?? [] } as any),
+    mutationFn: (payload: { title: string; description: string }) =>
+      api.updatePractice(id, { ...payload, tags: q.data?.practice.tags ?? [] }),
     onSuccess: () => invalidate(),
     onError: () => toast.error('保存失败'),
   })
@@ -355,11 +387,17 @@ export function PracticeDetail({ id }: { id: number }) {
 
   function handleTitleChange(v: string) {
     setLocalTitle(v)
-    saveMeta.mutate({ title: v })
+    if (titleTimerRef.current) clearTimeout(titleTimerRef.current)
+    titleTimerRef.current = setTimeout(() => {
+      saveMeta.mutate({ title: v, description: localDescRef.current })
+    }, 600)
   }
   function handleDescriptionChange(v: string) {
     setLocalDescription(v)
-    saveMeta.mutate({ description: v })
+    if (descTimerRef.current) clearTimeout(descTimerRef.current)
+    descTimerRef.current = setTimeout(() => {
+      saveMeta.mutate({ title: localTitleRef.current, description: v })
+    }, 600)
   }
 
   async function updateItem(item: PracticeItem, score: number) {
