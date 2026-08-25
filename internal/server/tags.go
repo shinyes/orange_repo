@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 
 	"github.com/gofiber/fiber/v2"
+
+	"orangerepo/internal/store"
 )
 
 // handleRenameTag 重命名标签（子树整体搬家）：PATCH /api/tags {from,to} → {updated}。
@@ -18,6 +20,9 @@ func (s *Server) handleRenameTag(c *fiber.Ctx) error {
 	if req.From == "" || req.To == "" {
 		return respondError(c, fiber.StatusBadRequest, "from 和 to 不能为空")
 	}
+	if req.From == store.NoneTag || req.To == store.NoneTag {
+		return respondError(c, fiber.StatusBadRequest, "不能重命名无标签标记")
+	}
 	updated, err := s.Store.RenameTag(req.From, req.To)
 	if err != nil {
 		return respondError(c, fiber.StatusBadRequest, err.Error())
@@ -30,6 +35,9 @@ func (s *Server) handleDeleteTag(c *fiber.Ctx) error {
 	tag := c.Query("tag")
 	if tag == "" {
 		return respondError(c, fiber.StatusBadRequest, "缺少 tag 参数")
+	}
+	if tag == store.NoneTag {
+		return respondError(c, fiber.StatusBadRequest, "不能删除无标签标记")
 	}
 	updated, err := s.Store.DeleteTag(tag)
 	if err != nil {

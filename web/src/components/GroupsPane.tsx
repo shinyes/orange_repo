@@ -1,20 +1,24 @@
 import { useState, type DragEvent } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
   ArrowDownIcon,
   ArrowUpIcon,
   ChevronRightIcon,
   DownloadIcon,
+  EyeIcon,
   FolderPlusIcon,
   GripVerticalIcon,
+  PencilIcon,
   PlusIcon,
   TrashIcon,
 } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import { api } from '@/lib/api'
 import { useAppState } from '@/lib/app-context'
@@ -34,6 +38,8 @@ export function TrainingDetail({ id }: { id: number }) {
   const [newChapter, setNewChapter] = useState('')
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [collapsed, setCollapsed] = useState<Record<number, boolean>>({})
+  const [editMode, setEditMode] = useState(true)
+  const [editGroup, setEditGroup] = useState(false)
 
   // 拖拽状态提升到详情级：跨章节放置需要全局视野
   const [drag, setDrag] = useState<DragState | null>(null)
@@ -173,6 +179,9 @@ export function TrainingDetail({ id }: { id: number }) {
         kindLabel="训练"
         exportUrl={api.exportTrainingUrl(id)}
         onDelete={() => setConfirmDelete(true)}
+        editMode={editMode}
+        onToggleMode={() => setEditMode((v) => !v)}
+        onEdit={() => setEditGroup(true)}
       />
 
       <p className="mb-3 text-xs text-muted-foreground">
@@ -227,13 +236,35 @@ export function TrainingDetail({ id }: { id: number }) {
         {chapters.length === 0 && <Empty>还没有章节，在下方创建第一个章节</Empty>}
       </div>
 
-      <Separator className="my-4" />
-      <div className="flex gap-2">
-        <Input value={newChapter} onChange={(e) => setNewChapter(e.target.value)} placeholder="新章节名称" className="max-w-xs" onKeyDown={(e) => e.key === 'Enter' && addChapter()} />
-        <Button variant="outline" onClick={addChapter} disabled={!newChapter.trim()}>
-          <FolderPlusIcon data-icon="inline-start" /> 添加章节
-        </Button>
-      </div>
+      {training.description && (
+        <div className="mb-4 rounded-lg border bg-muted/30 px-4 py-3">
+          <div className="mb-1 text-xs font-medium text-muted-foreground">描述</div>
+          <p className="whitespace-pre-wrap text-sm">{training.description}</p>
+        </div>
+      )}
+
+      {editMode && (
+        <>
+          <Separator className="my-4" />
+          <div className="flex gap-2">
+            <Input value={newChapter} onChange={(e) => setNewChapter(e.target.value)} placeholder="新章节名称" className="max-w-xs" onKeyDown={(e) => e.key === 'Enter' && addChapter()} />
+            <Button variant="outline" onClick={addChapter} disabled={!newChapter.trim()}>
+              <FolderPlusIcon data-icon="inline-start" /> 添加章节
+            </Button>
+          </div>
+        </>
+      )}
+
+      <EditGroupDialog
+        open={editGroup}
+        onOpenChange={setEditGroup}
+        kind="training"
+        id={id}
+        initialTitle={training.title}
+        initialDescription={training.description}
+        initialTags={training.tags}
+        onSaved={invalidate}
+      />
 
       <ConfirmDialog
         open={confirmDelete}
@@ -260,6 +291,8 @@ export function PracticeDetail({ id }: { id: number }) {
   const { goHome } = useAppState()
   const q = useQuery({ queryKey: ['practice', id], queryFn: () => api.getPractice(id) })
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [editMode, setEditMode] = useState(true)
+  const [editGroup, setEditGroup] = useState(false)
 
   if (!q.data) return <div className="p-8 text-sm text-muted-foreground">加载中…</div>
   const { practice, items } = q.data
@@ -296,6 +329,9 @@ export function PracticeDetail({ id }: { id: number }) {
         kindLabel="练习"
         exportUrl={api.exportPracticeUrl(id)}
         onDelete={() => setConfirmDelete(true)}
+        editMode={editMode}
+        onToggleMode={() => setEditMode((v) => !v)}
+        onEdit={() => setEditGroup(true)}
       />
       <div className="space-y-1.5">
         {items.map((it, i) => (
@@ -332,6 +368,24 @@ export function PracticeDetail({ id }: { id: number }) {
         {items.length === 0 && <Empty>练习为空，去左侧勾选题目后通过「加入练习」添加</Empty>}
       </div>
 
+      {practice.description && (
+        <div className="mt-4 rounded-lg border bg-muted/30 px-4 py-3">
+          <div className="mb-1 text-xs font-medium text-muted-foreground">描述</div>
+          <p className="whitespace-pre-wrap text-sm">{practice.description}</p>
+        </div>
+      )}
+
+      <EditGroupDialog
+        open={editGroup}
+        onOpenChange={setEditGroup}
+        kind="practice"
+        id={id}
+        initialTitle={practice.title}
+        initialDescription={practice.description}
+        initialTags={practice.tags}
+        onSaved={invalidate}
+      />
+
       <ConfirmDialog
         open={confirmDelete}
         onOpenChange={setConfirmDelete}
@@ -357,24 +411,41 @@ function Header(props: {
   kindLabel: string
   exportUrl: string
   onDelete: () => void
+  editMode: boolean
+  onToggleMode: () => void
+  onEdit: () => void
 }) {
   return (
     <div className="mb-4">
       <div className="mb-1 text-xs text-muted-foreground">{props.kindLabel}</div>
       <div className="flex items-start gap-2">
         <h1 className="min-w-0 flex-1 text-xl font-semibold">{props.title}</h1>
+        <Button variant="ghost" size="icon-sm" title="编辑名称/描述" onClick={props.onEdit}>
+          <PencilIcon />
+        </Button>
         <a href={props.exportUrl}>
           <Button variant="outline" size="sm">
             <DownloadIcon data-icon="inline-start" /> 导出 OrangeOJ ZIP
           </Button>
         </a>
-        <Button variant="ghost" size="sm" className="text-destructive" onClick={props.onDelete}>
-          <TrashIcon />
-        </Button>
+        <button
+          type="button"
+          onClick={props.onToggleMode}
+          title={props.editMode ? '切换到显示模式' : '切换到编辑模式'}
+          className={`inline-flex size-8 items-center justify-center rounded-lg border border-input text-sm transition-colors ${
+            props.editMode ? 'bg-primary/10 text-primary' : 'hover:bg-muted'
+          }`}
+        >
+          <EyeIcon className="size-4" />
+        </button>
+        {props.editMode && (
+          <Button variant="ghost" size="sm" className="text-destructive" onClick={props.onDelete}>
+            <TrashIcon />
+          </Button>
+        )}
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-1.5">
         <Badge variant="outline">{props.count} 题</Badge>
-        {props.description && <span className="text-xs text-muted-foreground">{props.description}</span>}
         {props.tags.map((t) => (
           <Badge key={t} variant="secondary" className="text-xs">
             {t}
@@ -522,5 +593,82 @@ function ChapterCard(props: {
         </div>
       )}
     </div>
+  )
+}
+
+// ---------- 编辑题册名称/描述对话框 ----------
+
+function EditGroupDialog(props: {
+  open: boolean
+  onOpenChange: (v: boolean) => void
+  kind: 'training' | 'practice'
+  id: number
+  initialTitle: string
+  initialDescription: string
+  initialTags: string[]
+  onSaved: () => void
+}) {
+  const isTraining = props.kind === 'training'
+  const [title, setTitle] = useState(props.initialTitle)
+  const [description, setDescription] = useState(props.initialDescription)
+
+  // 打开时同步预填值
+  const [lastOpen, setLastOpen] = useState(false)
+  if (props.open && !lastOpen) {
+    setLastOpen(true)
+    setTitle(props.initialTitle)
+    setDescription(props.initialDescription)
+  } else if (!props.open && lastOpen) {
+    setLastOpen(false)
+  }
+
+  const save = useMutation({
+    mutationFn: async () => {
+      if (isTraining) {
+        await api.updateTraining(props.id, { title, description, tags: props.initialTags })
+      } else {
+        await api.updatePractice(props.id, { title, description, tags: props.initialTags })
+      }
+    },
+    onSuccess: async () => {
+      toast.success('已保存')
+      await props.onSaved()
+      props.onOpenChange(false)
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : '保存失败'),
+  })
+
+  return (
+    <Dialog open={props.open} onOpenChange={props.onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>编辑{isTraining ? '训练' : '练习'}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <Label>名称</Label>
+            <Input value={title} onChange={(e) => setTitle(e.target.value)} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>描述</Label>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="可选描述"
+              rows={4}
+              className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/20"
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => props.onOpenChange(false)}>
+            取消
+          </Button>
+          <Button onClick={() => save.mutate()} disabled={!title.trim() || save.isPending}>
+            {save.isPending ? '保存中…' : '保存'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }

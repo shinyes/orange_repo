@@ -279,6 +279,25 @@ func TestExportImportRoundTrip(t *testing.T) {
 	}
 }
 
+// TestNoneTagGuard 无标签哨兵的重命名/删除守卫。
+func TestNoneTagGuard(t *testing.T) {
+	app, _ := newTestApp(t)
+	cookie := sessionCookie(t, app)
+
+	resp, _ := doJSON(t, app, "PATCH", "/api/tags", cookie, map[string]any{"from": "__none__", "to": "xxx"})
+	if resp.StatusCode != fiber.StatusBadRequest {
+		t.Fatalf("rename __none__ = %d, want 400", resp.StatusCode)
+	}
+	resp, _ = doJSON(t, app, "PATCH", "/api/tags", cookie, map[string]any{"from": "a", "to": "__none__"})
+	if resp.StatusCode != fiber.StatusBadRequest {
+		t.Fatalf("rename to __none__ = %d, want 400", resp.StatusCode)
+	}
+	resp, _ = doJSON(t, app, "DELETE", "/api/tags?tag=__none__", cookie, nil)
+	if resp.StatusCode != fiber.StatusBadRequest {
+		t.Fatalf("delete __none__ = %d, want 400", resp.StatusCode)
+	}
+}
+
 // TestTagOrderSettings 手动排序持久化往返。
 func TestTagOrderSettings(t *testing.T) {
 	app, _ := newTestApp(t)

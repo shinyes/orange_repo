@@ -5,6 +5,7 @@ import { BookOpenIcon, ListChecksIcon, TagsIcon } from 'lucide-react'
 
 import { api } from '@/lib/api'
 import { AppStateProvider, useAppState } from '@/lib/app-context'
+import { BookletColumn } from '@/components/BookletColumn'
 import { Login } from '@/components/Login'
 import { PasswordDialog } from '@/components/PasswordDialog'
 import { ProblemListColumn, TagFilterColumn } from '@/components/Sidebar'
@@ -47,13 +48,22 @@ export default function App() {
 
 function Main({ onLogout }: { onLogout: () => void }) {
   const [pwOpen, setPwOpen] = useState(false)
+  const [showBooklets, setShowBooklets] = useState(false)
+  const { view } = useAppState()
+
+  // 打开训练/练习时自动展开题册列
+  useEffect(() => {
+    if (view.kind === 'training' || view.kind === 'practice') setShowBooklets(true)
+  }, [view.kind === 'training', view.kind === 'practice'])
+
   return (
     <div className="flex h-screen overflow-hidden">
       <aside className="w-[270px] shrink-0 border-r">
         <TagFilterColumn onLogout={onLogout} onOpenSettings={() => setPwOpen(true)} />
       </aside>
+      {showBooklets && <aside className="w-[280px] shrink-0 border-r"><BookletColumn /></aside>}
       <aside className="w-[320px] shrink-0 border-r">
-        <ProblemListColumn />
+        <ProblemListColumn showBooklets={showBooklets} onToggleBooklets={() => setShowBooklets((v) => !v)} />
       </aside>
       <main className="min-w-0 flex-1 overflow-y-auto">
         <RightPane />

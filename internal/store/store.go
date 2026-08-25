@@ -257,6 +257,9 @@ func (s *Store) problemWhere(f ProblemFilter) (string, []any) {
 	return strings.Join(where, " AND "), args
 }
 
+// NoneTag 哨兵值：题目没有任何标签时匹配的虚拟标签（前端「无标签」伪节点）。
+const NoneTag = "__none__"
+
 // tagSetMatches 报告 tags 中是否存在 sel 本身或其前缀子孙（t==sel || HasPrefix(t, sel+"/")）。
 func tagSetMatches(tags []string, sel string) bool {
 	prefix := sel + "/"
@@ -269,9 +272,14 @@ func tagSetMatches(tags []string, sel string) bool {
 }
 
 // tagMatchesSelected 前缀 AND 规则：对选中集 S 中每个 s，题目至少有一个标签命中。
+// 特判 NoneTag：命中标签数组为空的题目。
 func tagMatchesSelected(tags []string, selected []string) bool {
 	for _, sel := range selected {
-		if !tagSetMatches(tags, sel) {
+		if sel == NoneTag {
+			if len(tags) != 0 {
+				return false
+			}
+		} else if !tagSetMatches(tags, sel) {
 			return false
 		}
 	}
@@ -568,6 +576,7 @@ func (s *Store) ListTagFacets(f ProblemFilter) ([]TagCount, int, error) {
 	for _, t := range selected {
 		candidates[t] = true
 	}
+	candidates[NoneTag] = true // 始终显示「无标签」伪节点
 
 	counts := make(map[string]int, len(candidates))
 	total := 0

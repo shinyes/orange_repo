@@ -192,6 +192,56 @@ func TestListTagFacetsHierarchical(t *testing.T) {
 	}
 }
 
+func TestNoneTagFiltering(t *testing.T) {
+	s := newTestStore(t)
+	mustAddProblem(t, s, "有标签", []string{"a"})
+	mustAddProblem(t, s, "无标签题", []string{})
+	mustAddProblem(t, s, "也是无标签", []string{})
+
+	// 选中 __none__：命中 2 道无标签题
+	list, err := s.ListProblems(ProblemFilter{Tags: []string{NoneTag}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list) != 2 {
+		t.Fatalf("none filter = %d, want 2", len(list))
+	}
+
+	// 无标签 + 有标签 AND 组合 → 0
+	list, err = s.ListProblems(ProblemFilter{Tags: []string{NoneTag, "a"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list) != 0 {
+		t.Fatalf("none+tag filter = %d, want 0", len(list))
+	}
+
+	// 分面：__none__ 计数 = 2
+	tags, total, err := s.ListTagFacets(ProblemFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := facetMap(tags)
+	if m[NoneTag] != 2 {
+		t.Errorf("__none__ count = %d, want 2", m[NoneTag])
+	}
+	if total != 3 {
+		t.Errorf("total = %d, want 3", total)
+	}
+	// 选中 a → __none__ count 预览=0（因为 AND 后 a+无标签=0）
+	tags, total, err = s.ListTagFacets(ProblemFilter{Tags: []string{"a"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	m = facetMap(tags)
+	if m[NoneTag] != 0 {
+		t.Errorf("none with a selected: count = %d, want 0", m[NoneTag])
+	}
+	if total != 1 {
+		t.Errorf("total with a = %d, want 1", total)
+	}
+}
+
 func TestValidateTagPath(t *testing.T) {
 	valid := map[string]string{" 数学 ": "数学", "a/b/c": "a/b/c", "中文/标签": "中文/标签"}
 	for in, want := range valid {
