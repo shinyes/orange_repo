@@ -1,4 +1,4 @@
-import { useState, type DragEvent } from 'react'
+import { useEffect, useState, type DragEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
@@ -49,12 +49,13 @@ export function TrainingDetail({ id }: { id: number }) {
   const chapters = q.data?.chapters ?? []
   const draggingChapter = drag?.kind === 'chapter'
 
-  // 加载训练数据后同步本地标题/描述
-  if (q.data && lastTrainingId !== id) {
-    setLastTrainingId(id)
-    setLocalTitle(q.data.training.title)
-    setLocalDescription(q.data.training.description)
-  }
+  useEffect(() => {
+    if (q.data && lastTrainingId !== id) {
+      setLastTrainingId(id)
+      setLocalTitle(q.data.training.title)
+      setLocalDescription(q.data.training.description)
+    }
+  }, [q.data, id, lastTrainingId])
 
   const saveMeta = useMutation({
     mutationFn: (patch: { title?: string; description?: string }) =>
@@ -329,19 +330,9 @@ export function PracticeDetail({ id }: { id: number }) {
   const [localDescription, setLocalDescription] = useState('')
   const [lastPracticeId, setLastPracticeId] = useState(0)
 
-  if (!q.data) return <div className="p-8 text-sm text-muted-foreground">加载中…</div>
-  const { practice, items } = q.data
-
   async function invalidate() {
     await qc.invalidateQueries({ queryKey: ['practice', id] })
     await qc.invalidateQueries({ queryKey: ['practices'] })
-  }
-
-  // 加载练习数据后同步本地标题/描述
-  if (q.data && lastPracticeId !== id) {
-    setLastPracticeId(id)
-    setLocalTitle(q.data.practice.title)
-    setLocalDescription(q.data.practice.description)
   }
 
   const saveMeta = useMutation({
@@ -350,6 +341,17 @@ export function PracticeDetail({ id }: { id: number }) {
     onSuccess: () => invalidate(),
     onError: () => toast.error('保存失败'),
   })
+
+  useEffect(() => {
+    if (q.data && lastPracticeId !== id) {
+      setLastPracticeId(id)
+      setLocalTitle(q.data.practice.title)
+      setLocalDescription(q.data.practice.description)
+    }
+  }, [q.data, id, lastPracticeId])
+
+  if (!q.data) return <div className="p-8 text-sm text-muted-foreground">加载中…</div>
+  const { practice, items } = q.data
 
   function handleTitleChange(v: string) {
     setLocalTitle(v)
