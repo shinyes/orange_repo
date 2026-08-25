@@ -39,6 +39,7 @@ export function ProblemPane({ id }: { id: number }) {
   const problemQuery = useQuery({ queryKey: ['problem', id], queryFn: () => api.getProblem(id) })
   const [tab, setTab] = useState('problem')
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [editMode, setEditMode] = useState(true)
 
   const problem = problemQuery.data?.problem
 
@@ -61,9 +62,21 @@ export function ProblemPane({ id }: { id: number }) {
       <div className="mb-4">
         <div className="flex items-start gap-2">
           <h1 className="min-w-0 flex-1 text-xl font-semibold">{problem.title}</h1>
-          <Button variant="ghost" size="sm" className="text-destructive" onClick={() => setConfirmDelete(true)}>
-            <TrashIcon data-icon="inline-start" /> 删除
-          </Button>
+          <button
+            type="button"
+            onClick={() => setEditMode((v) => !v)}
+            title={editMode ? '切换到显示模式' : '切换到编辑模式'}
+            className={`inline-flex size-8 items-center justify-center rounded-lg border border-input text-sm transition-colors ${
+              editMode ? 'bg-primary/10 text-primary' : 'hover:bg-muted'
+            }`}
+          >
+            <EyeIcon className="size-4" />
+          </button>
+          {editMode && (
+            <Button variant="ghost" size="sm" className="text-destructive" onClick={() => setConfirmDelete(true)}>
+              <TrashIcon data-icon="inline-start" /> 删除
+            </Button>
+          )}
         </div>
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
           <Badge>{TYPE_LABEL[problem.type]}</Badge>
@@ -84,7 +97,7 @@ export function ProblemPane({ id }: { id: number }) {
         <TabsList>
           <TabsTrigger value="problem">题目</TabsTrigger>
           <TabsTrigger value="solutions">题解 {problem.solutions.length > 0 && `(${problem.solutions.length})`}</TabsTrigger>
-          <TabsTrigger value="edit">编辑</TabsTrigger>
+          {editMode && <TabsTrigger value="edit">编辑</TabsTrigger>}
         </TabsList>
         <TabsContent value="problem" className="space-y-5 text-[17px] leading-relaxed">
           <section>

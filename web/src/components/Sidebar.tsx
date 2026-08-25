@@ -636,8 +636,8 @@ function NoneNode({ count, selected, onSelect }: { count: number; selected: stri
       }`}
       onClick={() => onSelect('__none__')}
     >
-      <span className="size-3.5 shrink-0 text-center text-xs text-muted-foreground/70">∅</span>
-      <span className="flex-1 text-muted-foreground italic">无标签</span>
+      <TagIcon className="size-3.5 shrink-0 text-muted-foreground/50" />
+      <span className="flex-1 text-muted-foreground">无标签</span>
       <span className="text-xs tabular-nums text-muted-foreground">{count > 0 ? count : ''}</span>
     </button>
   )

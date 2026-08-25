@@ -208,6 +208,7 @@ export function TrainingDetail({ id }: { id: number }) {
               drag={drag}
               itemIndicator={itemIndicator}
               checkedCount={checked.length}
+              editMode={editMode}
               onToggleCollapse={() => setCollapsed((p) => ({ ...p, [ch.id]: !p[ch.id] }))}
               onChanged={invalidate}
               onAddChecked={() => addCheckedTo(ch.id)}
@@ -342,27 +343,34 @@ export function PracticeDetail({ id }: { id: number }) {
             </Badge>
             <span className="min-w-0 flex-1 truncate text-sm">{it.problemTitle || `#${it.problemId}`}</span>
             <div className="flex w-24 items-center gap-1">
-              <Input
-                type="number"
-                defaultValue={it.score}
-                min={0}
-                className="h-7 text-xs"
-                onBlur={(e) => {
-                  const v = Number(e.target.value)
-                  if (v !== it.score) void updateItem(it, v)
-                }}
-              />
-              <span className="text-xs text-muted-foreground">分</span>
+              {editMode ? (
+                <Input
+                  type="number"
+                  defaultValue={it.score}
+                  min={0}
+                  className="h-7 text-xs"
+                  onBlur={(e) => {
+                    const v = Number(e.target.value)
+                    if (v !== it.score) void updateItem(it, v)
+                  }}
+                />
+              ) : (
+                <span className="text-sm tabular-nums">{it.score} 分</span>
+              )}
             </div>
-            <Button size="icon-xs" variant="ghost" disabled={i === 0} onClick={() => move(i, -1)}>
-              <ArrowUpIcon />
-            </Button>
-            <Button size="icon-xs" variant="ghost" disabled={i === items.length - 1} onClick={() => move(i, 1)}>
-              <ArrowDownIcon />
-            </Button>
-            <Button size="icon-xs" variant="ghost" className="text-destructive" onClick={() => removeItem(it.id)}>
-              <TrashIcon />
-            </Button>
+            {editMode && (
+              <>
+                <Button size="icon-xs" variant="ghost" disabled={i === 0} onClick={() => move(i, -1)}>
+                  <ArrowUpIcon />
+                </Button>
+                <Button size="icon-xs" variant="ghost" disabled={i === items.length - 1} onClick={() => move(i, 1)}>
+                  <ArrowDownIcon />
+                </Button>
+                <Button size="icon-xs" variant="ghost" className="text-destructive" onClick={() => removeItem(it.id)}>
+                  <TrashIcon />
+                </Button>
+              </>
+            )}
           </div>
         ))}
         {items.length === 0 && <Empty>练习为空，去左侧勾选题目后通过「加入练习」添加</Empty>}
@@ -466,6 +474,7 @@ function ChapterCard(props: {
   drag: DragState | null
   itemIndicator: { chapterId: number; index: number } | null
   checkedCount: number
+  editMode: boolean
   onToggleCollapse: () => void
   onChanged: () => void
   onAddChecked: () => void
@@ -480,7 +489,7 @@ function ChapterCard(props: {
   const [renaming, setRenaming] = useState(false)
   const [name, setName] = useState(ch.title)
   const showBody = !props.collapsed && !props.forceCollapse
-  const itemDragActive = props.drag?.kind === 'item'
+  const itemDragActive = props.drag?.kind === 'item' && props.editMode
   const ind = itemDragActive ? props.itemIndicator : null
   const isDraggedChapter = props.drag?.kind === 'chapter' && props.drag.chapterId === ch.id
 
@@ -502,26 +511,28 @@ function ChapterCard(props: {
 
   return (
     <div className={`rounded-xl border ${isDraggedChapter ? 'opacity-60' : ''}`}>
-      {/* 章节头部：手柄拖拽排序；拖拽经过时按上下半区决定插入位 */}
+      {/* 章节头部：编辑模式显示拖拽/删除/重命名控件 */}
       <div
         className={`flex items-center gap-2 border-b bg-muted/50 px-2 py-2 ${
-          props.drag?.kind === 'chapter' && !isDraggedChapter ? 'hover:bg-muted' : ''
+          props.editMode && props.drag?.kind === 'chapter' && !isDraggedChapter ? 'hover:bg-muted' : ''
         }`}
-        onDragOver={(e) =>
+        onDragOver={props.editMode ? (e) =>
           props.onChapterDragOver(
             e.clientY > e.currentTarget.getBoundingClientRect().top + e.currentTarget.offsetHeight / 2 ? props.index + 1 : props.index,
             e,
-          )
+          ) : undefined
         }
       >
-        <span
-          draggable
-          onDragStart={(e) => props.onChapterDragStart(ch.id, e)}
-          title="拖动调整章节顺序"
-          className="flex shrink-0 cursor-grab items-center justify-center text-muted-foreground hover:text-foreground active:cursor-grabbing"
-        >
-          <GripVerticalIcon className="size-4" />
-        </span>
+        {props.editMode && (
+          <span
+            draggable
+            onDragStart={(e) => props.onChapterDragStart(ch.id, e)}
+            title="拖动调整章节顺序"
+            className="flex shrink-0 cursor-grab items-center justify-center text-muted-foreground hover:text-foreground active:cursor-grabbing"
+          >
+            <GripVerticalIcon className="size-4" />
+          </span>
+        )}
         <button
           type="button"
           className="flex size-5 shrink-0 items-center justify-center"
@@ -533,21 +544,23 @@ function ChapterCard(props: {
         {renaming ? (
           <Input value={name} onChange={(e) => setName(e.target.value)} onBlur={saveName} onKeyDown={(e) => e.key === 'Enter' && saveName()} className="h-7 max-w-xs" autoFocus />
         ) : (
-          <button type="button" className="min-w-0 flex-1 truncate text-left text-sm font-medium hover:underline" onClick={() => setRenaming(true)} title="点击重命名">
+          <button type="button" className="min-w-0 flex-1 truncate text-left text-sm font-medium" onClick={() => props.editMode && setRenaming(true)} title={props.editMode ? '点击重命名' : undefined}>
             {ch.title}
           </button>
         )}
         <Badge variant="outline" className="shrink-0 text-[10px]">
           {ch.items.length} 题
         </Badge>
-        <div className="ml-auto flex shrink-0 items-center gap-1">
-          <Button size="xs" variant="outline" onClick={props.onAddChecked} disabled={props.checkedCount === 0}>
-            <PlusIcon data-icon="inline-start" /> 加入勾选（{props.checkedCount}）
-          </Button>
-          <Button size="icon-xs" variant="ghost" className="text-destructive" onClick={removeChapter} title="删除章节">
-            <TrashIcon />
-          </Button>
-        </div>
+        {props.editMode && (
+          <div className="ml-auto flex shrink-0 items-center gap-1">
+            <Button size="xs" variant="outline" onClick={props.onAddChecked} disabled={props.checkedCount === 0}>
+              <PlusIcon data-icon="inline-start" /> 加入勾选（{props.checkedCount}）
+            </Button>
+            <Button size="icon-xs" variant="ghost" className="text-destructive" onClick={removeChapter} title="删除章节">
+              <TrashIcon />
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* 条目列表：拖动章节时整体隐藏 */}
@@ -562,26 +575,30 @@ function ChapterCard(props: {
             <div key={it.id}>
               {ind?.chapterId === ch.id && ind.index === i + 1 && <IndicatorLine />}
               <div
-                draggable
-                onDragStart={(e) => props.onItemDragStart(it, ch.id, e)}
-                onDragOver={(e) => props.onItemDragOver(ch.id, i, e)}
-                onDrop={(e) => props.onItemDrop(ch.id, i, e)}
-                className={`group flex cursor-grab items-center gap-2 px-3 py-1.5 active:cursor-grabbing ${
-                  props.drag?.kind === 'item' && props.drag.itemId === it.id ? 'opacity-40' : 'hover:bg-muted/60'
+                draggable={props.editMode}
+                onDragStart={props.editMode ? (e) => props.onItemDragStart(it, ch.id, e) : undefined}
+                onDragOver={props.editMode ? (e) => props.onItemDragOver(ch.id, i, e) : undefined}
+                onDrop={props.editMode ? (e) => props.onItemDrop(ch.id, i, e) : undefined}
+                className={`group flex items-center gap-2 px-3 py-1.5 ${
+                  props.editMode ? 'cursor-grab active:cursor-grabbing' : ''
+                } ${
+                  props.editMode && props.drag?.kind === 'item' && props.drag.itemId === it.id ? 'opacity-40' : 'hover:bg-muted/60'
                 }`}
               >
-                <GripVerticalIcon className="size-3.5 shrink-0 text-muted-foreground/60" />
+                {props.editMode && <GripVerticalIcon className="size-3.5 shrink-0 text-muted-foreground/60" />}
                 <span className="w-6 text-center text-xs text-muted-foreground">{i + 1}</span>
                 <span className="min-w-0 flex-1 truncate text-sm">{it.problemTitle || `#${it.problemId}`}</span>
-                <Button
-                  size="icon-xs"
-                  variant="ghost"
-                  className="opacity-0 transition-opacity group-hover:opacity-100"
-                  onClick={() => removeItem(it)}
-                  title="从章节移除"
-                >
-                  <TrashIcon />
-                </Button>
+                {props.editMode && (
+                  <Button
+                    size="icon-xs"
+                    variant="ghost"
+                    className="opacity-0 transition-opacity group-hover:opacity-100"
+                    onClick={() => removeItem(it)}
+                    title="从章节移除"
+                  >
+                    <TrashIcon />
+                  </Button>
+                )}
               </div>
             </div>
           ))}
