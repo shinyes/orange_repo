@@ -263,6 +263,20 @@ export function TrainingDetail({ id }: { id: number }) {
           </div>
         ))}
         {draggingChapter && chapterIndicator === chapters.length && <IndicatorLine />}
+        {draggingChapter && chapters.length > 0 && (
+          <div
+            className="h-4 rounded-md border border-dashed border-transparent transition-colors hover:border-primary/30"
+            onDragOver={(e) => {
+              e.preventDefault()
+              e.dataTransfer.dropEffect = 'move'
+              setChapterIndicator(chapters.length)
+            }}
+            onDrop={(e) => {
+              e.preventDefault()
+              handleDropChapter()
+            }}
+          />
+        )}
         {chapters.length === 0 && <Empty>还没有章节，在下方创建第一个章节</Empty>}
       </div>
 
