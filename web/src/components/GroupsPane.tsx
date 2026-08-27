@@ -2,8 +2,6 @@ import { useEffect, useRef, useState, type DragEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
-  ArrowDownIcon,
-  ArrowUpIcon,
   ChevronRightIcon,
   DownloadIcon,
   EyeIcon,
@@ -20,7 +18,7 @@ import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'
 import { api } from '@/lib/api'
 import { useAppState } from '@/lib/app-context'
-import type { Chapter, Item, PracticeItem } from '@/lib/types'
+import type { Chapter, Item } from '@/lib/types'
 import { ConfirmDialog } from './dialogs'
 import { Empty } from './ProblemPane'
 
@@ -338,7 +336,7 @@ function IndicatorLine() {
   return <div className="my-0.5 h-0.5 rounded-full bg-primary" />
 }
 
-// 练习详情（平铺 + 分值）。
+// 练习详情（平铺 + 分值，支持鼠标拖拽调整顺序）。
 export function PracticeDetail({ id }: { id: number }) {
   const qc = useQueryClient()
   const { goHome } = useAppState()
@@ -348,6 +346,9 @@ export function PracticeDetail({ id }: { id: number }) {
   const [localTitle, setLocalTitle] = useState('')
   const [localDescription, setLocalDescription] = useState('')
   const [lastPracticeId, setLastPracticeId] = useState(0)
+  // 拖拽排序状态
+  const [dragId, setDragId] = useState<number | null>(null)
+  const [dropIndex, setDropIndex] = useState<number | null>(null)
 
   const titleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const descTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -400,21 +401,39 @@ export function PracticeDetail({ id }: { id: number }) {
     }, 600)
   }
 
-  async function updateItem(item: PracticeItem, score: number) {
-    await api.updatePracticeItem(item.id, score)
-    await invalidate()
-  }
   async function removeItem(itemId: number) {
     await api.deletePracticeItem(itemId)
     await invalidate()
   }
-  async function move(index: number, dir: -1 | 1) {
-    const j = index + dir
-    if (j < 0 || j >= items.length) return
+
+  function endItemDrag() {
+    setDragId(null)
+    setDropIndex(null)
+  }
+
+  /** 计算指针相对行位置的落点下标：上半=插到该行前，下半=插到该行后。 */
+  function itemDropIndex(i: number, e: DragEvent): number {
+    const r = e.currentTarget.getBoundingClientRect()
+    const y = (e.clientY - r.top) / Math.max(r.height, 1)
+    return y < 0.5 ? i : i + 1
+  }
+
+  async function commitDrop(target: number) {
+    if (dragId === null) return endItemDrag()
+    const from = items.findIndex((x) => x.id === dragId)
+    endItemDrag()
+    if (from === -1 || from === target) return
     const ids = items.map((x) => x.id)
-    ;[ids[index], ids[j]] = [ids[j], ids[index]]
-    await api.reorderPracticeItems(id, ids)
-    await invalidate()
+    let t = target
+    if (from < t) t-- // 移除自身后目标位前移一格
+    const [moved] = ids.splice(from, 1)
+    ids.splice(t, 0, moved)
+    try {
+      await api.reorderPracticeItems(id, ids)
+      await invalidate()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : '排序失败')
+    }
   }
 
   return (
@@ -433,44 +452,67 @@ export function PracticeDetail({ id }: { id: number }) {
         onDescriptionChange={handleDescriptionChange}
       />
       <div className="space-y-1.5">
+        {editMode && items.length > 0 && (
+          <p className="text-xs text-muted-foreground">拖住 ⋮ 手柄调整题目顺序。</p>
+        )}
         {items.map((it, i) => (
-          <div key={it.id} className="flex items-center gap-2 rounded-lg border p-2.5">
-            <span className="w-6 text-center text-xs text-muted-foreground">{i + 1}</span>
-            <Badge variant="outline" className="text-[10px] text-muted-foreground">
-              {it.problemType === 'programming' ? '编程' : it.problemType === 'single_choice' ? '单选' : it.problemType === 'true_false' ? '判断' : '?'}
-            </Badge>
-            <span className="min-w-0 flex-1 truncate text-sm">{it.problemTitle || `#${it.problemId}`}</span>
-            <div className="flex w-24 items-center gap-1">
-              {editMode ? (
-                <Input
-                  type="number"
-                  defaultValue={it.score}
-                  min={0}
-                  className="h-7 text-xs"
-                  onBlur={(e) => {
-                    const v = Number(e.target.value)
-                    if (v !== it.score) void updateItem(it, v)
-                  }}
-                />
-              ) : (
-                <span className="text-sm tabular-nums">{it.score} 分</span>
-              )}
-            </div>
-            {editMode && (
-              <>
-                <Button size="icon-xs" variant="ghost" disabled={i === 0} onClick={() => move(i, -1)}>
-                  <ArrowUpIcon />
-                </Button>
-                <Button size="icon-xs" variant="ghost" disabled={i === items.length - 1} onClick={() => move(i, 1)}>
-                  <ArrowDownIcon />
-                </Button>
+          <div key={it.id}>
+            {dragId !== null && dropIndex === i && <IndicatorLine />}
+            <div
+              draggable={editMode}
+              onDragStart={editMode ? (e) => {
+                e.dataTransfer.effectAllowed = 'move'
+                e.dataTransfer.setData('text/plain', String(it.id))
+                setDragId(it.id)
+              } : undefined}
+              onDragOver={editMode ? (e) => {
+                if (dragId === null) return
+                e.preventDefault()
+                e.dataTransfer.dropEffect = 'move'
+                // 注意：必须在事件处理期间读取 currentTarget（React 状态更新器是异步执行的）
+                const idx = itemDropIndex(i, e)
+                setDropIndex((prev) => (prev === idx ? prev : idx))
+              } : undefined}
+              onDrop={editMode ? (e) => {
+                e.preventDefault()
+                if (dragId === null) return
+                void commitDrop(itemDropIndex(i, e))
+              } : undefined}
+              onDragEnd={endItemDrag}
+              className={`flex items-center gap-2 rounded-lg border p-2.5 ${
+                editMode && dragId === it.id ? 'opacity-40' : ''
+              } ${editMode ? 'cursor-grab active:cursor-grabbing' : ''}`}
+            >
+              {editMode && <GripVerticalIcon className="size-4 shrink-0 text-muted-foreground/60" />}
+              <span className="w-6 text-center text-xs text-muted-foreground">{i + 1}</span>
+              <Badge variant="outline" className="text-[10px] text-muted-foreground">
+                {it.problemType === 'programming' ? '编程' : it.problemType === 'single_choice' ? '单选' : it.problemType === 'true_false' ? '判断' : '?'}
+              </Badge>
+              <span className="min-w-0 flex-1 truncate text-sm">{it.problemTitle || `#${it.problemId}`}</span>
+              {editMode && (
                 <Button size="icon-xs" variant="ghost" className="text-destructive" onClick={() => removeItem(it.id)}>
                   <TrashIcon />
                 </Button>
-              </>
-            )}
+              )}
+            </div>
           </div>
         ))}
+        {dragId !== null && dropIndex === items.length && <IndicatorLine />}
+        {dragId !== null && items.length > 0 && (
+          <div
+            className="h-4 rounded-md border border-dashed border-transparent transition-colors hover:border-primary/30"
+            onDragOver={(e) => {
+              e.preventDefault()
+              e.dataTransfer.dropEffect = 'move'
+              setDropIndex(items.length)
+            }}
+            onDrop={(e) => {
+              e.preventDefault()
+              if (dragId === null) return
+              void commitDrop(items.length)
+            }}
+          />
+        )}
         {items.length === 0 && <Empty>练习为空，去左侧勾选题目后通过「加入练习」添加</Empty>}
       </div>
 

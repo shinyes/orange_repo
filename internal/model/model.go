@@ -59,12 +59,21 @@ type ProblemSummary struct {
 	CreatedAt      time.Time   `json:"createdAt"`
 }
 
+// BookletDirectory 题册目录：可嵌套的组织结构（训练/练习归属其中，nullable 表示根目录）。
+type BookletDirectory struct {
+	ID       int64  `json:"id"`
+	Name     string `json:"name"`
+	ParentID *int64 `json:"parentId"`
+	OrderNo  int    `json:"orderNo"`
+}
+
 // Training 训练计划：章节化的题目编组。
 type Training struct {
 	ID           int64     `json:"id"`
 	Title        string    `json:"title"`
 	Description  string    `json:"description"`
 	Tags         []string  `json:"tags"`
+	FolderID     *int64    `json:"folderId,omitempty"`
 	ProblemCount int       `json:"problemCount"`
 	CreatedAt    time.Time `json:"createdAt"`
 }
@@ -94,6 +103,7 @@ type Practice struct {
 	Title        string    `json:"title"`
 	Description  string    `json:"description"`
 	Tags         []string  `json:"tags"`
+	FolderID     *int64    `json:"folderId,omitempty"`
 	ProblemCount int       `json:"problemCount"`
 	CreatedAt    time.Time `json:"createdAt"`
 }
@@ -104,7 +114,6 @@ type PracticeItem struct {
 	PracticeID   int64  `json:"practiceId"`
 	ProblemID    int64  `json:"problemId"`
 	OrderNo      int    `json:"orderNo"`
-	Score        int    `json:"score"`
 	ProblemTitle string `json:"problemTitle,omitempty"`
 	ProblemType  string `json:"problemType,omitempty"`
 }

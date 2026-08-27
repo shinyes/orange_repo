@@ -1,4 +1,5 @@
 import type {
+  BookletDirectory,
   Chapter,
   Practice,
   PracticeItem,
@@ -105,10 +106,24 @@ export const api = {
   exportTrainingUrl: (id: number) => `/api/export/trainings/${id}`,
   exportPracticeUrl: (id: number) => `/api/export/practices/${id}`,
 
+  // ---- 题册目录（可嵌套） ----
+  bookletDirectories: () => req<{ directories: BookletDirectory[] }>('/api/booklet-directories'),
+  createBookletDirectory: (name: string, parentId: number | null = null) =>
+    req<{ id: number }>('/api/booklet-directories', json({ method: 'POST', body: JSON.stringify({ name, parentId }) })),
+  renameBookletDirectory: (id: number, name: string) =>
+    req<void>(`/api/booklet-directories/${id}`, json({ method: 'PATCH', body: JSON.stringify({ name }) })),
+  deleteBookletDirectory: (id: number) => req<void>(`/api/booklet-directories/${id}`, { method: 'DELETE' }),
+  setBookletDirectoryLayout: (directories: BookletDirectory[]) =>
+    req<void>('/api/booklet-directories/layout', json({ method: 'PUT', body: JSON.stringify({ directories }) })),
+  setTrainingFolder: (id: number, folderId: number | null) =>
+    req<void>(`/api/trainings/${id}/folder`, json({ method: 'PUT', body: JSON.stringify({ folderId }) })),
+  setPracticeFolder: (id: number, folderId: number | null) =>
+    req<void>(`/api/practices/${id}/folder`, json({ method: 'PUT', body: JSON.stringify({ folderId }) })),
+
   // ---- 训练 ----
   trainings: () => req<{ trainings: Training[] }>('/api/trainings'),
-  createTraining: (title: string, description = '', tags: string[] = []) =>
-    req<{ id: number }>('/api/trainings', json({ method: 'POST', body: JSON.stringify({ title, description, tags }) })),
+  createTraining: (title: string, description = '', tags: string[] = [], folderId: number | null = null) =>
+    req<{ id: number }>('/api/trainings', json({ method: 'POST', body: JSON.stringify({ title, description, tags, folderId }) })),
   getTraining: (id: number) => req<{ training: Training; chapters: Chapter[] }>(`/api/trainings/${id}`),
   updateTraining: (id: number, payload: { title: string; description: string; tags: string[] }) =>
     req<void>(`/api/trainings/${id}`, json({ method: 'PUT', body: JSON.stringify(payload) })),
@@ -131,17 +146,15 @@ export const api = {
 
   // ---- 练习 ----
   practices: () => req<{ practices: Practice[] }>('/api/practices'),
-  createPractice: (title: string, description = '', tags: string[] = []) =>
-    req<{ id: number }>('/api/practices', json({ method: 'POST', body: JSON.stringify({ title, description, tags }) })),
+  createPractice: (title: string, description = '', tags: string[] = [], folderId: number | null = null) =>
+    req<{ id: number }>('/api/practices', json({ method: 'POST', body: JSON.stringify({ title, description, tags, folderId }) })),
   getPractice: (id: number) => req<{ practice: Practice; items: PracticeItem[] }>(`/api/practices/${id}`),
   updatePractice: (id: number, payload: { title: string; description: string; tags: string[] }) =>
     req<void>(`/api/practices/${id}`, json({ method: 'PUT', body: JSON.stringify(payload) })),
   deletePractice: (id: number) => req<void>(`/api/practices/${id}`, { method: 'DELETE' }),
-  addPracticeItems: (practiceId: number, problemIds: number[], score = 100) =>
-    req<{ itemIds: number[] }>(`/api/practices/${practiceId}/items`, json({ method: 'POST', body: JSON.stringify({ problemIds, score }) })),
+  addPracticeItems: (practiceId: number, problemIds: number[]) =>
+    req<{ itemIds: number[] }>(`/api/practices/${practiceId}/items`, json({ method: 'POST', body: JSON.stringify({ problemIds }) })),
   reorderPracticeItems: (practiceId: number, itemIds: number[]) =>
     req<void>(`/api/practices/${practiceId}/items`, json({ method: 'PUT', body: JSON.stringify({ itemIds }) })),
-  updatePracticeItem: (id: number, score: number) =>
-    req<void>(`/api/practice-items/${id}`, json({ method: 'PUT', body: JSON.stringify({ score }) })),
   deletePracticeItem: (id: number) => req<void>(`/api/practice-items/${id}`, { method: 'DELETE' }),
 }

@@ -97,8 +97,14 @@ func (s *Store) migrate() error {
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			practice_id INTEGER NOT NULL REFERENCES practices(id) ON DELETE CASCADE,
 			problem_id INTEGER NOT NULL REFERENCES problems(id),
+			order_no INTEGER NOT NULL DEFAULT 0
+		);`,
+		`CREATE TABLE IF NOT EXISTS booklet_directories (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			name TEXT NOT NULL,
+			parent_id INTEGER REFERENCES booklet_directories(id) ON DELETE SET NULL,
 			order_no INTEGER NOT NULL DEFAULT 0,
-			score INTEGER NOT NULL DEFAULT 100
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 		);`,
 	}
 	for _, stmt := range stmts {
@@ -106,7 +112,47 @@ func (s *Store) migrate() error {
 			return fmt.Errorf("migrate failed: %w; stmt: %s", err, stmt)
 		}
 	}
+	if err := s.ensureColumn("trainings", "folder_id", `folder_id INTEGER REFERENCES booklet_directories(id) ON DELETE SET NULL`); err != nil {
+		return err
+	}
+	if err := s.ensureColumn("practices", "folder_id", `folder_id INTEGER REFERENCES booklet_directories(id) ON DELETE SET NULL`); err != nil {
+		return err
+	}
+	// v1.7.0：OrangeOJ 练习无分值语义，退役 score 列
+	if err := s.dropColumn("practice_items", "score"); err != nil {
+		return err
+	}
 	return s.migrateLegacyDirectories()
+}
+
+// ensureColumn 幂等补列：仅当目标表缺少该列时执行 ALTER TABLE ADD COLUMN。
+func (s *Store) ensureColumn(table, column, ddl string) error {
+	var n int
+	if err := s.DB.QueryRow(`SELECT COUNT(1) FROM pragma_table_info(?) WHERE name=?`, table, column).Scan(&n); err != nil {
+		return fmt.Errorf("ensure column %s.%s: %w", table, column, err)
+	}
+	if n > 0 {
+		return nil
+	}
+	if _, err := s.DB.Exec(`ALTER TABLE ` + table + ` ADD COLUMN ` + ddl); err != nil {
+		return fmt.Errorf("ensure column %s.%s: %w", table, column, err)
+	}
+	return nil
+}
+
+// dropColumn 幂等删列：仅当目标表存在该列时执行 ALTER TABLE DROP COLUMN。
+func (s *Store) dropColumn(table, column string) error {
+	var n int
+	if err := s.DB.QueryRow(`SELECT COUNT(1) FROM pragma_table_info(?) WHERE name=?`, table, column).Scan(&n); err != nil {
+		return fmt.Errorf("drop column %s.%s: %w", table, column, err)
+	}
+	if n == 0 {
+		return nil
+	}
+	if _, err := s.DB.Exec(`ALTER TABLE ` + table + ` DROP COLUMN ` + column); err != nil {
+		return fmt.Errorf("drop column %s.%s: %w", table, column, err)
+	}
+	return nil
 }
 
 // migrateLegacyDirectories 一次性迁移 v1.0 旧库：退役目录结构（用户决策：目录数据丢弃）。
@@ -525,14 +571,13 @@ func (s *Store) rewriteTags(rewrite func(string) ([]string, bool)) (int64, error
 	return int64(len(updates)), tx.Commit()
 }
 
-// ListTagFacets 动态 facet 统计（前缀层级语义）：
+// ListTagFacets 标签计数（每个标签显示它自己实际命中的题目数）：
 //
 //   - 基底过滤 = f 去掉标签条件后的全部条件（q/类型等）；
-//   - 候选节点 = 基底命中题目的字面标签 ∪ 其虚拟祖先前缀 ∪ 选中集；
-//   - 对候选 T：count = 满足基底过滤、且按前缀 AND 规则命中 effective(T) 的题目数，
-//     其中 T 已选中时 effective(T) = 选中集去掉 T（预览"取消勾选后还剩几题"），
-//     T 未选中时 effective(T) = 选中集加上 T（预览"点下去能筛出几题"）；
-//   - total = 满足完整选中集（AND + 前缀规则）的题目数。
+//   - 候选节点 = 基底命中题目的字面标签 ∪ 其虚拟祖先前缀 ∪ 选中集 ∪ __none__；
+//   - 对候选 T：count = 基底命中题目中、按前缀规则命中标签 T 的题目数
+//     （T 已选中与否不影响其计数；T=__none__ 时计无任何标签的题目数）；
+//   - total = 满足完整选中集（AND + 前缀规则）的题目数，与题目列表一致。
 //
 // 空过滤时退化为全局计数。
 func (s *Store) ListTagFacets(f ProblemFilter) ([]TagCount, int, error) {
@@ -544,14 +589,6 @@ func (s *Store) ListTagFacets(f ProblemFilter) ([]TagCount, int, error) {
 	defer rows.Close()
 
 	selected := f.Tags
-	inSelected := func(t string) bool {
-		for _, s := range selected {
-			if s == t {
-				return true
-			}
-		}
-		return false
-	}
 	candidates := map[string]bool{}
 	var tagLists [][]string
 	for rows.Next() {
@@ -585,18 +622,7 @@ func (s *Store) ListTagFacets(f ProblemFilter) ([]TagCount, int, error) {
 			total++
 		}
 		for t := range candidates {
-			want := make([]string, 0, len(selected)+1)
-			if inSelected(t) {
-				for _, s := range selected {
-					if s != t {
-						want = append(want, s)
-					}
-				}
-			} else {
-				want = append(want, selected...)
-				want = append(want, t)
-			}
-			if tagMatchesSelected(tags, want) {
+			if tagMatchesSelected(tags, []string{t}) {
 				counts[t]++
 			}
 		}

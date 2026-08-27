@@ -65,6 +65,12 @@ func New(s *store.Store, uploadsDir, webDist string) *fiber.App {
 	api.Post("/images", srv.handleUploadImage)
 	api.Static("/api/uploads", uploadsDir)
 
+	api.Get("/booklet-directories", srv.handleListBookletDirectories)
+	api.Post("/booklet-directories", srv.handleCreateBookletDirectory)
+	api.Put("/booklet-directories/layout", srv.handleSetBookletDirectoryLayout)
+	api.Patch("/booklet-directories/:id", srv.handleRenameBookletDirectory)
+	api.Delete("/booklet-directories/:id", srv.handleDeleteBookletDirectory)
+
 	api.Post("/import", srv.handleImport)
 	api.Get("/export/problems", srv.handleExportProblems)
 	api.Get("/export/trainings/:id", srv.handleExportTraining)
@@ -76,6 +82,7 @@ func New(s *store.Store, uploadsDir, webDist string) *fiber.App {
 	api.Put("/trainings/:id", srv.handleUpdateTraining)
 	api.Delete("/trainings/:id", srv.handleDeleteTraining)
 	api.Post("/trainings/:id/chapters", srv.handleCreateChapter)
+	api.Put("/trainings/:id/folder", srv.handleSetTrainingFolder)
 	api.Put("/chapters/:id", srv.handleUpdateChapter)
 	api.Delete("/chapters/:id", srv.handleDeleteChapter)
 	api.Post("/chapters/:id/items", srv.handleAddChapterItems)
@@ -89,8 +96,8 @@ func New(s *store.Store, uploadsDir, webDist string) *fiber.App {
 	api.Put("/practices/:id", srv.handleUpdatePractice)
 	api.Delete("/practices/:id", srv.handleDeletePractice)
 	api.Post("/practices/:id/items", srv.handleAddPracticeItems)
+	api.Put("/practices/:id/folder", srv.handleSetPracticeFolder)
 	api.Put("/practices/:id/items", srv.handleReorderPracticeItems)
-	api.Put("/practice-items/:id", srv.handleUpdatePracticeItem)
 	api.Delete("/practice-items/:id", srv.handleDeletePracticeItem)
 
 	// 前端静态资源 + SPA 回退

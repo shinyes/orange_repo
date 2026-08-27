@@ -32,7 +32,7 @@ go run . -seed          # 首次可加 -seed 导入示例包
 ```bash
 docker compose -f deploy/docker-compose.yml up -d
 # 或手动：
-docker run -d -p 8080:8080 -v ./data:/app/data ghcr.io/shinyes/orange_repo:1.2.0
+docker run -d -p 8080:8080 -v ./data:/app/data ghcr.io/shinyes/orange_repo:1.7.0
 ```
 
 镜像基于 distroless/static。容器启动时若为 root，会自动把数据目录属主修正为运行用户 65532 并**立即降权**后再对外服务——因此 `./data:/app/data` 绑定挂载在 Linux 宿主机上开箱即用，无需手动 chown；命名卷（`-v orangerepo-data:/app/data`）同样免配置。
@@ -44,10 +44,10 @@ docker run -d -p 8080:8080 -v ./data:/app/data ghcr.io/shinyes/orange_repo:1.2.0
 
 ## 功能
 
-- **三栏布局**：左栏 = 标签筛选（搜索、类型过滤、标签树）；中栏 = 题目查看（新建/导入导出、题目列表、批量操作）；右栏 = 详情（题面 Markdown+KaTeX 与答案同屏、按题型渲染、题解列表）
-- **多标签筛选**：标签树常驻展示（动态 facet 计数随搜索/已选联动），父标签前缀包含全部子孙；支持多选 AND 组合、已选置顶移除、一键清空、树内查找与数量/名称排序；节点菜单支持子树整体重命名与删除，涉及题目自动同步
+- **三栏布局**：左栏 = 标签筛选（搜索、类型过滤、标签树）；中栏 = 题目查看（新建/导入导出、题目列表、批量操作）；右栏 = 详情（题面 Markdown+KaTeX 与答案同屏、按题型渲染、题解列表）；题册栏可展开在题目栏右侧
+- **多标签筛选**：标签树常驻展示（每个标签显示它自己实际命中的题目数，不受已选标签影响）；父标签前缀包含全部子孙；支持多选 AND 组合、已选置顶移除、一键清空、树内查找与数量/名称排序；节点菜单支持子树整体重命名与删除，涉及题目自动同步
 - **题目编辑**：三种题型（编程 / 单选 / 判断），字段结构与 OrangeOJ 完全一致；编程题支持输入输出格式、样例、测试点、时限内存；题解支持多语言代码 + Markdown 解读；题面支持图片上传插入
-- **训练与练习**：左侧勾选题目 → 加入训练（章节结构）/ 练习（平铺+分值）→ 一键导出 OrangeOJ 兼容 ZIP
+- **训练与练习**：左侧勾选题目 → 加入训练（章节结构）/ 练习（平铺）→ 一键导出 OrangeOJ 兼容 ZIP；题册栏支持可嵌套目录管理与拖拽（改层级/顺序），训练/练习内均支持鼠标拖拽调整题目顺序
 - **OrangeOJ 兼容**：`problems.json` + `trainingPlan.json` + `images/` 的双向转换，图片引用路径自动重写，导出包可直接导入 OrangeOJ
 
 ## API 概览
@@ -56,12 +56,13 @@ docker run -d -p 8080:8080 -v ./data:/app/data ghcr.io/shinyes/orange_repo:1.2.0
 
 ```
 POST /api/auth/login|logout   GET /api/auth/me      PUT /api/auth/password
-GET/POST /api/directories     PUT/DELETE /api/directories/:id
 GET/POST /api/problems        GET/PUT/DELETE /api/problems/:id
-PUT  /api/problems/:id/solutions | /directory
-GET  /api/tags                POST /api/images      GET /api/uploads/*
+PUT  /api/problems/:id/solutions
+GET  /api/tags[?q&tags&type]  PATCH/DELETE /api/tags   GET/PUT /api/tag-order
+GET/POST /api/booklet-directories   PUT /api/booklet-directories/layout   PATCH/DELETE /api/booklet-directories/:id
+POST /api/images              GET /api/uploads/*
 POST /api/import?mode=…       GET  /api/export/problems | trainings/:id | practices/:id
-CRUD /api/trainings · chapters · items ； CRUD /api/practices · practice-items
+CRUD /api/trainings · chapters · items · /folder ； CRUD /api/practices · practice-items · /folder
 ```
 
 ## 项目结构

@@ -61,10 +61,10 @@ function Main({ onLogout }: { onLogout: () => void }) {
       <aside className="w-[270px] shrink-0 border-r">
         <TagFilterColumn onLogout={onLogout} onOpenSettings={() => setPwOpen(true)} />
       </aside>
-      {showBooklets && <aside className="w-[280px] shrink-0 border-r"><BookletColumn /></aside>}
       <aside className="w-[320px] shrink-0 border-r">
         <ProblemListColumn showBooklets={showBooklets} onToggleBooklets={() => setShowBooklets((v) => !v)} />
       </aside>
+      {showBooklets && <aside className="w-[280px] shrink-0 border-r"><BookletColumn /></aside>}
       <main className="min-w-0 flex-1 overflow-y-auto">
         <RightPane />
       </main>

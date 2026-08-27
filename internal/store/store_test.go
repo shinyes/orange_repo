@@ -57,24 +57,24 @@ func TestListTagFacets(t *testing.T) {
 		t.Errorf("empty-filter total = %d, want 3", total)
 	}
 
-	// 选中 {a}：a 预览取消勾选后=全部 3；b 需同时含 {a,b}=1；c 需 {a,c}=0；total=2
+	// 选中 {a}：每个标签仍显示自己实际命中的题数（a=2/b=1/c=1），total=当前筛出 =2
 	tags, total, err = s.ListTagFacets(ProblemFilter{Tags: []string{"a"}})
 	if err != nil {
 		t.Fatalf("facets(a): %v", err)
 	}
 	m = facetMap(tags)
-	if m["a"] != 3 || m["b"] != 1 || m["c"] != 0 || total != 2 {
-		t.Errorf("selected {a}: got a=%d b=%d c=%d total=%d, want 3/1/0/2", m["a"], m["b"], m["c"], total)
+	if m["a"] != 2 || m["b"] != 1 || m["c"] != 1 || total != 2 {
+		t.Errorf("selected {a}: got a=%d b=%d c=%d total=%d, want 2/1/1/2", m["a"], m["b"], m["c"], total)
 	}
 
-	// 选中 {a,c}：total=0；a 预览去掉自身剩 {c}=1；c 预览去掉自身剩 {a}=2
+	// 选中 {a,c}：计数不受选中集影响；total=0（无题同时命中两者）
 	tags, total, err = s.ListTagFacets(ProblemFilter{Tags: []string{"a", "c"}})
 	if err != nil {
 		t.Fatalf("facets(a,c): %v", err)
 	}
 	m = facetMap(tags)
-	if total != 0 || m["a"] != 1 || m["c"] != 2 {
-		t.Errorf("selected {a,c}: total=%d a=%d c=%d, want 0/1/2", total, m["a"], m["c"])
+	if total != 0 || m["a"] != 2 || m["c"] != 1 {
+		t.Errorf("selected {a,c}: total=%d a=%d c=%d, want 0/2/1", total, m["a"], m["c"])
 	}
 
 	// 搜索词参与基底过滤
@@ -156,7 +156,7 @@ func TestListTagFacetsHierarchical(t *testing.T) {
 		t.Errorf("total = %d, want 3", total)
 	}
 
-	// 选中 {数学}：total=3；数学 预览取消=3；数学/几何 命中 {数学,数学/几何}=2；算法 命中 {数学,算法}=1
+	// 选中 {数学}：total=3；计数均为各标签自己实际命中的题数（数学=3 几何=2 算法=1）
 	tags, total, err = s.ListTagFacets(ProblemFilter{Tags: []string{"数学"}})
 	if err != nil {
 		t.Fatalf("facets(数学): %v", err)
@@ -167,14 +167,14 @@ func TestListTagFacetsHierarchical(t *testing.T) {
 			total, m["数学"], m["数学/几何"], m["算法"])
 	}
 
-	// 选中 {数学/几何}：total=2；数学 预览去掉父剩 {数学/几何}=2；数学/代数 需同时含两者=0
+	// 选中 {数学/几何}：total=2；数学 仍显示含孙子的总数=3；数学/代数 显示自己的 1
 	tags, total, err = s.ListTagFacets(ProblemFilter{Tags: []string{"数学/几何"}})
 	if err != nil {
 		t.Fatalf("facets(数学/几何): %v", err)
 	}
 	m = facetMap(tags)
-	if total != 2 || m["数学"] != 2 || m["数学/代数"] != 0 {
-		t.Errorf("selected {数学/几何}: total=%d 数学=%d 代数=%d, want 2/2/0",
+	if total != 2 || m["数学"] != 3 || m["数学/代数"] != 1 {
+		t.Errorf("selected {数学/几何}: total=%d 数学=%d 代数=%d, want 2/3/1",
 			total, m["数学"], m["数学/代数"])
 	}
 
@@ -228,14 +228,14 @@ func TestNoneTagFiltering(t *testing.T) {
 	if total != 3 {
 		t.Errorf("total = %d, want 3", total)
 	}
-	// 选中 a → __none__ count 预览=0（因为 AND 后 a+无标签=0）
+	// 选中 a → __none__ 计数不变（无标签题数），total=1
 	tags, total, err = s.ListTagFacets(ProblemFilter{Tags: []string{"a"}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	m = facetMap(tags)
-	if m[NoneTag] != 0 {
-		t.Errorf("none with a selected: count = %d, want 0", m[NoneTag])
+	if m[NoneTag] != 2 {
+		t.Errorf("none with a selected: count = %d, want 2", m[NoneTag])
 	}
 	if total != 1 {
 		t.Errorf("total with a = %d, want 1", total)

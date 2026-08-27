@@ -9,9 +9,12 @@ import (
 
 // ---------- 练习（平铺题目编组，含分值） ----------
 
-func (s *Store) CreatePractice(title, description string, tags []string) (int64, error) {
-	res, err := s.DB.Exec(`INSERT INTO practices(title,description,tags_json) VALUES(?,?,?)`,
-		title, description, encodeTags(tags))
+func (s *Store) CreatePractice(title, description string, tags []string, folderID *int64) (int64, error) {
+	if err := s.ensureFolder(folderID); err != nil {
+		return 0, err
+	}
+	res, err := s.DB.Exec(`INSERT INTO practices(title,description,tags_json,folder_id) VALUES(?,?,?,?)`,
+		title, description, encodeTags(tags), nullInt64(folderID))
 	if err != nil {
 		return 0, err
 	}
@@ -20,7 +23,7 @@ func (s *Store) CreatePractice(title, description string, tags []string) (int64,
 
 // ListPractices 列出练习（含题目数）。
 func (s *Store) ListPractices() ([]model.Practice, error) {
-	rows, err := s.DB.Query(`SELECT id,title,description,tags_json,created_at,
+	rows, err := s.DB.Query(`SELECT id,title,description,tags_json,created_at,folder_id,
 		(SELECT COUNT(*) FROM practice_items pi WHERE pi.practice_id=practices.id)
 		FROM practices ORDER BY id DESC`)
 	if err != nil {
@@ -32,10 +35,14 @@ func (s *Store) ListPractices() ([]model.Practice, error) {
 		var p model.Practice
 		var tagsJSON string
 		var count int
-		if err := rows.Scan(&p.ID, &p.Title, &p.Description, &tagsJSON, &p.CreatedAt, &count); err != nil {
+		var folder sql.NullInt64
+		if err := rows.Scan(&p.ID, &p.Title, &p.Description, &tagsJSON, &p.CreatedAt, &folder, &count); err != nil {
 			return nil, err
 		}
 		p.Tags = decodeTags(tagsJSON)
+		if folder.Valid {
+			p.FolderID = &folder.Int64
+		}
 		p.ProblemCount = count
 		out = append(out, p)
 	}
@@ -84,12 +91,9 @@ func (s *Store) DeletePractice(id int64) error {
 }
 
 // AddPracticeItems 追加题目条目到练习末尾；校验题目存在。
-func (s *Store) AddPracticeItems(practiceID int64, problemIDs []int64, score int) ([]int64, error) {
+func (s *Store) AddPracticeItems(practiceID int64, problemIDs []int64) ([]int64, error) {
 	if _, err := s.GetPractice(practiceID); err != nil {
 		return nil, err
-	}
-	if score <= 0 {
-		score = 100
 	}
 	var maxOrder int
 	_ = s.DB.QueryRow(`SELECT COALESCE(MAX(order_no),0) FROM practice_items WHERE practice_id=?`, practiceID).Scan(&maxOrder)
@@ -103,8 +107,8 @@ func (s *Store) AddPracticeItems(practiceID int64, problemIDs []int64, score int
 			return nil, err
 		}
 		maxOrder++
-		res, err := s.DB.Exec(`INSERT INTO practice_items(practice_id,problem_id,order_no,score) VALUES(?,?,?,?)`,
-			practiceID, pid, maxOrder, score)
+		res, err := s.DB.Exec(`INSERT INTO practice_items(practice_id,problem_id,order_no) VALUES(?,?,?)`,
+			practiceID, pid, maxOrder)
 		if err != nil {
 			return nil, err
 		}
@@ -139,19 +143,7 @@ func (s *Store) ReorderPracticeItems(practiceID int64, itemIDs []int64) error {
 	return tx.Commit()
 }
 
-// UpdatePracticeItem 更新条目分值。
-func (s *Store) UpdatePracticeItem(id int64, score int) error {
-	res, err := s.DB.Exec(`UPDATE practice_items SET score=? WHERE id=?`, score, id)
-	if err != nil {
-		return err
-	}
-	n, _ := res.RowsAffected()
-	if n == 0 {
-		return ErrNotFound
-	}
-	return nil
-}
-
+// DeletePracticeItem 删除练习条目。
 func (s *Store) DeletePracticeItem(id int64) error {
 	res, err := s.DB.Exec(`DELETE FROM practice_items WHERE id=?`, id)
 	if err != nil {
@@ -166,7 +158,7 @@ func (s *Store) DeletePracticeItem(id int64) error {
 
 // ListPracticeItems 返回练习条目（含题目标题/类型）。
 func (s *Store) ListPracticeItems(practiceID int64) ([]model.PracticeItem, error) {
-	rows, err := s.DB.Query(`SELECT pi.id,pi.practice_id,pi.problem_id,pi.order_no,pi.score,
+	rows, err := s.DB.Query(`SELECT pi.id,pi.practice_id,pi.problem_id,pi.order_no,
 		COALESCE(p.title,''),COALESCE(p.type,'')
 		FROM practice_items pi LEFT JOIN problems p ON p.id=pi.problem_id
 		WHERE pi.practice_id=? ORDER BY pi.order_no,pi.id`, practiceID)
@@ -177,7 +169,7 @@ func (s *Store) ListPracticeItems(practiceID int64) ([]model.PracticeItem, error
 	out := []model.PracticeItem{}
 	for rows.Next() {
 		var it model.PracticeItem
-		if err := rows.Scan(&it.ID, &it.PracticeID, &it.ProblemID, &it.OrderNo, &it.Score,
+		if err := rows.Scan(&it.ID, &it.PracticeID, &it.ProblemID, &it.OrderNo,
 			&it.ProblemTitle, &it.ProblemType); err != nil {
 			return nil, err
 		}

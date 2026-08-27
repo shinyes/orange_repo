@@ -15,6 +15,7 @@ type trainingPayload struct {
 	Title       string   `json:"title"`
 	Description string   `json:"description"`
 	Tags        []string `json:"tags"`
+	FolderID    *int64   `json:"folderId"`
 }
 
 func (s *Server) handleListTrainings(c *fiber.Ctx) error {
@@ -33,9 +34,12 @@ func (s *Server) handleCreateTraining(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil || req.Title == "" {
 		return respondError(c, fiber.StatusBadRequest, "title is required")
 	}
-	id, err := s.Store.CreateTraining(req.Title, req.Description, req.Tags)
+	id, err := s.Store.CreateTraining(req.Title, req.Description, req.Tags, req.FolderID)
 	if err != nil {
-		return err
+		if errors.Is(err, store.ErrNotFound) {
+			return respondError(c, fiber.StatusNotFound, "folder not found")
+		}
+		return respondError(c, fiber.StatusBadRequest, err.Error())
 	}
 	return respondData(c, fiber.StatusCreated, fiber.Map{"id": id})
 }
@@ -205,6 +209,7 @@ type practicePayload struct {
 	Title       string   `json:"title"`
 	Description string   `json:"description"`
 	Tags        []string `json:"tags"`
+	FolderID    *int64   `json:"folderId"`
 }
 
 func (s *Server) handleListPractices(c *fiber.Ctx) error {
@@ -223,9 +228,12 @@ func (s *Server) handleCreatePractice(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil || req.Title == "" {
 		return respondError(c, fiber.StatusBadRequest, "title is required")
 	}
-	id, err := s.Store.CreatePractice(req.Title, req.Description, req.Tags)
+	id, err := s.Store.CreatePractice(req.Title, req.Description, req.Tags, req.FolderID)
 	if err != nil {
-		return err
+		if errors.Is(err, store.ErrNotFound) {
+			return respondError(c, fiber.StatusNotFound, "folder not found")
+		}
+		return respondError(c, fiber.StatusBadRequest, err.Error())
 	}
 	return respondData(c, fiber.StatusCreated, fiber.Map{"id": id})
 }
@@ -283,7 +291,6 @@ func (s *Server) handleDeletePractice(c *fiber.Ctx) error {
 
 type addPracticeItemsPayload struct {
 	ProblemIDs []int64 `json:"problemIds"`
-	Score      int     `json:"score"`
 }
 
 func (s *Server) handleAddPracticeItems(c *fiber.Ctx) error {
@@ -295,7 +302,7 @@ func (s *Server) handleAddPracticeItems(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil || len(req.ProblemIDs) == 0 {
 		return respondError(c, fiber.StatusBadRequest, "problemIds is required")
 	}
-	ids, err := s.Store.AddPracticeItems(id, req.ProblemIDs, req.Score)
+	ids, err := s.Store.AddPracticeItems(id, req.ProblemIDs)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			return respondError(c, fiber.StatusNotFound, "practice not found")
@@ -320,28 +327,7 @@ func (s *Server) handleReorderPracticeItems(c *fiber.Ctx) error {
 	return c.SendStatus(fiber.StatusNoContent)
 }
 
-type updatePracticeItemPayload struct {
-	Score int `json:"score"`
-}
-
-func (s *Server) handleUpdatePracticeItem(c *fiber.Ctx) error {
-	id, err := paramID(c, "id")
-	if err != nil {
-		return respondError(c, fiber.StatusBadRequest, err.Error())
-	}
-	var req updatePracticeItemPayload
-	if err := c.BodyParser(&req); err != nil {
-		return respondError(c, fiber.StatusBadRequest, "invalid request")
-	}
-	if err := s.Store.UpdatePracticeItem(id, req.Score); err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			return respondError(c, fiber.StatusNotFound, "item not found")
-		}
-		return err
-	}
-	return c.SendStatus(fiber.StatusNoContent)
-}
-
+// handleDeletePracticeItem 删除练习条目：DELETE /api/practice-items/:id。
 func (s *Server) handleDeletePracticeItem(c *fiber.Ctx) error {
 	id, err := paramID(c, "id")
 	if err != nil {

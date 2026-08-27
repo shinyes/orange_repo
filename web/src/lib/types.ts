@@ -97,8 +97,17 @@ export interface Training {
   title: string
   description: string
   tags: string[]
+  folderId?: number | null
   problemCount: number
   createdAt: string
+}
+
+// 题册目录节点（扁平列表，parentId 为 null 表示根目录）。
+export interface BookletDirectory {
+  id: number
+  name: string
+  parentId: number | null
+  orderNo: number
 }
 
 export interface PracticeItem {
@@ -106,7 +115,6 @@ export interface PracticeItem {
   practiceId: number
   problemId: number
   orderNo: number
-  score: number
   problemTitle?: string
   problemType?: string
 }
@@ -116,6 +124,7 @@ export interface Practice {
   title: string
   description: string
   tags: string[]
+  folderId?: number | null
   problemCount: number
   createdAt: string
 }

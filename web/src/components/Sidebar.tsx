@@ -37,6 +37,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { api } from '@/lib/api'
 import { useAppState } from '@/lib/app-context'
+import { useMenuAnchorHold } from '@/lib/use-menu-anchor-hold'
 import type { ProblemSummary, ProblemType, TagCount, TagNode } from '@/lib/types'
 import { AddToGroupDialog, ConfirmDialog, ImportDialog, NewProblemDialog } from './dialogs'
 
@@ -661,9 +662,9 @@ function TagRow(props: {
   onTagDrop: (target: string, mode: TagDropMode) => void
 }) {
   const { node, level } = props
-  // 菜单打开期间必须保持触发器可见：portal 菜单在 body 层，
-  // 鼠标移出行的 group-hover 一旦失效，锚点 display:none 会让弹层定位塌缩到左上角
-  const [menuOpen, setMenuOpen] = useState(false)
+  // 菜单锚点保持：打开期间强制可见（portal 菜单在 body 层，鼠标移出会丢 group-hover）；
+  // 点击菜单项关闭后也短暂保持，避免关闭动画期间 positioner 塌缩到左上角闪现
+  const [menuOpen, setMenuOpen, anchorVisible] = useMenuAnchorHold()
   const hasChildren = node.children.length > 0
   const open = props.expanded[node.tag] ?? level === 0
   const active = props.selected.includes(node.tag)
@@ -726,7 +727,7 @@ function TagRow(props: {
             {node.count > 0 ? node.count : ''}
           </span>
         </button>
-        <div className={`shrink-0 items-center gap-0.5 ${menuOpen ? 'flex' : 'hidden group-hover:flex'}`}>
+        <div className={`shrink-0 items-center gap-0.5 ${anchorVisible ? 'flex' : 'hidden group-hover:flex'}`}>
           <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
             <DropdownMenuTrigger
               className="rounded p-1 hover:bg-background"

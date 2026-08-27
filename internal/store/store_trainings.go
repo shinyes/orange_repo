@@ -9,9 +9,12 @@ import (
 
 // ---------- 训练计划（章节化题目编组） ----------
 
-func (s *Store) CreateTraining(title, description string, tags []string) (int64, error) {
-	res, err := s.DB.Exec(`INSERT INTO trainings(title,description,tags_json) VALUES(?,?,?)`,
-		title, description, encodeTags(tags))
+func (s *Store) CreateTraining(title, description string, tags []string, folderID *int64) (int64, error) {
+	if err := s.ensureFolder(folderID); err != nil {
+		return 0, err
+	}
+	res, err := s.DB.Exec(`INSERT INTO trainings(title,description,tags_json,folder_id) VALUES(?,?,?,?)`,
+		title, description, encodeTags(tags), nullInt64(folderID))
 	if err != nil {
 		return 0, err
 	}
@@ -35,7 +38,7 @@ func scanTrainingRows(rows *sql.Rows) ([]model.Training, error) {
 
 // ListTrainings 列出训练（含题目数）。
 func (s *Store) ListTrainings() ([]model.Training, error) {
-	rows, err := s.DB.Query(`SELECT id,title,description,tags_json,created_at,
+	rows, err := s.DB.Query(`SELECT id,title,description,tags_json,created_at,folder_id,
 		(SELECT COUNT(*) FROM training_items ti JOIN training_chapters tc ON ti.chapter_id=tc.id WHERE tc.training_id=trainings.id)
 		FROM trainings ORDER BY id DESC`)
 	if err != nil {
@@ -47,10 +50,14 @@ func (s *Store) ListTrainings() ([]model.Training, error) {
 		var t model.Training
 		var tagsJSON string
 		var count int
-		if err := rows.Scan(&t.ID, &t.Title, &t.Description, &tagsJSON, &t.CreatedAt, &count); err != nil {
+		var folder sql.NullInt64
+		if err := rows.Scan(&t.ID, &t.Title, &t.Description, &tagsJSON, &t.CreatedAt, &folder, &count); err != nil {
 			return nil, err
 		}
 		t.Tags = decodeTags(tagsJSON)
+		if folder.Valid {
+			t.FolderID = &folder.Int64
+		}
 		t.ProblemCount = count
 		out = append(out, t)
 	}

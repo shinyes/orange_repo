@@ -129,7 +129,7 @@ func (s *Server) ImportZipData(data []byte, mode string) (fiber.Map, error) {
 			description = meta.Description
 			tags = meta.Tags
 		}
-		trainingID, err := s.Store.CreateTraining(title, description, tags)
+		trainingID, err := s.Store.CreateTraining(title, description, tags, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -167,12 +167,12 @@ func (s *Server) ImportZipData(data []byte, mode string) (fiber.Map, error) {
 			description = meta.Description
 			tags = meta.Tags
 		}
-		practiceID, err := s.Store.CreatePractice(title, description, tags)
+		practiceID, err := s.Store.CreatePractice(title, description, tags, nil)
 		if err != nil {
 			return nil, err
 		}
 		if len(createdIDs) > 0 {
-			if _, err := s.Store.AddPracticeItems(practiceID, createdIDs, 100); err != nil {
+			if _, err := s.Store.AddPracticeItems(practiceID, createdIDs); err != nil {
 				return nil, err
 			}
 		}

@@ -165,7 +165,8 @@ func TestProblemCRUDAndFilter(t *testing.T) {
 	if got := len(list["problems"].([]any)); got != 1 {
 		t.Fatalf("search = %d results, want 1", got)
 	}
-	// 标签 facet 端点：基底=全部题；选中「语法」后 total=2，语法预览取消=3，入门需同时含=0
+	// 标签 facet 端点：基底=全部题；选中「语法」后 total=2（与题目列表一致），
+	// 各标签仍显示自己实际命中的题数（语法=2、入门=1），计数不受选中集影响
 	resp, ft := doJSON(t, app, "GET", "/api/tags?tags=%E8%AF%AD%E6%B3%95", cookie, nil)
 	if resp.StatusCode != fiber.StatusOK {
 		t.Fatalf("tags facet = %d %v", resp.StatusCode, ft)
@@ -175,7 +176,7 @@ func TestProblemCRUDAndFilter(t *testing.T) {
 		tc := item.(map[string]any)
 		fm[tc["tag"].(string)] = tc["count"].(float64)
 	}
-	if fm["语法"] != 3 || fm["入门"] != 0 || int(ft["total"].(float64)) != 2 {
+	if fm["语法"] != 2 || fm["入门"] != 1 || int(ft["total"].(float64)) != 2 {
 		t.Fatalf("facet result wrong: %v total=%v", fm, ft["total"])
 	}
 
@@ -407,6 +408,135 @@ func TestTrainingLayoutReorder(t *testing.T) {
 	})
 	if resp.StatusCode != fiber.StatusBadRequest {
 		t.Fatalf("foreign chapter layout = %d, want 400", resp.StatusCode)
+	}
+}
+
+// TestBookletDirectoriesAPI 题册目录路由：嵌套创建、重命名、题册移动、删除提升。
+func TestBookletDirectoriesAPI(t *testing.T) {
+	app, _ := newTestApp(t)
+	cookie := sessionCookie(t, app)
+
+	// 初始为空
+	resp, out := doJSON(t, app, "GET", "/api/booklet-directories", cookie, nil)
+	if resp.StatusCode != fiber.StatusOK || len(out["directories"].([]any)) != 0 {
+		t.Fatalf("initial dirs = %d %v", resp.StatusCode, out)
+	}
+
+	// 创建根目录与子目录
+	resp, out = doJSON(t, app, "POST", "/api/booklet-directories", cookie, map[string]any{"name": "数学"})
+	if resp.StatusCode != fiber.StatusCreated {
+		t.Fatalf("create root = %d", resp.StatusCode)
+	}
+	rootID := int64(out["id"].(float64))
+	resp, out = doJSON(t, app, "POST", "/api/booklet-directories", cookie, map[string]any{"name": "几何", "parentId": rootID})
+	if resp.StatusCode != fiber.StatusCreated {
+		t.Fatalf("create sub = %d", resp.StatusCode)
+	}
+	subID := int64(out["id"].(float64))
+
+	// 空名称/幽灵父目录 → 400/404
+	resp, _ = doJSON(t, app, "POST", "/api/booklet-directories", cookie, map[string]any{"name": ""})
+	if resp.StatusCode != fiber.StatusBadRequest {
+		t.Fatalf("empty name = %d, want 400", resp.StatusCode)
+	}
+	resp, _ = doJSON(t, app, "POST", "/api/booklet-directories", cookie, map[string]any{"name": "x", "parentId": 99999})
+	if resp.StatusCode != fiber.StatusNotFound {
+		t.Fatalf("ghost parent = %d, want 404", resp.StatusCode)
+	}
+
+	// 重命名
+	resp, _ = doJSON(t, app, "PATCH", fmt.Sprintf("/api/booklet-directories/%d", rootID), cookie, map[string]string{"name": "数学A"})
+	if resp.StatusCode != fiber.StatusNoContent {
+		t.Fatalf("rename = %d", resp.StatusCode)
+	}
+
+	// 创建训练/练习并移入目录（创建时带 folderId / 单独移动接口）
+	resp, tr := doJSON(t, app, "POST", "/api/trainings", cookie, map[string]any{"title": "训练X", "folderId": rootID})
+	if resp.StatusCode != fiber.StatusCreated {
+		t.Fatalf("create training = %d", resp.StatusCode)
+	}
+	trainingID := int64(tr["id"].(float64))
+	resp, pr := doJSON(t, app, "POST", "/api/practices", cookie, map[string]any{"title": "练习Y"})
+	if resp.StatusCode != fiber.StatusCreated {
+		t.Fatalf("create practice = %d", resp.StatusCode)
+	}
+	practiceID := int64(pr["id"].(float64))
+	resp, _ = doJSON(t, app, "PUT", fmt.Sprintf("/api/practices/%d/folder", practiceID), cookie, map[string]any{"folderId": subID})
+	if resp.StatusCode != fiber.StatusNoContent {
+		t.Fatalf("move practice = %d", resp.StatusCode)
+	}
+	resp, _ = doJSON(t, app, "PUT", fmt.Sprintf("/api/trainings/%d/folder", trainingID), cookie, map[string]any{"folderId": nil})
+	if resp.StatusCode != fiber.StatusNoContent {
+		t.Fatalf("move training to root = %d", resp.StatusCode)
+	}
+	// 移动回子目录
+	resp, _ = doJSON(t, app, "PUT", fmt.Sprintf("/api/trainings/%d/folder", trainingID), cookie, map[string]any{"folderId": subID})
+	if resp.StatusCode != fiber.StatusNoContent {
+		t.Fatalf("move training into sub = %d", resp.StatusCode)
+	}
+	// 练习移入将被删除的根目录（验证删除时的上移一层）
+	resp, _ = doJSON(t, app, "PUT", fmt.Sprintf("/api/practices/%d/folder", practiceID), cookie, map[string]any{"folderId": rootID})
+	if resp.StatusCode != fiber.StatusNoContent {
+		t.Fatalf("move practice into root = %d", resp.StatusCode)
+	}
+	// 幽灵目录 → 404
+	resp, _ = doJSON(t, app, "PUT", fmt.Sprintf("/api/trainings/%d/folder", trainingID), cookie, map[string]any{"folderId": 99999})
+	if resp.StatusCode != fiber.StatusNotFound {
+		t.Fatalf("ghost folder move = %d, want 404", resp.StatusCode)
+	}
+
+	// 列表返回 folderId
+	_, tl := doJSON(t, app, "GET", "/api/trainings", cookie, nil)
+	for _, item := range tl["trainings"].([]any) {
+		tr1 := item.(map[string]any)
+		if int64(tr1["id"].(float64)) == trainingID {
+			if fid, ok := tr1["folderId"].(float64); !ok || int64(fid) != subID {
+				t.Fatalf("training folderId = %v, want %d", tr1["folderId"], subID)
+			}
+		}
+	}
+	_, pl := doJSON(t, app, "GET", "/api/practices", cookie, nil)
+	for _, item := range pl["practices"].([]any) {
+		p1 := item.(map[string]any)
+		if int64(p1["id"].(float64)) == practiceID {
+			if fid, ok := p1["folderId"].(float64); !ok || int64(fid) != rootID {
+				t.Fatalf("practice folderId = %v, want %d", p1["folderId"], rootID)
+			}
+		}
+	}
+
+	// 删除「数学A」：其直接子目录「几何」与其中的练习上移一层（父为空=根）；
+	// 训练X 在「几何」下不受影响
+	resp, _ = doJSON(t, app, "DELETE", fmt.Sprintf("/api/booklet-directories/%d", rootID), cookie, nil)
+	if resp.StatusCode != fiber.StatusNoContent {
+		t.Fatalf("delete root = %d", resp.StatusCode)
+	}
+	_, out = doJSON(t, app, "GET", "/api/booklet-directories", cookie, nil)
+	dirs := out["directories"].([]any)
+	if len(dirs) != 1 {
+		t.Fatalf("dirs after delete = %d, want 1", len(dirs))
+	}
+	kept := dirs[0].(map[string]any)
+	if fid, ok := kept["parentId"]; ok && fid != nil {
+		t.Fatalf("promoted dir parentId = %v, want null", kept["parentId"])
+	}
+	_, pl = doJSON(t, app, "GET", "/api/practices", cookie, nil)
+	for _, item := range pl["practices"].([]any) {
+		p1 := item.(map[string]any)
+		if int64(p1["id"].(float64)) == practiceID {
+			if _, ok := p1["folderId"]; ok {
+				t.Fatalf("practice folderId after delete = %v, want null", p1["folderId"])
+			}
+		}
+	}
+	_, tl = doJSON(t, app, "GET", "/api/trainings", cookie, nil)
+	for _, item := range tl["trainings"].([]any) {
+		tr1 := item.(map[string]any)
+		if int64(tr1["id"].(float64)) == trainingID {
+			if fid, ok := tr1["folderId"].(float64); !ok || int64(fid) != subID {
+				t.Fatalf("training folderId after delete = %v, want %d", tr1["folderId"], subID)
+			}
+		}
 	}
 }
 
