@@ -16,32 +16,30 @@ export const TYPE_LABEL: Record<string, string> = {
 }
 
 // 题目查看视图（题面 / 答案 / 题解）：题目详情页与训练/练习条目浮窗共用。
+// 注：标题由外层容器渲染（详情页头部 / 浮窗标题），本视图不含题目标题。
 export function ProblemView({ problem }: { problem: Problem }) {
   const [tab, setTab] = useState('problem')
   return (
     <div>
-      {/* 头部 */}
-      <div className="mb-4">
-        <h1 className="text-xl font-semibold">{problem.title}</h1>
-        <div className="mt-2 flex flex-wrap items-center gap-1.5">
-          <Badge>{TYPE_LABEL[problem.type] ?? problem.type}</Badge>
-          {problem.type === 'programming' && (
-            <Badge variant="outline" className="text-xs text-muted-foreground">
-              {problem.timeLimitMs}ms · {problem.memoryLimitMiB}MiB
-            </Badge>
-          )}
-          {problem.tags.map((t) => (
-            <Badge key={t} variant="secondary" className="text-xs">
-              {t}
-            </Badge>
-          ))}
-        </div>
+      {/* 类型 / 时限 / 标签 */}
+      <div className="mb-4 flex flex-wrap items-center gap-1.5">
+        <Badge>{TYPE_LABEL[problem.type] ?? problem.type}</Badge>
+        {problem.type === 'programming' && (
+          <Badge variant="outline" className="text-xs text-muted-foreground">
+            {problem.timeLimitMs}ms · {problem.memoryLimitMiB}MiB
+          </Badge>
+        )}
+        {(problem.tags ?? []).map((t) => (
+          <Badge key={t} variant="secondary" className="text-xs">
+            {t}
+          </Badge>
+        ))}
       </div>
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as string)}>
         <TabsList>
           <TabsTrigger value="problem">题目</TabsTrigger>
-          <TabsTrigger value="solutions">题解 {problem.solutions.length > 0 && `(${problem.solutions.length})`}</TabsTrigger>
+          <TabsTrigger value="solutions">题解 {((problem.solutions ?? []).length) > 0 && `(${(problem.solutions ?? []).length})`}</TabsTrigger>
         </TabsList>
         <TabsContent value="problem" className="space-y-5 text-[17px] leading-relaxed">
           <section>
@@ -179,10 +177,11 @@ export function Empty({ children }: { children: React.ReactNode }) {
 // ---------- 题解视图 ----------
 
 function SolutionsView({ solutions }: { solutions: Solution[] }) {
-  if (solutions.length === 0) return <Empty>暂无题解，可在「编辑」页添加</Empty>
+  const list = solutions ?? []
+  if (list.length === 0) return <Empty>暂无题解，可在「编辑」页添加</Empty>
   return (
     <div className="space-y-4">
-      {solutions.map((s, i) => (
+      {list.map((s, i) => (
         <div key={i} className="overflow-hidden rounded-xl border">
           <div className="flex items-center gap-2 border-b bg-muted/50 px-4 py-2">
             <Badge variant="outline">{s.language}</Badge>

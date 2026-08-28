@@ -1,4 +1,4 @@
-﻿import { useEffect, useRef, useState, type DragEvent } from 'react'
+import { useEffect, useRef, useState, type DragEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
@@ -45,7 +45,7 @@ export function TrainingDetail({ id }: { id: number }) {
   const [itemIndicator, setItemIndicator] = useState<{ chapterId: number; index: number } | null>(null)
   const [chapterIndicator, setChapterIndicator] = useState<number | null>(null)
 
-  const chapters = q.data?.chapters ?? []
+  const chapters = (q.data?.chapters ?? []).map((c) => ({ ...c, items: c.items ?? [] }))
   const draggingChapter = drag?.kind === 'chapter'
 
   const titleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -302,13 +302,6 @@ export function TrainingDetail({ id }: { id: number }) {
         {chapters.length === 0 && <Empty>还没有章节，在下方创建第一个章节</Empty>}
       </div>
 
-      {training.description && (
-        <div className="mb-4 rounded-lg border bg-muted/30 px-4 py-3">
-          <div className="mb-1 text-xs font-medium text-muted-foreground">描述</div>
-          <p className="whitespace-pre-wrap text-sm">{training.description}</p>
-        </div>
-      )}
-
       {editMode && (
         <>
           <Separator className="my-4" />
@@ -392,7 +385,8 @@ export function PracticeDetail({ id }: { id: number }) {
   }, [q.data, id, lastPracticeId])
 
   if (!q.data) return <div className="p-8 text-sm text-muted-foreground">加载中…</div>
-  const { practice, items } = q.data
+  const { practice, items: rawItems } = q.data
+  const items = rawItems ?? []
 
   function handleTitleChange(v: string) {
     setLocalTitle(v)
@@ -534,13 +528,6 @@ export function PracticeDetail({ id }: { id: number }) {
         {items.length === 0 && <Empty>练习为空，去左侧勾选题目后通过「加入练习」添加</Empty>}
       </div>
 
-      {practice.description && (
-        <div className="mt-4 rounded-lg border bg-muted/30 px-4 py-3">
-          <div className="mb-1 text-xs font-medium text-muted-foreground">描述</div>
-          <p className="whitespace-pre-wrap text-sm">{practice.description}</p>
-        </div>
-      )}
-
       <ConfirmDialog
         open={confirmDelete}
         onOpenChange={setConfirmDelete}
@@ -592,6 +579,11 @@ function Header(props: {
             <DownloadIcon data-icon="inline-start" /> 导出 OrangeOJ ZIP
           </Button>
         </a>
+        {props.editMode && (
+          <Button variant="ghost" size="sm" className="text-destructive" onClick={props.onDelete}>
+            <TrashIcon />
+          </Button>
+        )}
         <button
           type="button"
           onClick={props.onToggleMode}
@@ -600,13 +592,8 @@ function Header(props: {
             props.editMode ? 'bg-primary/10 text-primary' : 'hover:bg-muted'
           }`}
         >
-          {props.editMode ? <PencilIcon className="size-4" /> : <EyeIcon className="size-4" />}
+          {props.editMode ? <EyeIcon className="size-4" /> : <PencilIcon className="size-4" />}
         </button>
-        {props.editMode && (
-          <Button variant="ghost" size="sm" className="text-destructive" onClick={props.onDelete}>
-            <TrashIcon />
-          </Button>
-        )}
       </div>
       {props.editMode && props.onDescriptionChange && (
         <textarea
@@ -622,7 +609,7 @@ function Header(props: {
       )}
       <div className="mt-2 flex flex-wrap items-center gap-1.5">
         <Badge variant="outline">{props.count} 题</Badge>
-        {props.tags.map((t) => (
+        {(props.tags ?? []).map((t) => (
           <Badge key={t} variant="secondary" className="text-xs">
             {t}
           </Badge>

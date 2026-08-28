@@ -1,4 +1,4 @@
-import { useMemo, useState, type DragEvent } from 'react'
+import { useMemo, useRef, useState, type DragEvent } from 'react'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
@@ -175,9 +175,9 @@ export function ProblemListColumn({ showBooklets, onToggleBooklets }: { showBook
       </div>
 
       {/* 题目列表 */}
-      <ScrollArea className="min-h-0 flex-1">
+      <div className="min-h-0 flex-1">
         <ProblemList />
-      </ScrollArea>
+      </div>
 
       {/* 批量操作条 */}
       {checked.length > 0 && (
@@ -857,7 +857,10 @@ function RenameTagDialog(props: {
   )
 }
 
-// ---------- 题目列表 ----------
+// ---------- 题目列表（固定行高虚拟滚动：题目量大时只渲染可视区） ----------
+
+const PROBLEM_ROW_H = 32 // 与 ProblemRow 实际高度一致（py-1.5 + text-sm）
+const OVERSCAN = 8
 
 function ProblemList() {
   const { filter, checked, toggleChecked, setChecked } = useAppState()
@@ -868,6 +871,9 @@ function ProblemList() {
   const problems = listQuery.data?.problems ?? []
   // Shift 范围选择的锚点（最近一次普通勾选的位置）
   const [anchorIndex, setAnchorIndex] = useState<number | null>(null)
+  // 虚拟滚动状态
+  const [scrollTop, setScrollTop] = useState(0)
+  const viewportRef = useRef<HTMLDivElement | null>(null)
 
   /** 勾选处理：Shift+点击=从锚点到当前项的整段范围选择；普通点击=切换单项并更新锚点。 */
   function handleCheck(i: number, shiftKey: boolean) {
@@ -884,11 +890,22 @@ function ProblemList() {
   if (problems.length === 0) {
     return <div className="px-4 py-6 text-center text-xs text-muted-foreground">当前范围没有题目</div>
   }
+
+  const total = problems.length
+  const viewH = viewportRef.current?.clientHeight ?? 600
+  const start = Math.max(0, Math.floor(scrollTop / PROBLEM_ROW_H) - OVERSCAN)
+  const end = Math.min(total, Math.ceil((scrollTop + viewH) / PROBLEM_ROW_H) + OVERSCAN)
+  const visible = problems.slice(start, end)
+
   return (
-    <div className="space-y-0.5 px-1 pb-2">
-      {problems.map((p, i) => (
-        <ProblemRow key={p.id} problem={p} checked={checked.includes(p.id)} onCheck={(shift) => handleCheck(i, shift)} />
-      ))}
+    <div ref={viewportRef} className="h-full overflow-y-auto" onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}>
+      <div className="relative px-1 pb-2" style={{ height: total * PROBLEM_ROW_H }}>
+        {visible.map((p, i) => (
+          <div key={p.id} className="absolute left-1 right-1" style={{ top: (start + i) * PROBLEM_ROW_H, height: PROBLEM_ROW_H }}>
+            <ProblemRow problem={p} checked={checked.includes(p.id)} onCheck={(shift) => handleCheck(start + i, shift)} />
+          </div>
+        ))}
+      </div>
     </div>
   )
 }

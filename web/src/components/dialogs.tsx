@@ -300,7 +300,10 @@ export function ProblemPreviewDialog(props: {
           editing ? (
             <ProblemEditor problem={problem} onSaved={() => setEditing(false)} />
           ) : (
-            <ProblemView problem={problem} />
+            <>
+              <h1 className="mb-4 text-xl font-semibold">{problem.title}</h1>
+              <ProblemView problem={problem} />
+            </>
           )
         ) : (
           <div className="py-8 text-center text-sm text-muted-foreground">加载中…</div>

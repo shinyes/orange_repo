@@ -36,7 +36,7 @@ export function ProblemPane({ id }: { id: number }) {
   const { goHome } = useAppState()
   const qc = useQueryClient()
   const problemQuery = useQuery({ queryKey: ['problem', id], queryFn: () => api.getProblem(id) })
-  const [mode, setMode] = useState<'view' | 'edit'>('edit')
+  const [mode, setMode] = useState<'view' | 'edit'>('view') // 默认查看模式
   const [confirmDelete, setConfirmDelete] = useState(false)
 
   const problem = problemQuery.data?.problem
@@ -56,9 +56,14 @@ export function ProblemPane({ id }: { id: number }) {
 
   return (
     <div className="mx-auto max-w-4xl px-6 py-5">
-      {/* 头部：标题 + 模式切换 + 删除 */}
+      {/* 头部：标题 + 删除（编辑模式，位于模式切换按钮左侧）+ 模式切换 */}
       <div className="mb-4 flex items-start gap-2">
         <h1 className="min-w-0 flex-1 text-xl font-semibold">{problem.title}</h1>
+        {mode === 'edit' && (
+          <Button variant="ghost" size="sm" className="text-destructive" onClick={() => setConfirmDelete(true)}>
+            <TrashIcon data-icon="inline-start" /> 删除
+          </Button>
+        )}
         <button
           type="button"
           onClick={() => setMode((v) => (v === 'view' ? 'edit' : 'view'))}
@@ -69,11 +74,6 @@ export function ProblemPane({ id }: { id: number }) {
         >
           {mode === 'view' ? <PencilIcon className="size-4" /> : <EyeIcon className="size-4" />}
         </button>
-        {mode === 'edit' && (
-          <Button variant="ghost" size="sm" className="text-destructive" onClick={() => setConfirmDelete(true)}>
-            <TrashIcon data-icon="inline-start" /> 删除
-          </Button>
-        )}
       </div>
 
       {mode === 'edit' ? (
@@ -463,13 +463,14 @@ function ChoiceEditor({ s, patch }: { s: EditState; patch: (p: Partial<EditState
 const LANGS = ['cpp', 'python', 'go', 'turtle']
 
 function SolutionsEditor({ solutions, onChange }: { solutions: Solution[]; onChange: (s: Solution[]) => void }) {
+  const list = solutions ?? []
   function update(i: number, p: Partial<Solution>) {
-    onChange(solutions.map((x, j) => (j === i ? { ...x, ...p } : x)))
+    onChange(list.map((x, j) => (j === i ? { ...x, ...p } : x)))
   }
   function move(i: number, dir: -1 | 1) {
     const j = i + dir
-    if (j < 0 || j >= solutions.length) return
-    const next = [...solutions]
+    if (j < 0 || j >= list.length) return
+    const next = [...list]
     ;[next[i], next[j]] = [next[j], next[i]]
     onChange(next)
   }
@@ -477,15 +478,15 @@ function SolutionsEditor({ solutions, onChange }: { solutions: Solution[]; onCha
     <div className="space-y-1.5">
       <div className="flex items-center">
         <Label>题解（可多个）</Label>
-        <Button size="xs" variant="ghost" className="ml-auto" onClick={() => onChange([...solutions, { language: 'cpp', code: '', markdown: '' }])}>
+        <Button size="xs" variant="ghost" className="ml-auto" onClick={() => onChange([...list, { language: 'cpp', code: '', markdown: '' }])}>
           <PlusIcon data-icon="inline-start" /> 添加题解
         </Button>
       </div>
       <div className="space-y-3">
-        {solutions.map((sol, i) => (
-          <SolCard key={i} index={i} total={solutions.length} sol={sol} onChange={(p) => update(i, p)} onRemove={() => onChange(solutions.filter((_, j) => j !== i))} onMove={(d) => move(i, d)} />
+        {list.map((sol, i) => (
+          <SolCard key={i} index={i} total={list.length} sol={sol} onChange={(p) => update(i, p)} onRemove={() => onChange(list.filter((_, j) => j !== i))} onMove={(d) => move(i, d)} />
         ))}
-        {solutions.length === 0 && <Empty>暂无题解</Empty>}
+        {list.length === 0 && <Empty>暂无题解</Empty>}
       </div>
     </div>
   )
