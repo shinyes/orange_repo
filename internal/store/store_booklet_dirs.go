@@ -79,9 +79,11 @@ func (s *Store) RenameBookletDirectory(id int64, name string) error {
 	return nil
 }
 
-// DeleteBookletDirectory 删除目录：其直接子目录与归属题册（训练/练习）上移一层
-// （挂到被删目录的父目录，根目录为 NULL），数据不丢失。
-func (s *Store) DeleteBookletDirectory(id int64) error {
+// DeleteBookletDirectory 删除目录：
+//   - deleteBooklets=true 时，直接归属该目录的训练/练习一并删除；
+//   - 否则它们移到顶层（folder_id=NULL）；
+//   - 直接子目录始终上移一层（挂到被删目录的父目录，根目录为 NULL）。
+func (s *Store) DeleteBookletDirectory(id int64, deleteBooklets bool) error {
 	tx, err := s.DB.Begin()
 	if err != nil {
 		return err
@@ -95,16 +97,77 @@ func (s *Store) DeleteBookletDirectory(id int64) error {
 	if err != nil {
 		return err
 	}
-	for _, q := range []struct {
+
+	steps := []struct {
 		query string
 		args  []any
 	}{
 		{`UPDATE booklet_directories SET parent_id=? WHERE parent_id=?`, []any{parent, id}},
-		{`UPDATE trainings SET folder_id=? WHERE folder_id=?`, []any{parent, id}},
-		{`UPDATE practices SET folder_id=? WHERE folder_id=?`, []any{parent, id}},
 		{`DELETE FROM booklet_directories WHERE id=?`, []any{id}},
-	} {
-		if _, err := tx.Exec(q.query, q.args...); err != nil {
+	}
+	if deleteBooklets {
+		// 删除直接归属的训练/练习（含其章节/条目）再删目录
+		rows, err := tx.Query(`SELECT id FROM trainings WHERE folder_id=?`, id)
+		if err != nil {
+			return err
+		}
+		var trainIDs []int64
+		for rows.Next() {
+			var tid int64
+			if err := rows.Scan(&tid); err != nil {
+				rows.Close()
+				return err
+			}
+			trainIDs = append(trainIDs, tid)
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return err
+		}
+		rows.Close()
+		rows, err = tx.Query(`SELECT id FROM practices WHERE folder_id=?`, id)
+		if err != nil {
+			return err
+		}
+		var pracIDs []int64
+		for rows.Next() {
+			var pid int64
+			if err := rows.Scan(&pid); err != nil {
+				rows.Close()
+				return err
+			}
+			pracIDs = append(pracIDs, pid)
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return err
+		}
+		rows.Close()
+		for _, tid := range trainIDs {
+			if err := deleteTrainingTx(tx, tid); err != nil {
+				return err
+			}
+		}
+		for _, pid := range pracIDs {
+			if err := deletePracticeTx(tx, pid); err != nil {
+				return err
+			}
+		}
+	} else {
+		// 不删题册：直接归属的题册移到顶层
+		steps = append(steps,
+			struct {
+				query string
+				args  []any
+			}{`UPDATE trainings SET folder_id=NULL WHERE folder_id=?`, []any{id}},
+			struct {
+				query string
+				args  []any
+			}{`UPDATE practices SET folder_id=NULL WHERE folder_id=?`, []any{id}},
+		)
+	}
+	for _, st := range steps {
+		if _, err := tx.Exec(st.query, st.args...); err != nil {
 			return fmt.Errorf("delete directory: %w", err)
 		}
 	}

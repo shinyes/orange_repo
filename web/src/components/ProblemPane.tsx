@@ -135,7 +135,7 @@ function fromProblem(p: Problem): EditState {
   }
 }
 
-function ProblemEditor({ problem, onSaved }: { problem: Problem; onSaved: () => void }) {
+export function ProblemEditor({ problem, onSaved }: { problem: Problem; onSaved: () => void }) {
   const qc = useQueryClient()
   const [s, setS] = useState<EditState>(() => fromProblem(problem))
   const [tagInput, setTagInput] = useState('')

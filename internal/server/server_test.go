@@ -16,6 +16,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 
 	"orangerepo/internal/store"
+	"orangerepo/internal/zipio"
 )
 
 func newTestApp(t *testing.T) (*fiber.App, *store.Store) {
@@ -537,6 +538,236 @@ func TestBookletDirectoriesAPI(t *testing.T) {
 				t.Fatalf("training folderId after delete = %v, want %d", tr1["folderId"], subID)
 			}
 		}
+	}
+
+	// deleteBooklets=true：目录连同直接归属题册一起删除
+	resp, d2 := doJSON(t, app, "POST", "/api/booklet-directories", cookie, map[string]any{"name": "临时代目录"})
+	if resp.StatusCode != fiber.StatusCreated {
+		t.Fatalf("create tmp dir = %d", resp.StatusCode)
+	}
+	tmpDir := int64(d2["id"].(float64))
+	resp, pr2 := doJSON(t, app, "POST", "/api/practices", cookie, map[string]any{"title": "待删除练习"})
+	if resp.StatusCode != fiber.StatusCreated {
+		t.Fatalf("create tmp practice = %d", resp.StatusCode)
+	}
+	tmpPrac := int64(pr2["id"].(float64))
+	resp, _ = doJSON(t, app, "PUT", fmt.Sprintf("/api/practices/%d/folder", tmpPrac), cookie, map[string]any{"folderId": tmpDir})
+	if resp.StatusCode != fiber.StatusNoContent {
+		t.Fatalf("move tmp practice = %d", resp.StatusCode)
+	}
+	resp, _ = doJSON(t, app, "DELETE", fmt.Sprintf("/api/booklet-directories/%d?deleteBooklets=true", tmpDir), cookie, nil)
+	if resp.StatusCode != fiber.StatusNoContent {
+		t.Fatalf("delete dir with booklets = %d", resp.StatusCode)
+	}
+	_, pl2 := doJSON(t, app, "GET", "/api/practices", cookie, nil)
+	for _, item := range pl2["practices"].([]any) {
+		if int64(item.(map[string]any)["id"].(float64)) == tmpPrac {
+			t.Fatal("deleteBooklets=true 后练习应被删除")
+		}
+	}
+}
+
+// TestImportModeValidation 导入 mode 参数规范化与非法值防御。
+func TestImportModeValidation(t *testing.T) {
+	app, _ := newTestApp(t)
+	cookie := sessionCookie(t, app)
+
+	sendZip := func(mode string) int {
+		body := &bytes.Buffer{}
+		mw := multipart.NewWriter(body)
+		fw, err := mw.CreateFormFile("zip", "p.zip")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := fw.Write([]byte("not a zip")); err != nil {
+			t.Fatal(err)
+		}
+		mw.Close()
+		req := httptest.NewRequest("POST", "/api/import?mode="+mode, body)
+		req.Header.Set("Content-Type", mw.FormDataContentType())
+		req.Header.Set("Cookie", cookie)
+		resp, err := app.Test(req, -1)
+		if err != nil {
+			t.Fatalf("import(%s): %v", mode, err)
+		}
+		return resp.StatusCode
+	}
+
+	// 非法/原始大小写 → 400（不复用 valid mode 静默降级）
+	if code := sendZip("Training"); code != fiber.StatusBadRequest {
+		t.Fatalf("mode=Training = %d, want 400", code)
+	}
+	if code := sendZip("badmode"); code != fiber.StatusBadRequest {
+		t.Fatalf("mode=badmode = %d, want 400", code)
+	}
+	// 合法 mode 通过模式校验，随后因 ZIP 非法报 400（非 500）
+	if code := sendZip("training"); code != fiber.StatusBadRequest {
+		t.Fatalf("mode=training with bad zip = %d, want 400", code)
+	}
+}
+
+// TestImportTrainingWithoutPlan 训练模式导入无章节结构的 ZIP：
+// 缺 trainingPlan.json，或其 chapters 为空 → 自动建「未分组」章节收纳全部题目，题目不再被单独遗弃。
+func TestImportTrainingWithoutPlan(t *testing.T) {
+	mkEntries := func() []zipio.ExportProblem {
+		srcApp, _ := newTestApp(t)
+		cookie := sessionCookie(t, srcApp)
+		doJSON(t, srcApp, "POST", "/api/problems", cookie, map[string]any{"type": "programming", "title": "题一"})
+		doJSON(t, srcApp, "POST", "/api/problems", cookie, map[string]any{"type": "single_choice", "title": "题二"})
+		zipData := getZip(t, srcApp, cookie, "/api/export/problems")
+		problems, _, _, err := zipio.ParseZip(zipData)
+		if err != nil {
+			t.Fatalf("parse exported zip: %v", err)
+		}
+		return problems
+	}
+	entries := mkEntries()
+
+	type caseSpec struct {
+		name     string
+		plan     *zipio.PlanMeta
+		filename string // 上传文件名（无元数据标题时作为题册名称兜底）
+		want     string // 期望的训练标题
+		wantCh   int    // 期望章节数
+		wantCap  string // 期望章节标题
+	}
+	cases := []caseSpec{
+		{"无 trainingPlan.json", nil, "CIE 2203.zip", "CIE 2203", 1, "未分组"},
+		// 用户实测场景：trainingPlan.json 存在但缺少 chapters 字段
+		{"trainingPlan 无 chapters", &zipio.PlanMeta{Title: "CIE Python二级 2022年3月Python二级", Tags: []string{"CIE"}}, "ignored.zip", "CIE Python二级 2022年3月Python二级", 1, "未分组"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			zipData, err := zipio.BuildZip(entries, tc.plan, nil)
+			if err != nil {
+				t.Fatalf("build zip: %v", err)
+			}
+			dstApp, _ := newTestApp(t)
+			dstCookie := sessionCookie(t, dstApp)
+			importZipAs(t, dstApp, dstCookie, zipData, "training", tc.filename)
+
+			_, tl := doJSON(t, dstApp, "GET", "/api/trainings", dstCookie, nil)
+			trainings := tl["trainings"].([]any)
+			if len(trainings) != 1 {
+				t.Fatalf("trainings = %d, want 1", len(trainings))
+			}
+			tr := trainings[0].(map[string]any)
+			if tr["title"] != tc.want {
+				t.Fatalf("title = %v, want %q", tr["title"], tc.want)
+			}
+			if tr["problemCount"].(float64) != 2 {
+				t.Fatalf("problemCount = %v, want 2", tr["problemCount"])
+			}
+			trainingID := int64(tr["id"].(float64))
+			_, td := doJSON(t, dstApp, "GET", fmt.Sprintf("/api/trainings/%d", trainingID), dstCookie, nil)
+			chapters := td["chapters"].([]any)
+			if len(chapters) != tc.wantCh {
+				t.Fatalf("chapters = %d, want %d", len(chapters), tc.wantCh)
+			}
+			first := chapters[0].(map[string]any)
+			if first["title"] != tc.wantCap {
+				t.Fatalf("chapter title = %v, want %q", first["title"], tc.wantCap)
+			}
+			if items := first["items"].([]any); len(items) != 2 {
+				t.Fatalf("items = %d, want 2（全部题目应收录进训练）", len(items))
+			}
+		})
+	}
+}
+
+// importZipAs 以指定文件名上传导入（文件名作为题册名称兜底）。
+func importZipAs(t *testing.T, app *fiber.App, cookie string, zipData []byte, mode, filename string) map[string]any {
+	t.Helper()
+	body := &bytes.Buffer{}
+	mw := multipart.NewWriter(body)
+	fw, err := mw.CreateFormFile("zip", filename)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fw.Write(zipData); err != nil {
+		t.Fatal(err)
+	}
+	mw.Close()
+	req := httptest.NewRequest("POST", "/api/import?mode="+mode, body)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	req.Header.Set("Cookie", cookie)
+	resp, err := app.Test(req, -1)
+	if err != nil {
+		t.Fatalf("import: %v", err)
+	}
+	raw, _ := io.ReadAll(resp.Body)
+	var out map[string]any
+	_ = json.Unmarshal(raw, &out)
+	if resp.StatusCode != fiber.StatusCreated {
+		t.Fatalf("import(%s) = %d %s", mode, resp.StatusCode, raw)
+	}
+	return out
+}
+
+// TestImportAutoDetect auto 模式自动识别：含章节结构→训练；否则→练习（平铺），名称取文件名兜底。
+func TestImportAutoDetect(t *testing.T) {
+	srcApp, _ := newTestApp(t)
+	cookie := sessionCookie(t, srcApp)
+	doJSON(t, srcApp, "POST", "/api/problems", cookie, map[string]any{"type": "programming", "title": "题一"})
+	doJSON(t, srcApp, "POST", "/api/problems", cookie, map[string]any{"type": "single_choice", "title": "题二"})
+	zipData := getZip(t, srcApp, cookie, "/api/export/problems")
+	entries, _, _, err := zipio.ParseZip(zipData)
+	if err != nil {
+		t.Fatalf("parse exported zip: %v", err)
+	}
+
+	// 场景 1：无 trainingPlan → auto 识别为练习，名称=文件名（去扩展名）
+	plainZip, err := zipio.BuildZip(entries, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dst1, _ := newTestApp(t)
+	c1 := sessionCookie(t, dst1)
+	out := importZipAs(t, dst1, c1, plainZip, "auto", "CIE 2203 真题.zip")
+	if _, ok := out["practiceId"]; !ok {
+		t.Fatalf("auto+无plan 应识别为练习: %v", out)
+	}
+	_, pl := doJSON(t, dst1, "GET", "/api/practices", c1, nil)
+	practices := pl["practices"].([]any)
+	if len(practices) != 1 {
+		t.Fatalf("practices = %d, want 1", len(practices))
+	}
+	p := practices[0].(map[string]any)
+	if p["title"] != "CIE 2203 真题" {
+		t.Fatalf("practice title = %v, want 文件名兜底「CIE 2203 真题」", p["title"])
+	}
+	if p["problemCount"].(float64) != 2 {
+		t.Fatalf("practice problemCount = %v, want 2", p["problemCount"])
+	}
+
+	// 场景 2：含 chapters → auto 识别为训练并按结构建章，名称=元数据标题
+	planZip, err := zipio.BuildZip(entries, &zipio.PlanMeta{
+		Title: "带章节的训练",
+		Chapters: []zipio.PlanChapter{{Title: "热身", ProblemIDs: []int{0, 1}}},
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dst2, _ := newTestApp(t)
+	c2 := sessionCookie(t, dst2)
+	out = importZipAs(t, dst2, c2, planZip, "auto", "ignored.zip")
+	if _, ok := out["trainingId"]; !ok {
+		t.Fatalf("auto+有章节 应识别为训练: %v", out)
+	}
+	_, tl := doJSON(t, dst2, "GET", "/api/trainings", c2, nil)
+	trainings := tl["trainings"].([]any)
+	if len(trainings) != 1 {
+		t.Fatalf("trainings = %d, want 1", len(trainings))
+	}
+	tr := trainings[0].(map[string]any)
+	if tr["title"] != "带章节的训练" {
+		t.Fatalf("training title = %v, want 元数据标题", tr["title"])
+	}
+	trainingID := int64(tr["id"].(float64))
+	_, td := doJSON(t, dst2, "GET", fmt.Sprintf("/api/trainings/%d", trainingID), c2, nil)
+	chapters := td["chapters"].([]any)
+	if len(chapters) != 1 || len(chapters[0].(map[string]any)["items"].([]any)) != 2 {
+		t.Fatalf("training chapters wrong: %v", td["chapters"])
 	}
 }
 

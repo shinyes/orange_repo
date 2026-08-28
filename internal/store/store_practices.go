@@ -81,13 +81,42 @@ func (s *Store) DeletePractice(id int64) error {
 		return err
 	}
 	defer tx.Rollback()
-	if _, err := tx.Exec(`DELETE FROM practice_items WHERE practice_id=?`, id); err != nil {
-		return err
-	}
-	if _, err := tx.Exec(`DELETE FROM practices WHERE id=?`, id); err != nil {
+	if err := deletePracticeTx(tx, id); err != nil {
 		return err
 	}
 	return tx.Commit()
+}
+
+// deletePracticeTx 在已有事务内删除练习（条目），并将仅被该题册引用的题目
+// 一并删除（被其他训练/练习条目引用的题目保留）。
+func deletePracticeTx(tx *sql.Tx, id int64) error {
+	rows, err := tx.Query(`SELECT problem_id FROM practice_items WHERE practice_id=?`, id)
+	if err != nil {
+		return err
+	}
+	var pids []int64
+	for rows.Next() {
+		var pid int64
+		if err := rows.Scan(&pid); err != nil {
+			rows.Close()
+			return err
+		}
+		pids = append(pids, pid)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	rows.Close()
+	for _, q := range []string{
+		`DELETE FROM practice_items WHERE practice_id=?`,
+		`DELETE FROM practices WHERE id=?`,
+	} {
+		if _, err := tx.Exec(q, id); err != nil {
+			return err
+		}
+	}
+	return deleteOrphanProblems(tx, pids)
 }
 
 // AddPracticeItems 追加题目条目到练习末尾；校验题目存在。

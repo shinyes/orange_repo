@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { FileCodeIcon, FolderPlusIcon, ListChecksIcon, UploadIcon } from 'lucide-react'
+import { EyeIcon, FileCodeIcon, FolderPlusIcon, ListChecksIcon, PencilIcon, SparklesIcon, UploadIcon } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -28,6 +28,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { api } from '@/lib/api'
 import { useAppState } from '@/lib/app-context'
 import type { Practice, ProblemType, Training } from '@/lib/types'
+import { ProblemEditor } from './ProblemPane'
 import { ProblemView } from './problem-view'
 
 // ---------- 删除确认 ----------
@@ -38,6 +39,7 @@ export function ConfirmDialog(props: {
   title: string
   description: string
   onConfirm: () => void
+  confirmLabel?: string
 }) {
   return (
     <AlertDialog open={props.open} onOpenChange={props.onOpenChange}>
@@ -48,7 +50,7 @@ export function ConfirmDialog(props: {
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>取消</AlertDialogCancel>
-          <AlertDialogAction onClick={props.onConfirm}>确认删除</AlertDialogAction>
+          <AlertDialogAction onClick={props.onConfirm}>{props.confirmLabel ?? '确认删除'}</AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
@@ -133,55 +135,70 @@ export function NewProblemDialog({ open, onOpenChange }: { open: boolean; onOpen
 
 // ---------- 导入 ZIP ----------
 
-export type ImportMode = 'problems' | 'training' | 'practice'
+export type ImportMode = 'auto' | 'problems' | 'training' | 'practice'
 
-// fixedMode 非空时锁定导入方式（题目栏=仅题目；题册栏=训练/练习），隐藏模式选择区。
+// fixedMode 非空时锁定导入方式（题目栏=仅题目），隐藏模式选择区；
+// allow 限定可选模式（题册栏合并入口=自动识别/训练/练习），默认全部。
 export function ImportDialog({
   open,
   onOpenChange,
   fixedMode,
+  allow,
 }: {
   open: boolean
   onOpenChange: (v: boolean) => void
   fixedMode?: ImportMode
+  allow?: ImportMode[]
 }) {
   const fileRef = useRef<HTMLInputElement>(null)
-  const [mode, setMode] = useState<ImportMode>(fixedMode ?? 'problems')
+  const [mode, setMode] = useState<ImportMode>(fixedMode ?? allow?.[0] ?? 'auto')
   const [busy, setBusy] = useState(false)
   const qc = useQueryClient()
 
   async function submit() {
-    const file = fileRef.current?.files?.[0]
-    if (!file) {
+    const files = fileRef.current?.files
+    if (!files || files.length === 0) {
       toast.error('请选择 ZIP 文件')
       return
     }
     setBusy(true)
+    let total = 0
+    let success = 0
+    const names: string[] = []
     try {
-      const result = await api.import(file, mode)
-      const imported = (result.imported as unknown[])?.length ?? 0
-      const extra =
-        mode === 'training' && result.trainingId
-          ? `，训练 #${String(result.trainingId)}（${String(result.chapters ?? 0)} 章）`
-          : mode === 'practice' && result.practiceId
-            ? `，练习 #${String(result.practiceId)}`
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i]
+        try {
+          const result = await api.import(file, mode)
+          total += (result.imported as unknown[])?.length ?? 0
+          success++
+          if (result.title) names.push(String(result.title))
+        } catch (e) {
+          toast.error(`「${file.name}」导入失败：${e instanceof Error ? e.message : '未知错误'}`)
+        }
+      }
+      if (success > 0) {
+        const extra =
+          names.length > 0
+            ? `，题册：${names.slice(0, 3).join('、')}${names.length > 3 ? ` 等 ${names.length} 个` : ''}`
             : ''
-      toast.success(`已导入 ${String(imported)} 道题目${extra}`)
-      await qc.invalidateQueries()
-      onOpenChange(false)
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : '导入失败')
+        toast.success(`已导入 ${total} 道题目${extra}`)
+        await qc.invalidateQueries()
+        onOpenChange(false)
+      }
     } finally {
       setBusy(false)
     }
   }
 
-  const modes = [
+  const allModes = [
+    { value: 'auto', label: '自动识别', desc: '包内含章节结构→训练，否则→练习（平铺）', icon: SparklesIcon },
     { value: 'problems', label: '仅导入题目', desc: '只把 problems.json 的题目入库', icon: FileCodeIcon },
     { value: 'training', label: '导入为训练', desc: '按 trainingPlan.json 章节结构建训练', icon: FolderPlusIcon },
     { value: 'practice', label: '导入为练习', desc: '按题目顺序建立平铺练习', icon: ListChecksIcon },
   ] as const
-  const modeLabel: Record<ImportMode, string> = { problems: '仅导入题目', training: '导入为训练', practice: '导入为练习' }
+  const modes = fixedMode ? [] : allModes.filter((m) => (allow ?? allModes.map((x) => x.value)).includes(m.value))
+  const modeLabel: Record<ImportMode, string> = { auto: '自动识别', problems: '仅导入题目', training: '导入为训练', practice: '导入为练习' }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -197,9 +214,11 @@ export function ImportDialog({
           ref={fileRef}
           type="file"
           accept=".zip"
+          multiple
           className="w-full cursor-pointer rounded-lg border border-input bg-transparent p-2 text-sm file:mr-3 file:cursor-pointer file:rounded-md file:border-0 file:bg-muted file:px-3 file:py-1.5 file:text-sm"
         />
-        {!fixedMode && (
+        <p className="text-xs text-muted-foreground">支持一次选择多个 ZIP 包；题册名称取包内元数据标题，缺失时用文件名。</p>
+        {modes.length > 1 && (
           <div className="space-y-1.5">
             <Label>导入方式</Label>
             <div className="grid gap-1.5">
@@ -235,26 +254,54 @@ export function ImportDialog({
   )
 }
 
-// ---------- 题目预览浮窗（训练/练习条目点击弹出） ----------
+// ---------- 题目预览浮窗（训练/练习条目点击弹出，支持编辑模式） ----------
 
 export function ProblemPreviewDialog(props: {
   open: boolean
   problemId: number | null
   onOpenChange: (v: boolean) => void
 }) {
+  const [editing, setEditing] = useState(false)
+  // 每次打开时回到查看模式
+  const [lastOpen, setLastOpen] = useState(false)
+  if (props.open && !lastOpen) {
+    setLastOpen(true)
+    setEditing(false)
+  } else if (!props.open && lastOpen) {
+    setLastOpen(false)
+  }
   const q = useQuery({
     queryKey: ['problem', props.problemId],
     queryFn: () => api.getProblem(props.problemId as number),
     enabled: props.open && props.problemId !== null,
   })
+  const problem = q.data?.problem
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-3xl">
         <DialogHeader>
-          <DialogTitle>题目预览</DialogTitle>
+          <DialogTitle className="flex items-center gap-2">
+            {editing ? '编辑题目' : '题目预览'}
+            {problem && (
+              <button
+                type="button"
+                onClick={() => setEditing((v) => !v)}
+                title={editing ? '切换到查看模式' : '切换到编辑模式'}
+                className={`inline-flex size-7 items-center justify-center rounded-lg border border-input text-sm transition-colors ${
+                  editing ? 'bg-primary/10 text-primary' : 'hover:bg-muted'
+                }`}
+              >
+                {editing ? <EyeIcon className="size-3.5" /> : <PencilIcon className="size-3.5" />}
+              </button>
+            )}
+          </DialogTitle>
         </DialogHeader>
-        {q.data ? (
-          <ProblemView problem={q.data.problem} />
+        {problem ? (
+          editing ? (
+            <ProblemEditor problem={problem} onSaved={() => setEditing(false)} />
+          ) : (
+            <ProblemView problem={problem} />
+          )
         ) : (
           <div className="py-8 text-center text-sm text-muted-foreground">加载中…</div>
         )}

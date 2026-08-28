@@ -42,7 +42,8 @@ func (s *Server) uploadResolver(name string) ([]byte, error) {
 
 // ---------- 导入 ----------
 
-// handleImport 导入 OrangeOJ ZIP。mode=problems|training|practice（默认 problems）。
+// handleImport 导入 OrangeOJ ZIP 包。mode=problems|training|practice|auto（默认 problems）。
+// auto：按包内容自动识别——trainingPlan.json 含章节 → 训练，否则 → 练习。
 func (s *Server) handleImport(c *fiber.Ctx) error {
 	file, err := c.FormFile("zip")
 	if err != nil {
@@ -60,7 +61,15 @@ func (s *Server) handleImport(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	resp, err := s.ImportZipData(data, c.Query("mode", "problems"))
+	mode := strings.ToLower(strings.TrimSpace(c.Query("mode", "problems")))
+	switch mode {
+	case "problems", "training", "practice", "auto":
+	default:
+		return respondError(c, fiber.StatusBadRequest, "invalid mode: 仅支持 problems|training|practice|auto")
+	}
+	// 文件名作为题册名称兜底（去掉扩展名）
+	nameHint := strings.TrimSuffix(filepath.Base(file.Filename), filepath.Ext(file.Filename))
+	resp, err := s.ImportZipData(data, mode, nameHint)
 	if err != nil {
 		if ferr, ok := err.(*fiber.Error); ok {
 			return respondError(c, ferr.Code, ferr.Message)
@@ -71,11 +80,20 @@ func (s *Server) handleImport(c *fiber.Ctx) error {
 }
 
 // ImportZipData 导入核心：图片落盘 → 归一化插入题目 → 按模式建组。
-// mode = problems | training | practice。
-func (s *Server) ImportZipData(data []byte, mode string) (fiber.Map, error) {
+// mode = problems | training | practice | auto；nameHint 为文件名（去扩展名），
+// 作为题册名称兜底（元数据无标题时使用）。
+func (s *Server) ImportZipData(data []byte, mode, nameHint string) (fiber.Map, error) {
 	problems, meta, images, err := zipio.ParseZip(data)
 	if err != nil {
 		return nil, fiber.NewError(fiber.StatusBadRequest, err.Error())
+	}
+	// auto：含章节结构 → 训练；否则 → 练习（平铺）
+	if mode == "auto" {
+		if meta != nil && len(meta.Chapters) > 0 {
+			mode = "training"
+		} else {
+			mode = "practice"
+		}
 	}
 	// Step 1: 落盘图片
 	for name, content := range images {
@@ -120,6 +138,9 @@ func (s *Server) ImportZipData(data []byte, mode string) (fiber.Map, error) {
 	// Step 3: 按模式建组
 	if mode == "training" {
 		title := "导入的训练"
+		if nameHint != "" {
+			title = nameHint
+		}
 		description := ""
 		var tags []string
 		if meta != nil {
@@ -134,7 +155,7 @@ func (s *Server) ImportZipData(data []byte, mode string) (fiber.Map, error) {
 			return nil, err
 		}
 		chapterCount := 0
-		if meta != nil {
+		if meta != nil && len(meta.Chapters) > 0 {
 			for _, ch := range meta.Chapters {
 				cid, err := s.Store.CreateChapter(trainingID, ch.Title)
 				if err != nil {
@@ -153,11 +174,28 @@ func (s *Server) ImportZipData(data []byte, mode string) (fiber.Map, error) {
 				}
 				chapterCount++
 			}
+		} else {
+			// ZIP 未提供章节结构（缺 trainingPlan.json 或 chapters 为空）：
+			// 自动创建「未分组」章节并收纳全部题目，避免题目被单独遗弃在题库中
+			cid, err := s.Store.CreateChapter(trainingID, "未分组")
+			if err != nil {
+				return nil, err
+			}
+			if len(createdIDs) > 0 {
+				if _, err := s.Store.AddChapterItems(cid, createdIDs); err != nil {
+					return nil, err
+				}
+			}
+			chapterCount = 1
 		}
 		resp["trainingId"] = trainingID
 		resp["chapters"] = chapterCount
+		resp["title"] = title
 	} else if mode == "practice" {
 		title := "导入的练习"
+		if nameHint != "" {
+			title = nameHint
+		}
 		description := ""
 		var tags []string
 		if meta != nil {
@@ -177,6 +215,7 @@ func (s *Server) ImportZipData(data []byte, mode string) (fiber.Map, error) {
 			}
 		}
 		resp["practiceId"] = practiceID
+		resp["title"] = title
 	}
 	return resp, nil
 }

@@ -108,12 +108,32 @@ export function TagFilterColumn({ onLogout, onOpenSettings }: { onLogout: () => 
 
 // 第二栏：题目查看（操作 / 批量 / 题目列表 / 训练练习）。
 export function ProblemListColumn({ showBooklets, onToggleBooklets }: { showBooklets: boolean; onToggleBooklets: () => void }) {
-  const { checked, clearChecked, filter } = useAppState()
+  const { checked, clearChecked, filter, view, goHome } = useAppState()
+  const qc = useQueryClient()
   const [newProblem, setNewProblem] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
   const [addToGroup, setAddToGroup] = useState<'training' | 'practice' | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   // 与 ProblemList 同 key 共享缓存：标题行计数
   const countQ = useQuery({ queryKey: ['problems', filter], queryFn: () => api.problems(filter) })
+
+  async function deleteChecked() {
+    setDeleting(true)
+    try {
+      await Promise.all(checked.map((id) => api.deleteProblem(id)))
+      toast.success(`已删除 ${checked.length} 道题目`)
+      const ids = new Set(checked)
+      if (view.kind === 'problem' && ids.has(view.id)) goHome()
+      clearChecked()
+      setConfirmDelete(false)
+      await qc.invalidateQueries()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : '删除失败')
+    } finally {
+      setDeleting(false)
+    }
+  }
 
   return (
     <div className="flex h-full flex-col bg-background">
@@ -171,6 +191,9 @@ export function ProblemListColumn({ showBooklets, onToggleBooklets }: { showBook
           <Button size="xs" variant="outline" onClick={() => setAddToGroup('practice')}>
             加入练习
           </Button>
+          <Button size="xs" variant="outline" className="text-destructive" onClick={() => setConfirmDelete(true)}>
+            删除
+          </Button>
           <Button size="xs" variant="ghost" onClick={clearChecked}>
             清空
           </Button>
@@ -185,6 +208,14 @@ export function ProblemListColumn({ showBooklets, onToggleBooklets }: { showBook
         onOpenChange={(v) => !v && setAddToGroup(null)}
         kind={addToGroup ?? 'training'}
         problemIds={checked}
+      />
+      <ConfirmDialog
+        open={confirmDelete}
+        onOpenChange={setConfirmDelete}
+        title={`删除选中的 ${checked.length} 道题？`}
+        description="题目将从题库及其所属训练/练习中移除，操作不可撤销。"
+        onConfirm={() => void deleteChecked()}
+        confirmLabel={deleting ? '删除中…' : '确认删除'}
       />
     </div>
   )
@@ -829,29 +860,42 @@ function RenameTagDialog(props: {
 // ---------- 题目列表 ----------
 
 function ProblemList() {
-  const { filter } = useAppState()
+  const { filter, checked, toggleChecked, setChecked } = useAppState()
   const listQuery = useQuery({
     queryKey: ['problems', filter],
     queryFn: () => api.problems(filter),
   })
   const problems = listQuery.data?.problems ?? []
+  // Shift 范围选择的锚点（最近一次普通勾选的位置）
+  const [anchorIndex, setAnchorIndex] = useState<number | null>(null)
+
+  /** 勾选处理：Shift+点击=从锚点到当前项的整段范围选择；普通点击=切换单项并更新锚点。 */
+  function handleCheck(i: number, shiftKey: boolean) {
+    if (shiftKey && anchorIndex !== null) {
+      const [a, b] = anchorIndex < i ? [anchorIndex, i] : [i, anchorIndex]
+      setChecked(problems.slice(a, b + 1).map((x) => x.id))
+      return
+    }
+    toggleChecked(problems[i].id)
+    setAnchorIndex(i)
+  }
+
   if (!listQuery.isSuccess) return null
   if (problems.length === 0) {
     return <div className="px-4 py-6 text-center text-xs text-muted-foreground">当前范围没有题目</div>
   }
   return (
     <div className="space-y-0.5 px-1 pb-2">
-      {problems.map((p) => (
-        <ProblemRow key={p.id} problem={p} />
+      {problems.map((p, i) => (
+        <ProblemRow key={p.id} problem={p} checked={checked.includes(p.id)} onCheck={(shift) => handleCheck(i, shift)} />
       ))}
     </div>
   )
 }
 
-function ProblemRow({ problem }: { problem: ProblemSummary }) {
-  const { view, openProblem, checked, toggleChecked } = useAppState()
+function ProblemRow({ problem, checked, onCheck }: { problem: ProblemSummary; checked: boolean; onCheck: (shift: boolean) => void }) {
+  const { view, openProblem } = useAppState()
   const selected = view.kind === 'problem' && view.id === problem.id
-  const isChecked = checked.includes(problem.id)
   return (
     <div
       className={`group flex cursor-pointer items-center gap-1.5 rounded-md px-1.5 py-1.5 ${
@@ -859,12 +903,17 @@ function ProblemRow({ problem }: { problem: ProblemSummary }) {
       }`}
       onClick={() => openProblem(problem.id)}
     >
-      <label className="flex shrink-0 items-center" onClick={(e) => e.stopPropagation()}>
+      <label className="flex shrink-0 items-center">
         <input
           type="checkbox"
           className="size-3.5 accent-[var(--primary)]"
-          checked={isChecked}
-          onChange={() => toggleChecked(problem.id)}
+          checked={checked}
+          onChange={() => {}}
+          onClick={(e) => {
+            e.stopPropagation()
+            onCheck(e.shiftKey)
+          }}
+          title="勾选（Shift+点击 = 范围选择）"
         />
       </label>
       <Badge variant="outline" className="shrink-0 px-1.5 text-[10px] text-muted-foreground">

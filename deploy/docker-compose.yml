@@ -1,10 +1,10 @@
-# OrangeRepo 生产部署示例
+﻿# OrangeRepo 生产部署示例
 # docker compose up -d   →  http://localhost:8080（默认密码 123456）
 services:
   orangerepo:
     # v1.0.2 起：容器启动时自动修正数据目录属主并降权运行，
     # ./data 绑定挂载开箱即用，宿主机无需任何 chown/setfacl 操作。
-    image: ghcr.io/shinyes/orange_repo:1.8.0
+    image: ghcr.io/shinyes/orange_repo:1.9.0
     container_name: orangerepo
     ports:
       - "8080:8080"

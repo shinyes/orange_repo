@@ -96,16 +96,44 @@ func (s *Store) DeleteTraining(id int64) error {
 		return err
 	}
 	defer tx.Rollback()
-	if _, err := tx.Exec(`DELETE FROM training_items WHERE chapter_id IN (SELECT id FROM training_chapters WHERE training_id=?)`, id); err != nil {
-		return err
-	}
-	if _, err := tx.Exec(`DELETE FROM training_chapters WHERE training_id=?`, id); err != nil {
-		return err
-	}
-	if _, err := tx.Exec(`DELETE FROM trainings WHERE id=?`, id); err != nil {
+	if err := deleteTrainingTx(tx, id); err != nil {
 		return err
 	}
 	return tx.Commit()
+}
+
+// deleteTrainingTx 在已有事务内删除训练（章节/条目），并将仅被该题册引用的题目
+// 一并删除（被其他训练/练习条目引用的题目保留）。
+func deleteTrainingTx(tx *sql.Tx, id int64) error {
+	rows, err := tx.Query(`SELECT ti.problem_id FROM training_items ti
+		JOIN training_chapters tc ON ti.chapter_id=tc.id WHERE tc.training_id=?`, id)
+	if err != nil {
+		return err
+	}
+	var pids []int64
+	for rows.Next() {
+		var pid int64
+		if err := rows.Scan(&pid); err != nil {
+			rows.Close()
+			return err
+		}
+		pids = append(pids, pid)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	rows.Close()
+	for _, q := range []string{
+		`DELETE FROM training_items WHERE chapter_id IN (SELECT id FROM training_chapters WHERE training_id=?)`,
+		`DELETE FROM training_chapters WHERE training_id=?`,
+		`DELETE FROM trainings WHERE id=?`,
+	} {
+		if _, err := tx.Exec(q, id); err != nil {
+			return err
+		}
+	}
+	return deleteOrphanProblems(tx, pids)
 }
 
 // CreateChapter 新建章节，排到末尾。

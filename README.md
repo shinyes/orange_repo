@@ -1,4 +1,4 @@
-# 🍊 OrangeRepo 题库
+﻿# 🍊 OrangeRepo 题库
 
 兼容 [OrangeOJ](https://github.com/shinyes/OrangeOJ) 格式的**纯题库管理 Web 应用**：
 斜杠嵌套标签树（父标签前缀筛选）、题面+答案同屏查看编辑、勾选题目编制训练与练习、ZIP 双向导入导出。
@@ -32,7 +32,7 @@ go run . -seed          # 首次可加 -seed 导入示例包
 ```bash
 docker compose -f deploy/docker-compose.yml up -d
 # 或手动：
-docker run -d -p 8080:8080 -v ./data:/app/data ghcr.io/shinyes/orange_repo:1.8.0
+docker run -d -p 8080:8080 -v ./data:/app/data ghcr.io/shinyes/orange_repo:1.9.0
 ```
 
 镜像基于 distroless/static。容器启动时若为 root，会自动把数据目录属主修正为运行用户 65532 并**立即降权**后再对外服务——因此 `./data:/app/data` 绑定挂载在 Linux 宿主机上开箱即用，无需手动 chown；命名卷（`-v orangerepo-data:/app/data`）同样免配置。

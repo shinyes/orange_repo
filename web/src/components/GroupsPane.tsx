@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type DragEvent } from 'react'
+﻿import { useEffect, useRef, useState, type DragEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
@@ -325,7 +325,7 @@ export function TrainingDetail({ id }: { id: number }) {
         open={confirmDelete}
         onOpenChange={setConfirmDelete}
         title={`删除训练「${training.title}」？`}
-        description="只删除编组结构，不会删除题目本身。"
+        description="将删除该题册及其中的题目；被其他题册引用的题目自动保留。"
         onConfirm={async () => {
           await api.deleteTraining(id)
           await qc.invalidateQueries()
@@ -545,7 +545,7 @@ export function PracticeDetail({ id }: { id: number }) {
         open={confirmDelete}
         onOpenChange={setConfirmDelete}
         title={`删除练习「${practice.title}」？`}
-        description="只删除编组结构，不会删除题目本身。"
+        description="将删除该题册及其中的题目；被其他题册引用的题目自动保留。"
         onConfirm={async () => {
           await api.deletePractice(id)
           await qc.invalidateQueries()

@@ -133,11 +133,11 @@ func TestBookletDirectories(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// 删除「数学竞赛」：子目录「几何」与其中的训练上移一层（到根）
-	if err := s.DeleteBookletDirectory(rootID); err != nil {
+	// 不删题册删除「数学竞赛」：子目录「几何」上移一层；训练A 移到顶层
+	if err := s.DeleteBookletDirectory(rootID, false); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.DeleteBookletDirectory(ghost); err == nil {
+	if err := s.DeleteBookletDirectory(ghost, false); err == nil {
 		t.Error("删除不存在的目录应报错")
 	}
 

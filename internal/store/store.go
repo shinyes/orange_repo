@@ -439,6 +439,27 @@ func (s *Store) DeleteProblem(id int64) error {
 	return tx.Commit()
 }
 
+// deleteOrphanProblems 在已有事务内删除不再被任何训练/练习条目引用的题目。
+// 用于删除题册时的级联：仅被该题册引用的题目一并删除，被多题册引用的保留。
+func deleteOrphanProblems(tx *sql.Tx, pids []int64) error {
+	for _, pid := range pids {
+		var n int
+		err := tx.QueryRow(`SELECT
+			(SELECT COUNT(*) FROM training_items ti JOIN training_chapters tc ON ti.chapter_id=tc.id WHERE ti.problem_id=?)
+			+
+			(SELECT COUNT(*) FROM practice_items WHERE problem_id=?)`, pid, pid).Scan(&n)
+		if err != nil {
+			return err
+		}
+		if n == 0 {
+			if _, err := tx.Exec(`DELETE FROM problems WHERE id=?`, pid); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 // CountProblems 题目总数。
 func (s *Store) CountProblems() (int, error) {
 	var n int

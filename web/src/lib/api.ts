@@ -94,7 +94,7 @@ export const api = {
   },
 
   // ---- 导入导出 ----
-  import: async (file: File, mode: 'problems' | 'training' | 'practice'): Promise<Record<string, unknown>> => {
+  import: async (file: File, mode: 'problems' | 'training' | 'practice' | 'auto'): Promise<Record<string, unknown>> => {
     const body = new FormData()
     body.append('zip', file)
     return req(`/api/import?mode=${mode}`, { method: 'POST', body })
@@ -112,7 +112,8 @@ export const api = {
     req<{ id: number }>('/api/booklet-directories', json({ method: 'POST', body: JSON.stringify({ name, parentId }) })),
   renameBookletDirectory: (id: number, name: string) =>
     req<void>(`/api/booklet-directories/${id}`, json({ method: 'PATCH', body: JSON.stringify({ name }) })),
-  deleteBookletDirectory: (id: number) => req<void>(`/api/booklet-directories/${id}`, { method: 'DELETE' }),
+  deleteBookletDirectory: (id: number, deleteBooklets = false) =>
+    req<void>(`/api/booklet-directories/${id}${deleteBooklets ? '?deleteBooklets=true' : ''}`, { method: 'DELETE' }),
   setBookletDirectoryLayout: (directories: BookletDirectory[]) =>
     req<void>('/api/booklet-directories/layout', json({ method: 'PUT', body: JSON.stringify({ directories }) })),
   setTrainingFolder: (id: number, folderId: number | null) =>

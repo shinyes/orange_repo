@@ -18,6 +18,7 @@ interface AppState {
   patchFilter: (patch: Partial<ProblemFilterState>) => void
   checked: number[]
   toggleChecked: (id: number) => void
+  setChecked: (ids: number[]) => void
   clearChecked: () => void
 }
 
@@ -40,11 +41,12 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const toggleChecked = useCallback((id: number) => {
     setChecked((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
   }, [])
+  const setCheckedIds = useCallback((ids: number[]) => setChecked(ids), [])
   const clearChecked = useCallback(() => setChecked([]), [])
 
   const value = useMemo(
-    () => ({ view, openProblem, openTraining, openPractice, goHome, filter, patchFilter, checked, toggleChecked, clearChecked }),
-    [view, openProblem, openTraining, openPractice, goHome, filter, patchFilter, checked, toggleChecked, clearChecked],
+    () => ({ view, openProblem, openTraining, openPractice, goHome, filter, patchFilter, checked, toggleChecked, setChecked: setCheckedIds, clearChecked }),
+    [view, openProblem, openTraining, openPractice, goHome, filter, patchFilter, checked, toggleChecked, setCheckedIds, clearChecked],
   )
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }

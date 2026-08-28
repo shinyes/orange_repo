@@ -63,14 +63,16 @@ func (s *Server) handleRenameBookletDirectory(c *fiber.Ctx) error {
 	return c.SendStatus(fiber.StatusNoContent)
 }
 
-// handleDeleteBookletDirectory DELETE /api/booklet-directories/:id → 204。
-// 子目录与归属题册上移一层，不删除任何题册。
+// handleDeleteBookletDirectory DELETE /api/booklet-directories/:id[?deleteBooklets=true] → 204。
+// deleteBooklets=true：直接归属的训练/练习一并删除；否则它们移到顶层。
+// 子目录总是上移一层，不删除数据。
 func (s *Server) handleDeleteBookletDirectory(c *fiber.Ctx) error {
 	id, err := paramID(c, "id")
 	if err != nil {
 		return respondError(c, fiber.StatusBadRequest, err.Error())
 	}
-	if err := s.Store.DeleteBookletDirectory(id); err != nil {
+	deleteBooklets := c.Query("deleteBooklets") == "true" || c.Query("deleteBooklets") == "1"
+	if err := s.Store.DeleteBookletDirectory(id, deleteBooklets); err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			return respondError(c, fiber.StatusNotFound, "directory not found")
 		}

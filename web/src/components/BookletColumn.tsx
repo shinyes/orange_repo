@@ -19,6 +19,16 @@ import {
 } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -41,7 +51,7 @@ import { api } from '@/lib/api'
 import { useAppState } from '@/lib/app-context'
 import { useMenuAnchorHold } from '@/lib/use-menu-anchor-hold'
 import type { BookletDirectory } from '@/lib/types'
-import { ConfirmDialog, ImportDialog, type ImportMode } from './dialogs'
+import { ConfirmDialog, ImportDialog } from './dialogs'
 
 type BookletItem = { id: number; type: 'training' | 'practice'; title: string; count: number; folderId: number | null }
 
@@ -66,7 +76,7 @@ export function BookletColumn() {
   const [expanded, setExpanded] = useState<Record<number, boolean>>({})
   const [activeFolderId, setActiveFolderId] = useState<number | null>(null)
   const [creating, setCreating] = useState<'training' | 'practice' | 'directory' | null>(null)
-  const [importing, setImporting] = useState<ImportMode | null>(null)
+  const [importOpen, setImportOpen] = useState(false)
   const [renamingId, setRenamingId] = useState<number | null>(null)
   const [deletingDir, setDeletingDir] = useState<FolderNode | null>(null)
   const [drag, setDrag] = useState<DragState>(null)
@@ -315,11 +325,8 @@ export function BookletColumn() {
                 <FolderPlusIcon /> 新建目录
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => setImporting('training')}>
-                <UploadIcon /> 导入训练…
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setImporting('practice')}>
-                <UploadIcon /> 导入练习…
+              <DropdownMenuItem onClick={() => setImportOpen(true)}>
+                <UploadIcon /> 导入题册…
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -431,23 +438,35 @@ export function BookletColumn() {
         onSubmit={(name) => creating && void createItem(creating, name)}
       />
 
-      {/* 导入训练/练习 */}
+      {/* 导入题册：自动识别（上传即确定，无需选择模式） */}
       <ImportDialog
-        open={importing !== null}
-        onOpenChange={(v) => !v && setImporting(null)}
-        fixedMode={importing ?? 'training'}
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        fixedMode="auto"
       />
 
-      {/* 删除目录确认 */}
-      <ConfirmDialog
-        open={deletingDir !== null}
-        onOpenChange={(v) => !v && setDeletingDir(null)}
-        title={`删除目录「${deletingDir?.dir.name ?? ''}」？`}
-        description={getDescendantCount(deletingDir) > 0 ? '其子目录与归属题册将上移一层，题册本身不会被删除。' : '该目录下的题册将移到根目录，不会被删除。'}
-        onConfirm={async () => {
+      {/* 删除目录：选择题册处理方式 */}
+      <DeleteDirectoryDialog
+        node={deletingDir}
+        bookletCount={deletingDir ? items.filter((it) => it.folderId === deletingDir.dir.id).length : 0}
+        onClose={() => setDeletingDir(null)}
+        onMoveToTop={async () => {
           if (!deletingDir) return
           try {
-            await api.deleteBookletDirectory(deletingDir.dir.id)
+            await api.deleteBookletDirectory(deletingDir.dir.id, false)
+            toast.success(`已删除目录「${deletingDir.dir.name}」，${items.filter((it) => it.folderId === deletingDir.dir.id).length} 个题册移到顶层`)
+            if (activeFolderId === deletingDir.dir.id) setActiveFolderId(null)
+            await invalidateBooklets()
+            setDeletingDir(null)
+          } catch (e) {
+            toast.error(e instanceof Error ? e.message : '删除失败')
+          }
+        }}
+        onDeleteBooklets={async () => {
+          if (!deletingDir) return
+          try {
+            await api.deleteBookletDirectory(deletingDir.dir.id, true)
+            toast.success(`已删除目录「${deletingDir.dir.name}」及其中的题册`)
             if (activeFolderId === deletingDir.dir.id) setActiveFolderId(null)
             await invalidateBooklets()
             setDeletingDir(null)
@@ -457,6 +476,39 @@ export function BookletColumn() {
         }}
       />
     </div>
+  )
+}
+
+// ---------- 删除目录对话框（选择题册处理方式） ----------
+
+function DeleteDirectoryDialog(props: {
+  node: FolderNode | null
+  bookletCount: number
+  onClose: () => void
+  onMoveToTop: () => void
+  onDeleteBooklets: () => void
+}) {
+  return (
+    <AlertDialog open={props.node !== null} onOpenChange={(v) => !v && props.onClose()}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>删除目录「{props.node?.dir.name ?? ''}」？</AlertDialogTitle>
+          <AlertDialogDescription>
+            其下 {props.bookletCount} 个题册如何处理（子目录将上移一层）？题册本身不会被无辜删除。
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>取消</AlertDialogCancel>
+          <AlertDialogAction onClick={() => void props.onMoveToTop()}>移到顶层（保留题册）</AlertDialogAction>
+          <AlertDialogAction
+            className="bg-destructive/10 text-destructive hover:bg-destructive/20 focus-visible:border-destructive/40 focus-visible:ring-destructive/20"
+            onClick={() => void props.onDeleteBooklets()}
+          >
+            连同题册删除
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   )
 }
 
@@ -487,12 +539,6 @@ function folderNameOf(nodes: FolderNode[], id: number): string | null {
     if (hit) return hit
   }
   return null
-}
-
-// 直接子目录数量（用于删除确认文案）
-function getDescendantCount(node: FolderNode | null): number {
-  if (!node) return 0
-  return node.children.reduce((acc, c) => acc + 1 + getDescendantCount(c), 0)
 }
 
 function countInSubtree(node: FolderNode, items: BookletItem[]): number {
@@ -717,9 +763,29 @@ function BookletRow(props: {
   onDragOver?: (e: DragEvent) => void
 }) {
   const { item } = props
+  const qc = useQueryClient()
+  const { view, goHome } = useAppState()
   const [menuOpen, setMenuOpen, anchorVisible] = useMenuAnchorHold()
+  const [confirmDelete, setConfirmDelete] = useState(false)
   const isDragged = props.drag?.kind === 'booklet' && props.drag.item.type === item.type && props.drag.item.id === item.id
   const exportUrl = item.type === 'training' ? api.exportTrainingUrl(item.id) : api.exportPracticeUrl(item.id)
+
+  async function removeBooklet() {
+    try {
+      if (item.type === 'training') await api.deleteTraining(item.id)
+      else await api.deletePractice(item.id)
+      toast.success(`已删除「${item.title}」`)
+      if (view.kind === item.type && view.id === item.id) goHome()
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['trainings'] }),
+        qc.invalidateQueries({ queryKey: ['practices'] }),
+        qc.invalidateQueries({ queryKey: ['booklet-directories'] }),
+      ])
+      setConfirmDelete(false)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : '删除失败')
+    }
+  }
 
   return (
     <div className="group flex items-center" style={{ paddingLeft: `${props.level * 14}px` }}>
@@ -752,9 +818,19 @@ function BookletRow(props: {
             <DropdownMenuItem onClick={() => window.open(exportUrl)}>
               <DownloadIcon className="size-3.5" /> 下载（导出 ZIP）
             </DropdownMenuItem>
+            <DropdownMenuItem variant="destructive" onClick={() => setConfirmDelete(true)}>
+              <TrashIcon className="size-3.5" /> 删除
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
+      <ConfirmDialog
+        open={confirmDelete}
+        onOpenChange={setConfirmDelete}
+        title={`删除${item.type === 'training' ? '训练' : '练习'}「${item.title}」？`}
+        description={`将删除该${item.type === 'training' ? '训练' : '练习'}及其中的题目；被其他题册引用的题目自动保留。`}
+        onConfirm={() => void removeBooklet()}
+      />
     </div>
   )
 }
