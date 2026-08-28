@@ -19,8 +19,8 @@ import { Separator } from '@/components/ui/separator'
 import { api } from '@/lib/api'
 import { useAppState } from '@/lib/app-context'
 import type { Chapter, Item } from '@/lib/types'
-import { ConfirmDialog } from './dialogs'
-import { Empty } from './ProblemPane'
+import { ConfirmDialog, ProblemPreviewDialog } from './dialogs'
+import { Empty } from './problem-view'
 
 type DragState =
   | { kind: 'item'; itemId: number; fromChapterId: number }
@@ -34,7 +34,8 @@ export function TrainingDetail({ id }: { id: number }) {
   const [newChapter, setNewChapter] = useState('')
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [collapsed, setCollapsed] = useState<Record<number, boolean>>({})
-  const [editMode, setEditMode] = useState(true)
+  const [editMode, setEditMode] = useState(false) // 默认查看模式
+  const [previewId, setPreviewId] = useState<number | null>(null)
   const [localTitle, setLocalTitle] = useState('')
   const [localDescription, setLocalDescription] = useState('')
   const [lastTrainingId, setLastTrainingId] = useState(0)
@@ -225,9 +226,11 @@ export function TrainingDetail({ id }: { id: number }) {
         onDescriptionChange={handleDescriptionChange}
       />
 
-      <p className="mb-3 text-xs text-muted-foreground">
-        拖住 ⋮ 手柄移动题目（可跨章节）；拖住章节手柄调整章节顺序（拖动时章节自动折叠）。
-      </p>
+      {editMode && (
+        <p className="mb-3 text-xs text-muted-foreground">
+          拖住 ⋮ 手柄移动题目（可跨章节）；拖住章节手柄调整章节顺序（拖动时章节自动折叠）。
+        </p>
+      )}
 
       {/* 章节列表：章节拖放落点在容器层统一处理 */}
       <div
@@ -277,6 +280,7 @@ export function TrainingDetail({ id }: { id: number }) {
               }}
               onChapterDragOver={handleChapterDragOver}
               onChapterBodyDragOver={(chapterId, count, e) => handleItemDragOver(chapterId, count, e)}
+              onPreview={setPreviewId}
             />
           </div>
         ))}
@@ -328,6 +332,9 @@ export function TrainingDetail({ id }: { id: number }) {
           goHome()
         }}
       />
+
+      {/* 条目点击 → 题目预览浮窗 */}
+      <ProblemPreviewDialog open={previewId !== null} problemId={previewId} onOpenChange={(v) => !v && setPreviewId(null)} />
     </div>
   )
 }
@@ -342,7 +349,8 @@ export function PracticeDetail({ id }: { id: number }) {
   const { goHome } = useAppState()
   const q = useQuery({ queryKey: ['practice', id], queryFn: () => api.getPractice(id) })
   const [confirmDelete, setConfirmDelete] = useState(false)
-  const [editMode, setEditMode] = useState(true)
+  const [editMode, setEditMode] = useState(false) // 默认查看模式
+  const [previewId, setPreviewId] = useState<number | null>(null)
   const [localTitle, setLocalTitle] = useState('')
   const [localDescription, setLocalDescription] = useState('')
   const [lastPracticeId, setLastPracticeId] = useState(0)
@@ -479,9 +487,11 @@ export function PracticeDetail({ id }: { id: number }) {
                 void commitDrop(itemDropIndex(i, e))
               } : undefined}
               onDragEnd={endItemDrag}
-              className={`flex items-center gap-2 rounded-lg border p-2.5 ${
+              onClick={() => setPreviewId(it.problemId)}
+              className={`flex cursor-pointer items-center gap-2 rounded-lg border p-2.5 ${
                 editMode && dragId === it.id ? 'opacity-40' : ''
-              } ${editMode ? 'cursor-grab active:cursor-grabbing' : ''}`}
+              } ${editMode ? 'cursor-grab active:cursor-grabbing' : 'hover:bg-muted/40'}`}
+              title="点击查看题目"
             >
               {editMode && <GripVerticalIcon className="size-4 shrink-0 text-muted-foreground/60" />}
               <span className="w-6 text-center text-xs text-muted-foreground">{i + 1}</span>
@@ -490,7 +500,15 @@ export function PracticeDetail({ id }: { id: number }) {
               </Badge>
               <span className="min-w-0 flex-1 truncate text-sm">{it.problemTitle || `#${it.problemId}`}</span>
               {editMode && (
-                <Button size="icon-xs" variant="ghost" className="text-destructive" onClick={() => removeItem(it.id)}>
+                <Button
+                  size="icon-xs"
+                  variant="ghost"
+                  className="text-destructive"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    void removeItem(it.id)
+                  }}
+                >
                   <TrashIcon />
                 </Button>
               )}
@@ -534,6 +552,9 @@ export function PracticeDetail({ id }: { id: number }) {
           goHome()
         }}
       />
+
+      {/* 条目点击 → 题目预览浮窗 */}
+      <ProblemPreviewDialog open={previewId !== null} problemId={previewId} onOpenChange={(v) => !v && setPreviewId(null)} />
     </div>
   )
 }
@@ -625,6 +646,7 @@ function ChapterCard(props: {
   onToggleCollapse: () => void
   onChanged: () => void
   onAddChecked: () => void
+  onPreview: (problemId: number) => void
   onItemDragStart: (item: Item, chapterId: number, e: DragEvent) => void
   onChapterDragStart: (chapterId: number, e: DragEvent) => void
   onItemDragOver: (chapterId: number, index: number, e: DragEvent) => void
@@ -726,11 +748,13 @@ function ChapterCard(props: {
                 onDragStart={props.editMode ? (e) => props.onItemDragStart(it, ch.id, e) : undefined}
                 onDragOver={props.editMode ? (e) => props.onItemDragOver(ch.id, i, e) : undefined}
                 onDrop={props.editMode ? (e) => props.onItemDrop(ch.id, i, e) : undefined}
-                className={`group flex items-center gap-2 px-3 py-1.5 ${
+                onClick={() => props.onPreview(it.problemId)}
+                className={`group flex cursor-pointer items-center gap-2 px-3 py-1.5 ${
                   props.editMode ? 'cursor-grab active:cursor-grabbing' : ''
                 } ${
                   props.editMode && props.drag?.kind === 'item' && props.drag.itemId === it.id ? 'opacity-40' : 'hover:bg-muted/60'
                 }`}
+                title="点击查看题目"
               >
                 {props.editMode && <GripVerticalIcon className="size-3.5 shrink-0 text-muted-foreground/60" />}
                 <span className="w-6 text-center text-xs text-muted-foreground">{i + 1}</span>
@@ -740,7 +764,10 @@ function ChapterCard(props: {
                     size="icon-xs"
                     variant="ghost"
                     className="opacity-0 transition-opacity group-hover:opacity-100"
-                    onClick={() => removeItem(it)}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      removeItem(it)
+                    }}
                     title="从章节移除"
                   >
                     <TrashIcon />

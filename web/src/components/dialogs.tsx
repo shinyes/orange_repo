@@ -28,6 +28,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { api } from '@/lib/api'
 import { useAppState } from '@/lib/app-context'
 import type { Practice, ProblemType, Training } from '@/lib/types'
+import { ProblemView } from './problem-view'
 
 // ---------- 删除确认 ----------
 
@@ -132,9 +133,20 @@ export function NewProblemDialog({ open, onOpenChange }: { open: boolean; onOpen
 
 // ---------- 导入 ZIP ----------
 
-export function ImportDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
+export type ImportMode = 'problems' | 'training' | 'practice'
+
+// fixedMode 非空时锁定导入方式（题目栏=仅题目；题册栏=训练/练习），隐藏模式选择区。
+export function ImportDialog({
+  open,
+  onOpenChange,
+  fixedMode,
+}: {
+  open: boolean
+  onOpenChange: (v: boolean) => void
+  fixedMode?: ImportMode
+}) {
   const fileRef = useRef<HTMLInputElement>(null)
-  const [mode, setMode] = useState<'problems' | 'training' | 'practice'>('problems')
+  const [mode, setMode] = useState<ImportMode>(fixedMode ?? 'problems')
   const [busy, setBusy] = useState(false)
   const qc = useQueryClient()
 
@@ -169,6 +181,7 @@ export function ImportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
     { value: 'training', label: '导入为训练', desc: '按 trainingPlan.json 章节结构建训练', icon: FolderPlusIcon },
     { value: 'practice', label: '导入为练习', desc: '按题目顺序建立平铺练习', icon: ListChecksIcon },
   ] as const
+  const modeLabel: Record<ImportMode, string> = { problems: '仅导入题目', training: '导入为训练', practice: '导入为练习' }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -176,6 +189,7 @@ export function ImportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <UploadIcon className="size-4" /> 导入 OrangeOJ ZIP 包
+            {fixedMode && <span className="text-sm font-normal text-muted-foreground">（{modeLabel[fixedMode]}）</span>}
           </DialogTitle>
           <DialogDescription>兼容 OrangeOJ 导出格式：problems.json + trainingPlan.json + images/。</DialogDescription>
         </DialogHeader>
@@ -185,27 +199,29 @@ export function ImportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
           accept=".zip"
           className="w-full cursor-pointer rounded-lg border border-input bg-transparent p-2 text-sm file:mr-3 file:cursor-pointer file:rounded-md file:border-0 file:bg-muted file:px-3 file:py-1.5 file:text-sm"
         />
-        <div className="space-y-1.5">
-          <Label>导入方式</Label>
-          <div className="grid gap-1.5">
-            {modes.map((m) => (
-              <button
-                key={m.value}
-                type="button"
-                onClick={() => setMode(m.value)}
-                className={`flex items-start gap-2.5 rounded-lg border p-2.5 text-left transition-colors ${
-                  mode === m.value ? 'border-primary bg-primary/5' : 'hover:bg-muted'
-                }`}
-              >
-                <m.icon className={`mt-0.5 size-4 ${mode === m.value ? 'text-primary' : 'text-muted-foreground'}`} />
-                <span>
-                  <span className="block text-sm font-medium">{m.label}</span>
-                  <span className="block text-xs text-muted-foreground">{m.desc}</span>
-                </span>
-              </button>
-            ))}
+        {!fixedMode && (
+          <div className="space-y-1.5">
+            <Label>导入方式</Label>
+            <div className="grid gap-1.5">
+              {modes.map((m) => (
+                <button
+                  key={m.value}
+                  type="button"
+                  onClick={() => setMode(m.value)}
+                  className={`flex items-start gap-2.5 rounded-lg border p-2.5 text-left transition-colors ${
+                    mode === m.value ? 'border-primary bg-primary/5' : 'hover:bg-muted'
+                  }`}
+                >
+                  <m.icon className={`mt-0.5 size-4 ${mode === m.value ? 'text-primary' : 'text-muted-foreground'}`} />
+                  <span>
+                    <span className="block text-sm font-medium">{m.label}</span>
+                    <span className="block text-xs text-muted-foreground">{m.desc}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             取消
@@ -214,6 +230,34 @@ export function ImportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
             {busy ? '导入中…' : '开始导入'}
           </Button>
         </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ---------- 题目预览浮窗（训练/练习条目点击弹出） ----------
+
+export function ProblemPreviewDialog(props: {
+  open: boolean
+  problemId: number | null
+  onOpenChange: (v: boolean) => void
+}) {
+  const q = useQuery({
+    queryKey: ['problem', props.problemId],
+    queryFn: () => api.getProblem(props.problemId as number),
+    enabled: props.open && props.problemId !== null,
+  })
+  return (
+    <Dialog open={props.open} onOpenChange={props.onOpenChange}>
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-3xl">
+        <DialogHeader>
+          <DialogTitle>题目预览</DialogTitle>
+        </DialogHeader>
+        {q.data ? (
+          <ProblemView problem={q.data.problem} />
+        ) : (
+          <div className="py-8 text-center text-sm text-muted-foreground">加载中…</div>
+        )}
       </DialogContent>
     </Dialog>
   )

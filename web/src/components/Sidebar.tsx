@@ -54,7 +54,6 @@ export function TagFilterColumn({ onLogout, onOpenSettings }: { onLogout: () => 
         <span className="flex size-8 items-center justify-center rounded-lg bg-primary text-lg text-primary-foreground">🍊</span>
         <div className="min-w-0 flex-1 leading-tight">
           <div className="truncate text-sm font-semibold">OrangeRepo</div>
-          <div className="text-[10px] text-muted-foreground">标签筛选</div>
         </div>
         <Button variant="ghost" size="icon-sm" title="修改密码" onClick={onOpenSettings}>
           <SettingsIcon />
@@ -109,40 +108,50 @@ export function TagFilterColumn({ onLogout, onOpenSettings }: { onLogout: () => 
 
 // 第二栏：题目查看（操作 / 批量 / 题目列表 / 训练练习）。
 export function ProblemListColumn({ showBooklets, onToggleBooklets }: { showBooklets: boolean; onToggleBooklets: () => void }) {
-  const { checked, clearChecked } = useAppState()
+  const { checked, clearChecked, filter } = useAppState()
   const [newProblem, setNewProblem] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
   const [addToGroup, setAddToGroup] = useState<'training' | 'practice' | null>(null)
+  // 与 ProblemList 同 key 共享缓存：标题行计数
+  const countQ = useQuery({ queryKey: ['problems', filter], queryFn: () => api.problems(filter) })
 
   return (
     <div className="flex h-full flex-col bg-background">
-      {/* 操作区 */}
-      <div className="flex items-center gap-1.5 px-3 pt-3">
-        <Button size="sm" className="flex-1" onClick={() => setNewProblem(true)}>
-          <PlusIcon data-icon="inline-start" /> 题目
-        </Button>
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            className="inline-flex size-8 items-center justify-center rounded-lg border border-input bg-transparent text-sm transition-colors hover:bg-muted"
-            title="导入 ZIP"
+      {/* 标题行：题目 + 计数 + 操作（+题目下拉 / 导出 / 题册栏开关），样式对齐题册栏 */}
+      <div className="mb-2 flex items-center gap-1.5 px-3 pt-3">
+        <span className="text-sm font-semibold">题目</span>
+        <Badge variant="secondary" className="h-4 px-1.5 text-[10px] tabular-nums">
+          {countQ.data?.problems.length ?? '…'}
+        </Badge>
+        <div className="ml-auto flex items-center gap-1.5">
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              className="inline-flex h-7 items-center gap-1 rounded-lg border border-input bg-background px-2 text-[0.8rem] font-medium transition-colors hover:bg-muted"
+              title="新建或导入题目"
+            >
+              <PlusIcon data-icon="inline-start" size={14} /> 题目
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => setNewProblem(true)}>
+                <PlusIcon className="size-3.5" /> 新建题目
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setImportOpen(true)}>
+                <UploadIcon className="size-3.5" /> 导入题目 ZIP…
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <ExportDropdown />
+          <button
+            type="button"
+            onClick={onToggleBooklets}
+            title={showBooklets ? '收起题册栏' : '展开题册栏'}
+            className={`inline-flex size-7 items-center justify-center rounded-lg border border-input bg-transparent text-sm transition-colors ${
+              showBooklets ? 'bg-primary/10 text-primary' : 'hover:bg-muted'
+            }`}
           >
-            <UploadIcon className="size-4" />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start">
-            <DropdownMenuItem onClick={() => setImportOpen(true)}>导入 OrangeOJ ZIP…</DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-        <ExportDropdown />
-        <button
-          type="button"
-          onClick={onToggleBooklets}
-          title={showBooklets ? '收起题册栏' : '展开题册栏'}
-          className={`inline-flex size-8 items-center justify-center rounded-lg border border-input bg-transparent text-sm transition-colors ${
-            showBooklets ? 'bg-primary/10 text-primary' : 'hover:bg-muted'
-          }`}
-        >
-          <BookOpenIcon className="size-4" />
-        </button>
+            <BookOpenIcon className="size-4" />
+          </button>
+        </div>
       </div>
 
       {/* 题目列表 */}
@@ -170,7 +179,7 @@ export function ProblemListColumn({ showBooklets, onToggleBooklets }: { showBook
 
       {/* 对话框 */}
       <NewProblemDialog open={newProblem} onOpenChange={setNewProblem} />
-      <ImportDialog open={importOpen} onOpenChange={setImportOpen} />
+      <ImportDialog open={importOpen} onOpenChange={setImportOpen} fixedMode="problems" />
       <AddToGroupDialog
         open={addToGroup !== null}
         onOpenChange={(v) => !v && setAddToGroup(null)}

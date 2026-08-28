@@ -4,6 +4,7 @@ import { toast } from 'sonner'
 import {
   CheckIcon,
   ChevronRightIcon,
+  DownloadIcon,
   FileCodeIcon,
   FolderIcon,
   FolderPlusIcon,
@@ -13,6 +14,7 @@ import {
   PlusIcon,
   SearchIcon,
   TrashIcon,
+  UploadIcon,
   XIcon,
 } from 'lucide-react'
 
@@ -29,6 +31,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
@@ -38,7 +41,7 @@ import { api } from '@/lib/api'
 import { useAppState } from '@/lib/app-context'
 import { useMenuAnchorHold } from '@/lib/use-menu-anchor-hold'
 import type { BookletDirectory } from '@/lib/types'
-import { ConfirmDialog } from './dialogs'
+import { ConfirmDialog, ImportDialog, type ImportMode } from './dialogs'
 
 type BookletItem = { id: number; type: 'training' | 'practice'; title: string; count: number; folderId: number | null }
 
@@ -63,6 +66,7 @@ export function BookletColumn() {
   const [expanded, setExpanded] = useState<Record<number, boolean>>({})
   const [activeFolderId, setActiveFolderId] = useState<number | null>(null)
   const [creating, setCreating] = useState<'training' | 'practice' | 'directory' | null>(null)
+  const [importing, setImporting] = useState<ImportMode | null>(null)
   const [renamingId, setRenamingId] = useState<number | null>(null)
   const [deletingDir, setDeletingDir] = useState<FolderNode | null>(null)
   const [drag, setDrag] = useState<DragState>(null)
@@ -296,7 +300,7 @@ export function BookletColumn() {
           <DropdownMenu>
             <DropdownMenuTrigger
               className="ml-auto inline-flex h-7 items-center gap-1 rounded-lg border border-input bg-background px-2 text-[0.8rem] font-medium transition-colors hover:bg-muted"
-              title="新建题册或目录"
+              title="新建或导入题册"
             >
               <PlusIcon data-icon="inline-start" size={14} /> 题册
             </DropdownMenuTrigger>
@@ -309,6 +313,13 @@ export function BookletColumn() {
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setCreating('directory')}>
                 <FolderPlusIcon /> 新建目录
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => setImporting('training')}>
+                <UploadIcon /> 导入训练…
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setImporting('practice')}>
+                <UploadIcon /> 导入练习…
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -418,6 +429,13 @@ export function BookletColumn() {
         kind={creating}
         onOpenChange={(v) => !v && setCreating(null)}
         onSubmit={(name) => creating && void createItem(creating, name)}
+      />
+
+      {/* 导入训练/练习 */}
+      <ImportDialog
+        open={importing !== null}
+        onOpenChange={(v) => !v && setImporting(null)}
+        fixedMode={importing ?? 'training'}
       />
 
       {/* 删除目录确认 */}
@@ -686,7 +704,7 @@ function FolderRow(props: {
   )
 }
 
-// ---------- 题册行 ----------
+// ---------- 题册行（紧凑单行 + 更多菜单） ----------
 
 function BookletRow(props: {
   item: BookletItem
@@ -699,9 +717,12 @@ function BookletRow(props: {
   onDragOver?: (e: DragEvent) => void
 }) {
   const { item } = props
+  const [menuOpen, setMenuOpen, anchorVisible] = useMenuAnchorHold()
   const isDragged = props.drag?.kind === 'booklet' && props.drag.item.type === item.type && props.drag.item.id === item.id
+  const exportUrl = item.type === 'training' ? api.exportTrainingUrl(item.id) : api.exportPracticeUrl(item.id)
+
   return (
-    <div className="flex items-center" style={{ paddingLeft: `${props.level * 14}px` }}>
+    <div className="group flex items-center" style={{ paddingLeft: `${props.level * 14}px` }}>
       <button
         type="button"
         draggable
@@ -709,26 +730,31 @@ function BookletRow(props: {
         onDragEnd={props.onDragEnd}
         onDragOver={props.onDragOver}
         onClick={props.onClick}
-        className={`group flex w-full items-start gap-2 rounded-md px-2 py-2 text-left transition-colors ${
+        className={`flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 py-1.5 text-left transition-colors ${
           props.active ? 'bg-accent text-accent-foreground' : 'hover:bg-muted'
         } ${isDragged ? 'opacity-40' : ''}`}
         title="点击打开；可拖入目录或根区域"
       >
         {item.type === 'training' ? (
-          <FileCodeIcon className="mt-0.5 size-3.5 shrink-0 text-primary/70" />
+          <FileCodeIcon className="size-3.5 shrink-0 text-primary/70" />
         ) : (
-          <ListChecksIcon className="mt-0.5 size-3.5 shrink-0 text-primary/70" />
+          <ListChecksIcon className="size-3.5 shrink-0 text-primary/70" />
         )}
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-sm">{item.title}</div>
-          <div className="mt-0.5 flex items-center gap-1.5">
-            <Badge variant="outline" className="h-3.5 px-1 text-[9px]">
-              {item.type === 'training' ? '训练' : '练习'}
-            </Badge>
-            <span className="text-[10px] text-muted-foreground">{item.count} 题</span>
-          </div>
-        </div>
+        <span className="min-w-0 flex-1 truncate text-sm">{item.title}</span>
+        <span className="shrink-0 text-[10px] text-muted-foreground">{item.count} 题</span>
       </button>
+      <div className={`shrink-0 items-center ${anchorVisible ? 'flex' : 'hidden group-hover:flex'}`}>
+        <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
+          <DropdownMenuTrigger className="rounded p-1 hover:bg-background" title="题册操作" onClick={(e) => e.stopPropagation()}>
+            <MoreVerticalIcon className="size-3.5" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={() => window.open(exportUrl)}>
+              <DownloadIcon className="size-3.5" /> 下载（导出 ZIP）
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
     </div>
   )
 }
