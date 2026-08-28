@@ -575,7 +575,7 @@ function FolderRow(props: {
   onItemDragOver: (e: DragEvent) => void
 }) {
   const { node, level } = props
-  const open = props.expanded[node.dir.id] ?? true
+  const open = props.expanded[node.dir.id] ?? false // 默认折叠
   // 菜单锚点保持：打开期间及关闭动画期间强制可见，防止弹层闪现左上角
   const [menuOpen, setMenuOpen, anchorVisible] = useMenuAnchorHold()
   const [renameValue, setRenameValue] = useState(node.dir.name)

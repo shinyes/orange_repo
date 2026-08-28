@@ -452,7 +452,7 @@ function TagTreePanel() {
   }, [raw, sortBy, search, tagOrder])
 
   const allPaths = useMemo(() => collectPaths(tree), [tree])
-  const isOpen = (tag: string) => expanded[tag] ?? !tag.includes('/')
+  const isOpen = (tag: string) => expanded[tag] ?? false // 默认折叠
 
   function toggleSelect(tag: string) {
     patchFilter({
@@ -706,7 +706,7 @@ function TagRow(props: {
   // 点击菜单项关闭后也短暂保持，避免关闭动画期间 positioner 塌缩到左上角闪现
   const [menuOpen, setMenuOpen, anchorVisible] = useMenuAnchorHold()
   const hasChildren = node.children.length > 0
-  const open = props.expanded[node.tag] ?? level === 0
+  const open = props.expanded[node.tag] ?? false // 默认折叠
   const active = props.selected.includes(node.tag)
   const implied = !active && impliedBySelected(node.tag, props.selected)
   const isDraggedTag = props.tagDragFrom === node.tag
