@@ -18,12 +18,14 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { api } from '@/lib/api'
 import { useAppState } from '@/lib/app-context'
 import { Markdown } from '@/lib/markdown'
 import type {
   Problem,
+  ProblemPayload,
   ProblemType,
   ProgrammingBody,
   ProgrammingCase,
@@ -142,34 +144,98 @@ export function ProblemEditor({ problem, onSaved }: { problem: Problem; onSaved:
   const [previewStatement, setPreviewStatement] = useState(false)
   const statementRef = useRef<HTMLTextAreaElement>(null)
   const imageInputRef = useRef<HTMLInputElement>(null)
+  // 表单 / JSON 双模式
+  const [editorTab, setEditorTab] = useState<'form' | 'json'>('form')
+  const [jsonText, setJsonText] = useState('')
   const patch = (p: Partial<EditState>) => setS((prev) => ({ ...prev, ...p }))
 
+  /** 把表单状态序列化为题目 JSON（视图结构，与保存载荷一致）。 */
+  function stateToJson(): Record<string, unknown> {
+    let bodyJson: Record<string, unknown> = {}
+    let answerJson: Record<string, unknown> = {}
+    if (s.type === 'programming') {
+      bodyJson = { inputFormat: s.inputFormat, outputFormat: s.outputFormat, samples: s.samples, testCases: s.testCases }
+      answerJson = {}
+    } else if (s.type === 'single_choice') {
+      bodyJson = { options: s.options }
+      answerJson = { answerIndex: s.answerIndex }
+    } else {
+      bodyJson = {}
+      answerJson = { answer: s.tfAnswer }
+    }
+    return {
+      type: s.type,
+      title: s.title,
+      tags: s.tags,
+      statementMd: s.statementMd,
+      bodyJson,
+      answerJson,
+      solutions: s.solutions,
+      timeLimitMs: s.type === 'programming' ? s.limits.time : undefined,
+      memoryLimitMiB: s.type === 'programming' ? s.limits.memory : undefined,
+    }
+  }
+
+  /** 由表单状态构造保存载荷。 */
+  function payloadFromState(): ProblemPayload {
+    const j = stateToJson()
+    return {
+      type: j.type as ProblemType,
+      title: j.title as string,
+      tags: j.tags as string[],
+      statementMd: j.statementMd as string,
+      bodyJson: j.bodyJson as Record<string, unknown>,
+      answerJson: j.answerJson as Record<string, unknown>,
+      solutions: j.solutions as Solution[] | undefined,
+      timeLimitMs: j.timeLimitMs as number | undefined,
+      memoryLimitMiB: j.memoryLimitMiB as number | undefined,
+    }
+  }
+
+  function switchTab(tab: 'form' | 'json') {
+    if (tab === 'json' && editorTab !== 'json') {
+      setJsonText(JSON.stringify(stateToJson(), null, 2))
+    }
+    setEditorTab(tab)
+  }
+
+  /** JSON 模式提交：解析校验 → 题型不可更改 → 构造载荷保存。 */
+  function handleJsonSave() {
+    let data: Record<string, unknown>
+    try {
+      data = JSON.parse(jsonText)
+    } catch (e) {
+      toast.error(`JSON 格式错误：${(e as Error).message}`)
+      return
+    }
+    if (typeof data !== 'object' || data === null || Array.isArray(data)) {
+      toast.error('JSON 内容应为对象')
+      return
+    }
+    if (typeof data.type === 'string' && data.type !== s.type) {
+      toast.error('题型不可修改：JSON 中的 type 与当前题型不一致')
+      return
+    }
+    const str = (v: unknown, fb: string) => (typeof v === 'string' ? v : fb)
+    const arr = (v: unknown, fb: unknown[]) => (Array.isArray(v) ? v : fb)
+    const num = (v: unknown, fb: number) => (typeof v === 'number' && Number.isFinite(v) ? v : fb)
+    const obj = (v: unknown, fb: Record<string, unknown>) =>
+      v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : fb
+    save.mutate({
+      type: s.type, // 恒以当前题型为准
+      title: str(data.title, s.title).trim() || s.title,
+      tags: arr(data.tags, s.tags).filter((x): x is string => typeof x === 'string'),
+      statementMd: str(data.statementMd, s.statementMd),
+      bodyJson: obj(data.bodyJson, s.type === 'programming' ? { inputFormat: s.inputFormat, outputFormat: s.outputFormat, samples: s.samples, testCases: s.testCases } : s.type === 'single_choice' ? { options: s.options } : {}),
+      answerJson: obj(data.answerJson, s.type === 'single_choice' ? { answerIndex: s.answerIndex } : s.type === 'true_false' ? { answer: s.tfAnswer } : {}),
+      solutions: arr(data.solutions, s.solutions) as Solution[],
+      timeLimitMs: s.type === 'programming' ? num(data.timeLimitMs, s.limits.time) : undefined,
+      memoryLimitMiB: s.type === 'programming' ? num(data.memoryLimitMiB, s.limits.memory) : undefined,
+    })
+  }
+
   const save = useMutation({
-    mutationFn: async () => {
-      let bodyJson: Record<string, unknown> = {}
-      let answerJson: Record<string, unknown> = {}
-      if (s.type === 'programming') {
-        bodyJson = { inputFormat: s.inputFormat, outputFormat: s.outputFormat, samples: s.samples, testCases: s.testCases }
-        answerJson = {}
-      } else if (s.type === 'single_choice') {
-        bodyJson = { options: s.options }
-        answerJson = { answerIndex: s.answerIndex }
-      } else {
-        bodyJson = {}
-        answerJson = { answer: s.tfAnswer }
-      }
-      return api.updateProblem(problem.id, {
-        type: s.type,
-        title: s.title,
-        tags: s.tags,
-        statementMd: s.statementMd,
-        bodyJson,
-        answerJson,
-        solutions: s.solutions,
-        timeLimitMs: s.type === 'programming' ? s.limits.time : undefined,
-        memoryLimitMiB: s.type === 'programming' ? s.limits.memory : undefined,
-      })
-    },
+    mutationFn: (payload: ProblemPayload) => api.updateProblem(problem.id, payload),
     onSuccess: async () => {
       toast.success('已保存')
       await qc.invalidateQueries({ queryKey: ['problem', problem.id] })
@@ -218,6 +284,28 @@ export function ProblemEditor({ problem, onSaved }: { problem: Problem; onSaved:
 
   return (
     <div className="space-y-4">
+      {/* 编辑模式切换：表单 / JSON */}
+      <Tabs value={editorTab} onValueChange={(v) => switchTab(v as 'form' | 'json')}>
+        <TabsList>
+          <TabsTrigger value="form">表单</TabsTrigger>
+          <TabsTrigger value="json">JSON</TabsTrigger>
+        </TabsList>
+      </Tabs>
+
+      {editorTab === 'json' ? (
+        <div className="space-y-2">
+          <Textarea
+            value={jsonText}
+            onChange={(e) => setJsonText(e.target.value)}
+            className="min-h-96 w-full font-mono text-xs"
+            spellCheck={false}
+          />
+          <p className="text-xs text-muted-foreground">
+            JSON 模式用于精细调整结构（bodyJson / answerJson / solutions 等）；题型 type 不可修改（保存时校验）。
+          </p>
+        </div>
+      ) : (
+        <>
       {/* 基础信息 */}
       <div className="space-y-1.5">
         <Label>标题</Label>
@@ -336,15 +424,30 @@ export function ProblemEditor({ problem, onSaved }: { problem: Problem; onSaved:
 
       {/* 题解 */}
       <SolutionsEditor solutions={s.solutions} onChange={(solutions) => patch({ solutions })} />
+        </>
+      )}
 
-      {/* 保存 */}
+      {/* 保存（表单 / JSON 共用底条） */}
       <div className="sticky bottom-0 flex justify-end gap-2 border-t bg-background py-3">
-        <Button variant="outline" onClick={() => setS(fromProblem(problem))}>
-          重置
-        </Button>
-        <Button onClick={() => save.mutate()} disabled={save.isPending || !s.title.trim()}>
-          <SaveIcon data-icon="inline-start" /> {save.isPending ? '保存中…' : '保存题目'}
-        </Button>
+        {editorTab === 'json' ? (
+          <>
+            <Button variant="outline" onClick={() => setJsonText(JSON.stringify(stateToJson(), null, 2))}>
+              重置
+            </Button>
+            <Button onClick={handleJsonSave} disabled={save.isPending}>
+              <SaveIcon data-icon="inline-start" /> {save.isPending ? '保存中…' : '保存题目'}
+            </Button>
+          </>
+        ) : (
+          <>
+            <Button variant="outline" onClick={() => setS(fromProblem(problem))}>
+              重置
+            </Button>
+            <Button onClick={() => save.mutate(payloadFromState())} disabled={save.isPending || !s.title.trim()}>
+              <SaveIcon data-icon="inline-start" /> {save.isPending ? '保存中…' : '保存题目'}
+            </Button>
+          </>
+        )}
       </div>
     </div>
   )

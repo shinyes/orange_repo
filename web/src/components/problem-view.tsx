@@ -73,11 +73,11 @@ function StatementView({ problem }: { problem: Problem }) {
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="rounded-lg border p-3">
                 <div className="mb-1 text-xs font-medium text-muted-foreground">输入格式</div>
-                <div className="text-sm whitespace-pre-wrap">{body.inputFormat || '—'}</div>
+                <Markdown text={body.inputFormat || '—'} className="markdown-body text-sm" />
               </div>
               <div className="rounded-lg border p-3">
                 <div className="mb-1 text-xs font-medium text-muted-foreground">输出格式</div>
-                <div className="text-sm whitespace-pre-wrap">{body.outputFormat || '—'}</div>
+                <Markdown text={body.outputFormat || '—'} className="markdown-body text-sm" />
               </div>
             </div>
           )}
