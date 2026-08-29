@@ -142,15 +142,18 @@ function AnswerView({ problem }: { problem: Problem }) {
         {options.map((opt, i) => (
           <div
             key={i}
-            className={`flex items-center gap-2.5 rounded-lg border p-3 text-sm ${
+            className={`flex items-start gap-2.5 rounded-lg border p-3 text-sm ${
               i === idx ? 'border-primary bg-primary/5 font-medium' : ''
             }`}
           >
-            <span className={`flex size-6 shrink-0 items-center justify-center rounded-full text-xs ${i === idx ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
+            <span className={`mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full text-xs ${i === idx ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
               {String.fromCharCode(65 + i)}
             </span>
-            <span>{opt}</span>
-            {i === idx && <Badge className="ml-auto">正确答案</Badge>}
+            <span className="min-w-0 flex-1">
+              {/* 选项支持 Markdown / KaTeX（与题面同一渲染管线） */}
+              <Markdown text={opt} className="markdown-body text-sm" />
+            </span>
+            {i === idx && <Badge className=" shrink-0">正确答案</Badge>}
           </div>
         ))}
         {options.length === 0 && <Empty>未配置选项</Empty>}
