@@ -92,6 +92,8 @@ export const api = {
     body.append('file', file)
     return req<{ url: string }>('/api/images', { method: 'POST', body })
   },
+  scanOrphanImages: () => req<{ orphaned: number; total: number }>('/api/uploads/cleanup?dryRun=true'),
+  cleanupOrphanImages: () => req<{ removed: number }>('/api/uploads/cleanup', { method: 'POST' }),
 
   // ---- 导入导出 ----
   import: async (file: File, mode: 'problems' | 'training' | 'practice' | 'auto'): Promise<Record<string, unknown>> => {

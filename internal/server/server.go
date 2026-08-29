@@ -63,7 +63,10 @@ func New(s *store.Store, uploadsDir, webDist string) *fiber.App {
 	api.Put("/tag-order", srv.handleSetTagOrder)
 
 	api.Post("/images", srv.handleUploadImage)
-	api.Static("/api/uploads", uploadsDir)
+	api.Get("/uploads/cleanup", srv.handleCleanupImages)
+	api.Post("/uploads/cleanup", srv.handleCleanupImages)
+	// 注意：挂载在 /api 组内，前缀只需 /uploads（组前缀合成 /api/uploads）
+	api.Static("/uploads", uploadsDir)
 
 	api.Get("/booklet-directories", srv.handleListBookletDirectories)
 	api.Post("/booklet-directories", srv.handleCreateBookletDirectory)

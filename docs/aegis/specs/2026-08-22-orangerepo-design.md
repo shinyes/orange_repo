@@ -10,6 +10,7 @@
 修订：2026-08-22k（v1.9.2）——题目/题册详情默认查看模式、删除按钮移至模式切换按钮左侧、移除底部重复描述块与查看视图双标题 + 401 崩溃防御（渲染空数据兜底与 App 错误边界）+ 题目列表虚拟滚动（大量题目不卡）
 修订：2026-08-22l（v1.9.3）——编辑器增加 JSON 模式（保存时阻止题型修改）+ 输入/输出格式支持 Markdown/KaTeX 渲染
 修订：2026-08-22m（v1.9.4）——进入应用时标签树与题册目录默认全部折叠（点击展开/状态保持）
+修订：2026-08-22n（v1.9.5）——训练编辑模式章节直接文本框 + 修复题目图片静态路由（/api/uploads） + 设置对话框整合修改密码/清理未关联图片 + 标签列固定区不随滚动消失
 
 ## 1. 目标与边界
 
@@ -118,7 +119,9 @@ PATCH  /api/tags {from,to} → {updated}   重命名 from→to：精确匹配重
 DELETE /api/tags?tag=… → {updated}       删除该标签及其全部前缀子孙，从所有题目上移除；返回受影响题数
 GET/PUT /api/tag-order →/← {order}       （v1.5.0）手动排序持久化：order 为 {"<父路径>":["子标签",...]}，"" 表示顶层
 
-POST /api/images multipart(file) → {url}        GET /api/uploads/* 静态
+POST /api/images multipart(file) → {url}        GET /api/uploads/* 静态（会话保护）
+GET  /api/uploads/cleanup?dryRun=true → {orphaned,total}   POST /api/uploads/cleanup → {removed}
+     （v1.9.5）扫描/删除未被任何题目引用的上传图片（按题面/答案/题解四文本字段引用判定）
 
 （v1.6.0 题册目录）
 GET  /api/booklet-directories → {directories:[{id,name,parentId,orderNo}]}   扁平列表，parentId=null 表示根

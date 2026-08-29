@@ -642,19 +642,23 @@ function ChapterCard(props: {
   onChapterBodyDragOver: (chapterId: number, count: number, e: DragEvent) => void
 }) {
   const ch = props.chapter
-  const [renaming, setRenaming] = useState(false)
   const [name, setName] = useState(ch.title)
   const showBody = !props.collapsed && !props.forceCollapse
   const itemDragActive = props.drag?.kind === 'item' && props.editMode
   const ind = itemDragActive ? props.itemIndicator : null
   const isDraggedChapter = props.drag?.kind === 'chapter' && props.drag.chapterId === ch.id
 
+  // 数据刷新（如重命名保存、重新打开）后同步输入框内容
+  useEffect(() => setName(ch.title), [ch.title])
+
   async function saveName() {
-    if (name.trim() && name.trim() !== ch.title) {
-      await api.updateChapter(ch.id, name.trim(), ch.orderNo)
+    const next = name.trim()
+    if (next && next !== ch.title) {
+      await api.updateChapter(ch.id, next, ch.orderNo)
       props.onChanged()
+    } else if (!next) {
+      setName(ch.title)
     }
-    setRenaming(false)
   }
   async function removeItem(item: Item) {
     await api.deleteItem(item.id)
@@ -697,10 +701,24 @@ function ChapterCard(props: {
         >
           <ChevronRightIcon className={`size-3.5 text-muted-foreground transition-transform ${showBody ? 'rotate-90' : ''}`} />
         </button>
-        {renaming ? (
-          <Input value={name} onChange={(e) => setName(e.target.value)} onBlur={saveName} onKeyDown={(e) => e.key === 'Enter' && saveName()} className="h-7 max-w-xs" autoFocus />
+        {props.editMode ? (
+          <Input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onBlur={() => void saveName()}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                void saveName()
+              } else if (e.key === 'Escape') {
+                setName(ch.title)
+              }
+            }}
+            className="h-7 min-w-0 flex-1 text-sm"
+            title="章节名称（失焦或回车保存，Esc 还原）"
+          />
         ) : (
-          <button type="button" className="min-w-0 flex-1 truncate text-left text-sm font-medium" onClick={() => props.editMode && setRenaming(true)} title={props.editMode ? '点击重命名' : undefined}>
+          <button type="button" className="min-w-0 flex-1 truncate text-left text-sm font-medium">
             {ch.title}
           </button>
         )}

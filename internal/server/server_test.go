@@ -838,3 +838,56 @@ func importZip(t *testing.T, app *fiber.App, cookie string, zipData []byte, mode
 	}
 	return out
 }
+
+// TestCleanupImages 清理未关联图片：dryRun 统计、引用保护、POST 删除孤儿。
+func TestCleanupImages(t *testing.T) {
+	app, st := newTestApp(t)
+	cookie := sessionCookie(t, app)
+
+	// 两张图：refer.png 将被题目引用，orphan.png 无引用
+	writeUpload(t, st, "refer.png", []byte("PNG1"))
+	writeUpload(t, st, "orphan.png", []byte("PNG2"))
+	writeUpload(t, st, "not-image.txt", []byte("ignored")) // 非规则文件名不统计
+
+	resp, out := doJSON(t, app, "GET", "/api/uploads/cleanup?dryRun=true", cookie, nil)
+	if resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("dry-run = %d", resp.StatusCode)
+	}
+	if out["orphaned"].(float64) != 2 || out["total"].(float64) != 2 {
+		t.Fatalf("dry-run orphaned=%v total=%v, want 2/2（初始均未引用）", out["orphaned"], out["total"])
+	}
+
+	// 题目引用 refer.png
+	doJSON(t, app, "POST", "/api/problems", cookie, map[string]any{
+		"type": "programming", "title": "含图题", "statementMd": "图示：![图](/api/uploads/refer.png)",
+	})
+	resp, out = doJSON(t, app, "GET", "/api/uploads/cleanup?dryRun=true", cookie, nil)
+	if resp.StatusCode != fiber.StatusOK || out["orphaned"].(float64) != 1 {
+		t.Fatalf("dry-run after reference = %v %v", resp.StatusCode, out)
+	}
+
+	// POST 清理：只删 orphan.png
+	resp, out = doJSON(t, app, "POST", "/api/uploads/cleanup", cookie, nil)
+	if resp.StatusCode != fiber.StatusOK || out["removed"].(float64) != 1 {
+		t.Fatalf("cleanup = %v %v", resp.StatusCode, out)
+	}
+	if _, err := os.Stat(filepath.Join(st.DataDir, "uploads", "refer.png")); err != nil {
+		t.Fatal("被引用的图片不应被删除")
+	}
+	if _, err := os.Stat(filepath.Join(st.DataDir, "uploads", "orphan.png")); err == nil {
+		t.Fatal("孤儿图片应被删除")
+	}
+
+	// 静态图片路由：应由 /api 组前缀合成 /api/uploads，而非重复前缀 /api/api/uploads
+	// （Windows 上 app.Test 静态 SendFile 会残留文件句柄，故此处只校验路由表）
+	paths := map[string]bool{}
+	for _, r := range app.GetRoutes() {
+		paths[r.Path] = true
+	}
+	if !paths["/api/uploads"] {
+		t.Fatalf("路由表缺少 /api/uploads（当前挂载路径: %v）", paths)
+	}
+	if paths["/api/api/uploads"] {
+		t.Fatal("存在错误路由 /api/api/uploads（组内重复前缀挂载）")
+	}
+}
