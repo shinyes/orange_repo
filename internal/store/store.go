@@ -317,9 +317,10 @@ func tagSetMatches(tags []string, sel string) bool {
 	return false
 }
 
-// tagMatchesSelected 前缀 AND 规则：对选中集 S 中每个 s，题目至少有一个标签命中。
-// 特判 NoneTag：命中标签数组为空的题目。
-func tagMatchesSelected(tags []string, selected []string) bool {
+// TagMatchesSelected 匹配选中标签集的规则：对选中集 S 中每个 s，题目至少有一个标签命中
+// （t==s 或 t 为 s 的前缀子孙 t==s+"/"+…）；特判 NoneTag：命中标签数组为空的题目。
+// 前缀 AND 规则的唯一权威实现，供主站列表/分面与刷题服务只读复用。
+func TagMatchesSelected(tags []string, selected []string) bool {
 	for _, sel := range selected {
 		if sel == NoneTag {
 			if len(tags) != 0 {
@@ -348,7 +349,7 @@ func (s *Store) ListProblems(f ProblemFilter) ([]model.ProblemSummary, error) {
 	}
 	out := make([]model.ProblemSummary, 0, len(list))
 	for _, p := range list {
-		if tagMatchesSelected(p.Tags, f.Tags) {
+		if TagMatchesSelected(p.Tags, f.Tags) {
 			out = append(out, p)
 		}
 	}
@@ -639,11 +640,11 @@ func (s *Store) ListTagFacets(f ProblemFilter) ([]TagCount, int, error) {
 	counts := make(map[string]int, len(candidates))
 	total := 0
 	for _, tags := range tagLists {
-		if tagMatchesSelected(tags, selected) {
+		if TagMatchesSelected(tags, selected) {
 			total++
 		}
 		for t := range candidates {
-			if tagMatchesSelected(tags, []string{t}) {
+			if TagMatchesSelected(tags, []string{t}) {
 				counts[t]++
 			}
 		}
