@@ -665,8 +665,15 @@ func (s *Store) CreateCategory(subjectID int64, name string, orderNo int, tags, 
 	return res.LastInsertId()
 }
 
-// UpdateCategory 全量更新分类（name 为空表示不修改名称；orderNo<=0 表示不修改顺序）。
+// UpdateCategory 全量更新分类（name 非空、orderNo 必须为正；调用方负责合并部分更新）。
 func (s *Store) UpdateCategory(c Category) error {
+	c.Name = strings.TrimSpace(c.Name)
+	if c.Name == "" {
+		return errors.New("分类名称不能为空")
+	}
+	if c.OrderNo <= 0 {
+		return errors.New("分类显示顺序必须为正整数")
+	}
 	types, err := NormalizeTypes(c.Types)
 	if err != nil {
 		return err
@@ -674,11 +681,8 @@ func (s *Store) UpdateCategory(c Category) error {
 	if err := NormalizeTags(c.Tags); err != nil {
 		return err
 	}
-	res, err := s.DB.Exec(`UPDATE categories SET
-		name=CASE WHEN ?='' THEN name ELSE ? END,
-		order_no=CASE WHEN ?<=0 THEN order_no ELSE ? END,
-		tags_json=?, types_json=? WHERE id=?`,
-		c.Name, c.Name, c.OrderNo, c.OrderNo, encodeStrings(c.Tags), encodeStrings(types), c.ID)
+	res, err := s.DB.Exec(`UPDATE categories SET name=?,order_no=?,tags_json=?,types_json=? WHERE id=?`,
+		c.Name, c.OrderNo, encodeStrings(c.Tags), encodeStrings(types), c.ID)
 	if err != nil {
 		return err
 	}
