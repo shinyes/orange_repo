@@ -16,3 +16,8 @@ orange_repo.exe
 # misc
 .DS_Store
 Thumbs.db
+
+# node / vite (quiz)
+web-quiz/node_modules/
+web-quiz/dist/
+
