@@ -369,12 +369,19 @@ function CategoryDialog({
   const [tagsText, setTagsText] = useState((category?.tags ?? []).join('、'))
   const [types, setTypes] = useState<ProblemType[]>(category?.types ?? ALL_TYPES)
   const [count, setCount] = useState<number | null>(null)
+  const [previewError, setPreviewError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
-  // 实时题目数预览（防抖）
+  // 实时题目数预览（防抖）；标签格式错误（如末尾斜杠）时显示服务端校验信息
   useEffect(() => {
+    setPreviewError(null)
     const t = setTimeout(() => {
-      void api.problemsCount(parseTags(tagsText), types).then((d) => setCount(d.count)).catch(() => setCount(null))
+      void api.problemsCount(parseTags(tagsText), types)
+        .then((d) => setCount(d.count))
+        .catch((err) => {
+          setCount(null)
+          setPreviewError(err instanceof Error ? err.message : '筛选条件无效')
+        })
     }, 300)
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -450,9 +457,13 @@ function CategoryDialog({
             </div>
             {types.length === 0 && <p className="text-xs text-red-600">至少选择一种题型</p>}
           </div>
-          <div className="text-xs text-muted-foreground">
-            当前筛选命中题目数：<span className="font-medium">{count === null ? '…' : count}</span>
-          </div>
+          {previewError ? (
+            <div className="text-xs text-red-600">{previewError}</div>
+          ) : (
+            <div className="text-xs text-muted-foreground">
+              当前筛选命中题目数：<span className="font-medium">{count === null ? '…' : count}</span>
+            </div>
+          )}
           <DialogFooter>
             <Button type="submit" disabled={busy || types.length === 0}>
               保存
