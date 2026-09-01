@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { BookOpenIcon, ClipboardXIcon, SettingsIcon, UserRoundIcon } from 'lucide-react'
+import { BookOpenIcon, ClipboardXIcon, UserRoundIcon } from 'lucide-react'
 
 import { api } from '@/lib/api'
 import { Toaster } from '@/components/ui/sonner'
@@ -64,20 +64,17 @@ function Main({ user, onLogout }: { user: User; onLogout: () => void }) {
         {effectiveTab === 'mine' && <MyPage user={user} onOpenAdmin={() => setTab('admin')} onLogout={onLogout} />}
         {effectiveTab === 'admin' && user.role === 'admin' && <AdminPage />}
       </main>
-      <BottomNav tab={effectiveTab} user={user} onSelect={setTab} />
+      <BottomNav tab={effectiveTab} onSelect={setTab} />
     </div>
   )
 }
 
-function BottomNav({ tab, user, onSelect }: { tab: Tab; user: User; onSelect: (t: Tab) => void }) {
+function BottomNav({ tab, onSelect }: { tab: Tab; onSelect: (t: Tab) => void }) {
   const items: { key: Tab; label: string; icon: typeof BookOpenIcon }[] = [
     { key: 'quiz', label: '刷题', icon: BookOpenIcon },
     { key: 'wrong', label: '错题', icon: ClipboardXIcon },
     { key: 'mine', label: '我的', icon: UserRoundIcon },
   ]
-  if (user.role === 'admin') {
-    items.push({ key: 'admin', label: '管理', icon: SettingsIcon })
-  }
   return (
     <nav className="flex shrink-0 border-t bg-background px-4 pb-[env(safe-area-inset-bottom)]">
       {items.map((it) => (

@@ -99,7 +99,6 @@ export function QuizPage() {
         index={idx}
         total={round.problems.length}
         submit={(payload) => api.submit({ ...payload, problemId: problem.id, categoryId: round.categoryId })}
-        nextLabel={idx + 1 < round.problems.length ? '下一题' : '完成'}
         onNext={() => {
           if (idx + 1 < round.problems.length) {
             setStage({ ...stage, idx: idx + 1 })

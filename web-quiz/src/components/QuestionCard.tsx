@@ -41,7 +41,6 @@ export function QuestionCard({ problem, submit, onNext, index, total, nextLabel 
       setPicked(pickIndex)
       setPickedTF(pickTF)
       if (r.correct) {
-        toast.success('✓ 回答正确')
         onCorrect?.()
       } else {
         toast.error('✗ 回答错误')
