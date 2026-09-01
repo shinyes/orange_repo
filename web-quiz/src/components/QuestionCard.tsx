@@ -152,7 +152,7 @@ export function QuestionCard({ problem, submit, onNext, index, total, nextLabel 
                 <Markdown text={result.explanation || '（暂无解析内容）'} className="markdown-body text-sm" />
               </div>
             ) : (
-              <Button variant="outline" size="sm" onClick={() => setShowExplanation(true)}>
+              <Button variant="outline" size="sm" className="min-h-9" onClick={() => setShowExplanation(true)}>
                 查看解析
               </Button>
             )}
@@ -162,7 +162,7 @@ export function QuestionCard({ problem, submit, onNext, index, total, nextLabel 
         {/* 下一题 */}
         {answered && (
           <div className="mt-5 flex justify-end">
-            <Button onClick={onNext}>
+            <Button className="min-h-10" onClick={onNext}>
               {nextLabel}
               <ChevronRightIcon className="size-4" />
             </Button>

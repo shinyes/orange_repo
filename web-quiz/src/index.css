@@ -129,6 +129,23 @@
     }
 }
 
+/* ---- 移动端适配 ---- */
+/* 消除点击高亮与双击缩放延迟 */
+html {
+  -webkit-tap-highlight-color: transparent;
+}
+body {
+  touch-action: manipulation;
+}
+/* iOS 聚焦不自动放大：触屏下输入控件字号提到 16px */
+@media (max-width: 640px) {
+  input,
+  textarea,
+  select {
+    font-size: 16px;
+  }
+}
+
 /* ---- Markdown 题面排版（配合 KaTeX） ---- */
 .markdown-body {
   line-height: 1.75;

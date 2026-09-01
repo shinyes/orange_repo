@@ -30,7 +30,7 @@ export function Login({ onSuccess }: { onSuccess: (user: User) => void }) {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-muted/30 px-4">
+    <div className="flex min-h-dvh items-center justify-center bg-muted/30 px-4">
       <div className="w-full max-w-sm rounded-2xl border bg-background p-8 shadow-sm">
         <div className="mb-6 text-center">
           <div className="mb-2 text-4xl">🍊</div>
@@ -46,7 +46,7 @@ export function Login({ onSuccess }: { onSuccess: (user: User) => void }) {
             <Label htmlFor="password">密码</Label>
             <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="密码" autoComplete="current-password" required />
           </div>
-          <Button type="submit" className="w-full" disabled={busy}>
+          <Button type="submit" className="w-full min-h-10" disabled={busy}>
             {busy && <Loader2Icon className="size-4 animate-spin" />}
             登录
           </Button>

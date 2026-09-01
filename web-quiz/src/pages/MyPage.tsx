@@ -38,18 +38,18 @@ export function MyPage({ user, onOpenAdmin, onLogout }: { user: User; onOpenAdmi
 
         <div className="mt-6 space-y-2.5">
           {user.role === 'admin' && (
-            <Button className="w-full justify-start" onClick={onOpenAdmin}>
+            <Button className="w-full min-h-10 justify-start" onClick={onOpenAdmin}>
               <SettingsIcon className="size-4" />
               系统管理
             </Button>
           )}
-          <Button variant="outline" className="w-full justify-start" onClick={() => setPwOpen(true)}>
+          <Button variant="outline" className="w-full min-h-10 justify-start" onClick={() => setPwOpen(true)}>
             <KeyRoundIcon className="size-4" />
             修改密码
           </Button>
           <Button
             variant="ghost"
-            className="w-full justify-start text-red-600 hover:bg-red-50 hover:text-red-600"
+            className="w-full min-h-10 justify-start text-red-600 hover:bg-red-50 hover:text-red-600"
             onClick={() => {
               onLogout()
               toast('已退出登录')

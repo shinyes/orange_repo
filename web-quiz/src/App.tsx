@@ -35,7 +35,7 @@ export default function App() {
   }, [])
 
   if (authed === null) {
-    return <div className="flex h-screen items-center justify-center text-sm text-muted-foreground">正在连接刷题服务…</div>
+    return <div className="flex h-dvh items-center justify-center text-sm text-muted-foreground">正在连接刷题服务…</div>
   }
 
   return (
@@ -57,7 +57,7 @@ function Main({ user, onLogout }: { user: User; onLogout: () => void }) {
   const effectiveTab: Tab = tab === 'admin' && user.role !== 'admin' ? 'mine' : tab
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden">
+    <div className="flex h-dvh flex-col overflow-hidden">
       <main className="min-h-0 flex-1 overflow-y-auto">
         {effectiveTab === 'quiz' && <QuizPage />}
         {effectiveTab === 'wrong' && <WrongPage />}

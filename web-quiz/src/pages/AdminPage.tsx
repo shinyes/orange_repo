@@ -125,7 +125,7 @@ function SubjectsTab() {
 
   return (
     <div className="space-y-3 pt-4">
-      <form onSubmit={create} className="flex gap-2">
+      <form onSubmit={create} className="flex flex-col gap-2 sm:flex-row">
         <Input placeholder="新科目名称" value={name} onChange={(e) => setName(e.target.value)} />
         <Button type="submit" disabled={!name.trim()}>
           <PlusIcon className="size-4" /> 新增
@@ -134,19 +134,31 @@ function SubjectsTab() {
       {list.map((s, i) => (
         <div key={s.id} className="flex items-center gap-2 rounded-xl border bg-card p-3">
           <div className="flex flex-col gap-0.5">
-            <button type="button" className="text-muted-foreground hover:text-foreground" onClick={() => void moveSubject(i, -1)} disabled={i === 0} aria-label="上移">
+            <button
+              type="button"
+              className="flex size-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground disabled:opacity-30"
+              onClick={() => void moveSubject(i, -1)}
+              disabled={i === 0}
+              aria-label="上移"
+            >
               <ArrowUpIcon className="size-4" />
             </button>
-            <button type="button" className="text-muted-foreground hover:text-foreground" onClick={() => void moveSubject(i, 1)} disabled={i === list.length - 1} aria-label="下移">
+            <button
+              type="button"
+              className="flex size-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground disabled:opacity-30"
+              onClick={() => void moveSubject(i, 1)}
+              disabled={i === list.length - 1}
+              aria-label="下移"
+            >
               <ArrowDownIcon className="size-4" />
             </button>
           </div>
           <span className="min-w-0 flex-1 truncate font-medium">{s.name}</span>
           <span className="text-xs text-muted-foreground">{s.categories.length} 个分类</span>
-          <Button variant="ghost" size="icon-sm" onClick={() => setEditing(s)} aria-label="编辑">
+          <Button variant="ghost" size="icon" onClick={() => setEditing(s)} aria-label="编辑">
             <PencilIcon className="size-4" />
           </Button>
-          <Button variant="ghost" size="icon-sm" className="text-red-600 hover:text-red-600" onClick={() => setDeleting(s)} aria-label="删除">
+          <Button variant="ghost" size="icon" className="text-red-600 hover:text-red-600" onClick={() => setDeleting(s)} aria-label="删除">
             <Trash2Icon className="size-4" />
           </Button>
         </div>
@@ -263,7 +275,7 @@ function CategoriesTab() {
                 <div className="flex flex-col gap-0.5">
                   <button
                     type="button"
-                    className="text-muted-foreground hover:text-foreground disabled:opacity-30"
+                    className="flex size-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground disabled:opacity-30"
                     onClick={() => void moveCategory(s, i, -1)}
                     disabled={i === 0}
                     aria-label="上移"
@@ -272,7 +284,7 @@ function CategoriesTab() {
                   </button>
                   <button
                     type="button"
-                    className="text-muted-foreground hover:text-foreground disabled:opacity-30"
+                    className="flex size-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground disabled:opacity-30"
                     onClick={() => void moveCategory(s, i, 1)}
                     disabled={i === s.categories.length - 1}
                     aria-label="下移"
@@ -296,10 +308,10 @@ function CategoriesTab() {
                     <span className="ml-1 text-muted-foreground">{c.questionCount} 题</span>
                   </div>
                 </div>
-                <Button variant="ghost" size="icon-sm" onClick={() => setDialog({ subject: s, category: c })} aria-label="编辑">
+                <Button variant="ghost" size="icon" onClick={() => setDialog({ subject: s, category: c })} aria-label="编辑">
                   <PencilIcon className="size-4" />
                 </Button>
-                <Button variant="ghost" size="icon-sm" className="text-red-600 hover:text-red-600" onClick={() => setDeleting({ subject: s, category: c })} aria-label="删除">
+                <Button variant="ghost" size="icon" className="text-red-600 hover:text-red-600" onClick={() => setDeleting({ subject: s, category: c })} aria-label="删除">
                   <Trash2Icon className="size-4" />
                 </Button>
               </div>
@@ -502,7 +514,7 @@ function StudentsTab() {
 
   return (
     <div className="space-y-3 pt-4">
-      <form onSubmit={create} className="flex gap-2">
+      <form onSubmit={create} className="flex flex-col gap-2 sm:flex-row">
         <Input placeholder="用户名" value={username} onChange={(e) => setUsername(e.target.value)} />
         <Input placeholder="初始密码" value={password} onChange={(e) => setPassword(e.target.value)} type="password" />
         <Button type="submit" disabled={!username.trim() || !password}>
@@ -515,10 +527,10 @@ function StudentsTab() {
             <div className="truncate text-sm font-medium">{s.username}</div>
             <div className="text-xs text-muted-foreground">错题 {s.wrongCount} 题 · 创建于 {s.createdAt.slice(0, 10)}</div>
           </div>
-          <Button variant="ghost" size="icon-sm" onClick={() => setResetting({ id: s.id, username: s.username })} aria-label="重置密码">
+          <Button variant="ghost" size="icon" onClick={() => setResetting({ id: s.id, username: s.username })} aria-label="重置密码">
             <RotateCcwIcon className="size-4" />
           </Button>
-          <Button variant="ghost" size="icon-sm" className="text-red-600 hover:text-red-600" onClick={() => setDeleting({ id: s.id, username: s.username })} aria-label="删除">
+          <Button variant="ghost" size="icon" className="text-red-600 hover:text-red-600" onClick={() => setDeleting({ id: s.id, username: s.username })} aria-label="删除">
             <Trash2Icon className="size-4" />
           </Button>
         </div>
@@ -618,7 +630,7 @@ function SettingsTab() {
     <div className="space-y-4 pt-4">
       <div className="space-y-1.5">
         <Label htmlFor="round-size">每轮题数（1–100，抽题时从符合分类筛选的题目中随机抽取）</Label>
-        <div className="flex gap-2">
+        <div className="flex flex-col gap-2 sm:flex-row">
           <Input id="round-size" type="number" min={1} max={100} value={roundSize} onChange={(e) => setRoundSize(e.target.value)} />
           <Button onClick={() => void save()}>保存</Button>
         </div>
