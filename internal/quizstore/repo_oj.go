@@ -207,11 +207,12 @@ func (r *RepoReader) TrainingProblemIDs(id int64) ([][]int64, error) {
 
 // RepoPractice 练习结构。
 type RepoPractice struct {
-	ID          int64    `json:"id"`
-	Title       string   `json:"title"`
-	Description string   `json:"description"`
-	Tags        []string `json:"tags"`
-	Items       []int64  `json:"items"`
+	ID           int64    `json:"id"`
+	Title        string   `json:"title"`
+	Description  string   `json:"description"`
+	Tags         []string `json:"tags"`
+	Items        []int64  `json:"items"`
+	ProblemCount int      `json:"problemCount"`
 }
 
 // ListRepoPractices 主库练习目录。
@@ -240,6 +241,7 @@ func (r *RepoReader) ListRepoPractices() ([]RepoPractice, error) {
 			return nil, err
 		}
 		out[i].Items = ids
+		out[i].ProblemCount = len(ids)
 	}
 	return out, nil
 }
@@ -262,6 +264,7 @@ func (r *RepoReader) GetRepoPractice(id int64) (*RepoPractice, error) {
 		return nil, err
 	}
 	p.Items = ids
+	p.ProblemCount = len(ids)
 	return p, nil
 }
 

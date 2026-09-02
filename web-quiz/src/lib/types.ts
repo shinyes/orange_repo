@@ -102,3 +102,179 @@ export interface AdminStudent {
 export interface Settings {
   roundSize: number
 }
+
+// ---- OrangeOJ：布置与做题 ----
+
+export interface OjAssigned {
+  trainings: OjTrainingBrief[]
+  practices: OjPracticeBrief[]
+}
+
+export interface OjTrainingBrief {
+  id: number
+  title: string
+  description: string
+  tags: string[]
+  problemCount: number
+  accepted: number
+  chapterCount: number
+}
+
+export interface OjPracticeBrief {
+  id: number
+  title: string
+  description: string
+  tags: string[]
+  problemCount: number
+  accepted: number
+}
+
+export interface OjItem {
+  problemId: number
+  orderNo: number
+  title: string
+  type: 'programming' | 'single_choice' | 'true_false'
+  completed: boolean
+}
+
+export interface OjChapter {
+  id: number
+  title: string
+  orderNo: number
+  items: OjItem[]
+}
+
+export interface OjTrainingDetail {
+  id: number
+  title: string
+  description: string
+  tags: string[]
+  chapters: OjChapter[]
+  accepted: number
+  total: number
+  stale?: boolean
+}
+
+export interface OjPracticeDetail {
+  id: number
+  title: string
+  description: string
+  tags: string[]
+  items: OjItem[]
+  accepted: number
+  total: number
+  stale?: boolean
+}
+
+export type CodeLang = 'cpp' | 'python'
+
+export interface OjProblem {
+  id: number
+  type: 'programming' | 'single_choice' | 'true_false'
+  title: string
+  statementMd: string
+  bodyJson: Record<string, unknown>
+  timeLimitMs: number
+  memoryLimitMiB: number
+}
+
+export type Verdict = 'PENDING' | 'OK' | 'AC' | 'WA' | 'CE' | 'RE' | 'TLE' | 'MLE'
+
+export interface CaseDetail {
+  caseNo: number
+  verdict: Verdict
+  input?: string
+  output?: string
+  expectedOutput?: string
+  error?: string
+  timeMs: number
+  memoryKiB: number
+}
+
+export interface Submission {
+  id: number
+  problemId: number
+  questionType: string
+  language: string
+  sourceCode?: string
+  inputData?: string
+  submitType: 'run' | 'test' | 'submit' | 'objective'
+  status: 'queued' | 'running' | 'done' | 'failed'
+  verdict: Verdict
+  timeMs: number
+  memoryKiB: number
+  score: number
+  stdout?: string
+  stderr?: string
+  caseDetails?: CaseDetail[]
+  createdAt: string
+  finishedAt?: string | null
+}
+
+export interface SubmissionPoll {
+  submissionId: number
+  status: 'queued' | 'running' | 'done' | 'failed'
+  isFinal: boolean
+  verdict: Verdict
+  score: number
+  timeMs: number
+  memoryKiB: number
+  stdout: string
+  stderr: string
+  caseDetails: CaseDetail[]
+  pollAfterMs: number
+}
+
+// ---- 管理端：布置 ----
+
+export interface RepoTraining {
+  id: number
+  title: string
+  description: string
+  tags: string[]
+  problemCount: number
+  chapterCount: number
+}
+
+export interface RepoPractice {
+  id: number
+  title: string
+  description: string
+  tags: string[]
+  items: number[]
+  problemCount: number
+}
+
+export interface AdminAssignment {
+  id: number
+  kind: 'training' | 'practice'
+  repoId: number
+  title: string
+  description: string
+  tags: string[]
+  published: boolean
+  assignedAll: boolean
+  problemCount: number
+  studentCount: number
+  createdAt: string
+}
+
+export interface AssignmentStudents {
+  assignedAll: boolean
+  students: { userId: number; username: string }[]
+}
+
+export interface AssignmentStatsProblem {
+  problemId: number
+  title: string
+  type: string
+  accepted: number
+  submissions: number
+}
+
+export interface AssignmentStats {
+  title: string
+  kind: 'training' | 'practice'
+  totalStudents: number
+  problems: AssignmentStatsProblem[]
+}

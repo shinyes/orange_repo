@@ -497,7 +497,24 @@ func (s *Server) handleOJObjectiveSubmit(c *fiber.Ctx) error {
 	if err := s.QS.UpsertProgress(user.ID, problemID, verdict, score, submissionID); err != nil {
 		return respondError(c, fiber.StatusInternalServerError, err.Error())
 	}
-	return respondData(c, fiber.StatusOK, fiber.Map{"submissionId": submissionID, "verdict": verdict, "score": score, "correct": correct})
+	// 反馈正确答案（同期 objective 交互：答错时高亮正确项）
+	correctAnswer := fiber.Map{}
+	if p.Type == "single_choice" {
+		if env, err := s.QS.Repo.GetObjectiveAnswer(problemID); err == nil && env.AnswerIndex != nil {
+			correctAnswer["answerIndex"] = *env.AnswerIndex
+		}
+	} else if p.Type == "true_false" {
+		if env, err := s.QS.Repo.GetObjectiveAnswer(problemID); err == nil && env.Answer != nil {
+			correctAnswer["answer"] = *env.Answer
+		}
+	}
+	return respondData(c, fiber.StatusOK, fiber.Map{
+		"submissionId":  submissionID,
+		"verdict":       verdict,
+		"score":         score,
+		"correct":       correct,
+		"correctAnswer": correctAnswer,
+	})
 }
 
 // gradeObjective 客观题判定（单选 answerIndex / 判断 answer 布尔）。

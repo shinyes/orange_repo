@@ -36,6 +36,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import { AssignmentsTab } from '@/pages/oj/AdminAssignments'
 
 const TYPE_LABEL: Record<ProblemType, string> = {
   single_choice: '单选题',
@@ -58,7 +59,7 @@ function moveItem<T>(arr: T[], from: number, to: number): T[] {
   return next
 }
 
-// 系统管理页（仅管理员）：科目 / 分类 / 学生 / 设置。
+// 系统管理页（仅管理员）：科目 / 分类 / 学生 / 布置 / 设置。
 export function AdminPage() {
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-6">
@@ -67,6 +68,7 @@ export function AdminPage() {
         <TabsList className="w-full">
           <TabsTrigger value="subjects" className="flex-1">科目</TabsTrigger>
           <TabsTrigger value="categories" className="flex-1">分类</TabsTrigger>
+          <TabsTrigger value="assignments" className="flex-1">布置</TabsTrigger>
           <TabsTrigger value="students" className="flex-1">学生</TabsTrigger>
           <TabsTrigger value="settings" className="flex-1">设置</TabsTrigger>
         </TabsList>
@@ -75,6 +77,9 @@ export function AdminPage() {
         </TabsContent>
         <TabsContent value="categories">
           <CategoriesTab />
+        </TabsContent>
+        <TabsContent value="assignments">
+          <AssignmentsTab />
         </TabsContent>
         <TabsContent value="students">
           <StudentsTab />

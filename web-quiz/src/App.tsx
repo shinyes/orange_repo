@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { BrowserRouter, Navigate, NavLink, Outlet, Route, Routes } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { BookOpenIcon, ClipboardXIcon, UserRoundIcon } from 'lucide-react'
+import { BookOpenIcon, ClipboardXIcon, FolderKanbanIcon, ClipboardListIcon, UserRoundIcon } from 'lucide-react'
 
 import { api } from '@/lib/api'
 import { Toaster } from '@/components/ui/sonner'
@@ -13,6 +13,10 @@ import { WrongListPage } from '@/pages/WrongListPage'
 import { WrongRoundPage } from '@/pages/WrongRoundPage'
 import { MyPage } from '@/pages/MyPage'
 import { AdminPage } from '@/pages/AdminPage'
+import { TrainingCards, PracticeCards } from '@/pages/oj/AssignmentCards'
+import { TrainingPage } from '@/pages/oj/TrainingPage'
+import { PracticePage } from '@/pages/oj/PracticePage'
+import { ProblemSolvePage } from '@/pages/oj/ProblemSolvePage'
 import type { User } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
@@ -55,6 +59,11 @@ export default function App() {
               <Route path="/quiz" element={<QuizSubjectsPage />} />
               <Route path="/quiz/:subjectId" element={<QuizCategoriesPage />} />
               <Route path="/quiz/:subjectId/:categoryId" element={<QuizRoundPage />} />
+              <Route path="/training" element={<TrainingHome />} />
+              <Route path="/training/:id" element={<TrainingPage />} />
+              <Route path="/practice" element={<PracticeHome />} />
+              <Route path="/practice/:id" element={<PracticePage />} />
+              <Route path="/problem/:problemId" element={<ProblemSolvePage />} />
               <Route path="/wrong" element={<WrongListPage />} />
               <Route path="/wrong/:scope" element={<WrongRoundPage />} />
               <Route path="/mine" element={<MyPage />} />
@@ -76,11 +85,33 @@ export default function App() {
 
 export type ShellContext = { user: User; onLogout: () => void }
 
-// 主壳：内容区（Outlet）+ 底部导航（仅刷题/错题/我的三个入口；
-// 系统管理入口保留在「我的」页内，管理员专用）。
+// 训练 / 练习 首页（共用卡片列表，仅文案差异）。
+function TrainingHome() {
+  return (
+    <div className="mx-auto w-full max-w-2xl px-4 py-6">
+      <h1 className="mb-1 text-lg font-semibold">训练</h1>
+      <p className="mb-4 text-xs text-muted-foreground">按章节组织的布置训练（编程题提交评测，客观题即答即判）</p>
+      <TrainingCards />
+    </div>
+  )
+}
+
+function PracticeHome() {
+  return (
+    <div className="mx-auto w-full max-w-2xl px-4 py-6">
+      <h1 className="mb-1 text-lg font-semibold">练习</h1>
+      <p className="mb-4 text-xs text-muted-foreground">布置给本班的练习题单</p>
+      <PracticeCards />
+    </div>
+  )
+}
+
+// 主壳：内容区（Outlet）+ 底部导航（刷题/训练/练习/错题/我的）。
 function MainShell({ user, onLogout }: { user: User; onLogout: () => void }) {
   const items: { to: string; label: string; icon: typeof BookOpenIcon }[] = [
     { to: '/quiz', label: '刷题', icon: BookOpenIcon },
+    { to: '/training', label: '训练', icon: FolderKanbanIcon },
+    { to: '/practice', label: '练习', icon: ClipboardListIcon },
     { to: '/wrong', label: '错题', icon: ClipboardXIcon },
     { to: '/mine', label: '我的', icon: UserRoundIcon },
   ]
@@ -89,14 +120,14 @@ function MainShell({ user, onLogout }: { user: User; onLogout: () => void }) {
       <main className="min-h-0 flex-1 overflow-y-auto">
         <Outlet context={{ user, onLogout }} />
       </main>
-      <nav className="flex shrink-0 border-t bg-background px-4 pb-[env(safe-area-inset-bottom)]">
+      <nav className="flex shrink-0 border-t bg-background px-1 pb-[env(safe-area-inset-bottom)] sm:px-4">
         {items.map((it) => (
           <NavLink
             key={it.to}
             to={it.to}
             className={({ isActive }) =>
               cn(
-                'flex flex-1 flex-col items-center gap-1 py-2.5 text-xs transition-colors',
+                'flex flex-1 flex-col items-center gap-0.5 py-2 text-[10px] transition-colors sm:gap-1 sm:text-xs',
                 isActive ? 'text-primary' : 'text-muted-foreground hover:text-foreground',
               )
             }

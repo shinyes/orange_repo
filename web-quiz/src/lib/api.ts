@@ -1,12 +1,25 @@
 import type {
   AdminStudent,
   AdminSubject,
+  AdminAssignment,
+  AssignmentStats,
+  AssignmentStudents,
+  CodeLang,
+  OjAssigned,
+  OjPracticeDetail,
+  OjProblem,
+  OjTrainingDetail,
   ProblemType,
+  RepoPractice,
+  RepoTraining,
   Round,
   Settings,
   SubjectBrief,
+  Submission,
+  SubmissionPoll,
   SubmitResult,
   User,
+  Verdict,
   WrongRound,
   WrongSummary,
 } from './types'
@@ -105,4 +118,38 @@ export const api = {
   settings: () => req<Settings>('/api/admin/settings'),
   putSettings: (roundSize: number) =>
     req<void>('/api/admin/settings', json({ method: 'PUT', body: JSON.stringify({ roundSize }) })),
+
+  // ---- OrangeOJ：学生端（训练/练习/做题） ----
+  ojAssigned: () => req<OjAssigned>('/api/oj/assigned'),
+  ojTraining: (id: number) => req<OjTrainingDetail>(`/api/oj/training/${id}`),
+  ojPractice: (id: number) => req<OjPracticeDetail>(`/api/oj/practice/${id}`),
+  ojProblem: (id: number) => req<OjProblem>(`/api/oj/problem/${id}`),
+  ojRun: (id: number, language: CodeLang, sourceCode: string, inputData: string) =>
+    req<{ submissionId: number; status: string }>(`/api/oj/problem/${id}/run`, json({ method: 'POST', body: JSON.stringify({ language, sourceCode, inputData }) })),
+  ojTest: (id: number, language: CodeLang, sourceCode: string) =>
+    req<{ submissionId: number; status: string }>(`/api/oj/problem/${id}/test`, json({ method: 'POST', body: JSON.stringify({ language, sourceCode }) })),
+  ojSubmit: (id: number, language: CodeLang, sourceCode: string) =>
+    req<{ submissionId: number; status: string }>(`/api/oj/problem/${id}/submit`, json({ method: 'POST', body: JSON.stringify({ language, sourceCode }) })),
+  ojObjectiveSubmit: (id: number, answer: number | boolean) =>
+    req<{ submissionId: number; verdict: Verdict; score: number; correct: boolean; correctAnswer: { answerIndex?: number; answer?: boolean } }>(
+      `/api/oj/problem/${id}/objective-submit`, json({ method: 'POST', body: JSON.stringify({ answer }) })),
+  ojPoll: (submissionId: number) => req<SubmissionPoll>(`/api/oj/submission/${submissionId}/poll`),
+  ojSubmissions: (id: number) => req<{ submissions: Submission[] }>(`/api/oj/problem/${id}/submissions`),
+
+  // ---- OrangeOJ：管理端布置 ----
+  repoTrainings: () => req<{ trainings: RepoTraining[] }>('/api/admin/repo-trainings'),
+  repoPractices: () => req<{ practices: RepoPractice[] }>('/api/admin/repo-practices'),
+  repoTraining: (id: number) => req<OjTrainingDetail & { id: number }>(`/api/admin/repo-trainings/${id}`),
+  repoPractice: (id: number) => req<RepoPractice>(`/api/admin/repo-practices/${id}`),
+  adminAssignments: (kind?: 'training' | 'practice') =>
+    req<{ assignments: AdminAssignment[] }>(`/api/admin/assignments${kind ? `?kind=${kind}` : ''}`),
+  createAssignment: (payload: { kind: string; repoId: number; title?: string; description?: string; assignedAll: boolean; published?: boolean; studentIds: number[] }) =>
+    req<{ id: number }>('/api/admin/assignments', json({ method: 'POST', body: JSON.stringify(payload) })),
+  updateAssignment: (id: number, payload: { title?: string; description?: string; published?: boolean }) =>
+    req<void>(`/api/admin/assignments/${id}`, json({ method: 'PATCH', body: JSON.stringify(payload) })),
+  setAssignmentStudents: (id: number, payload: { assignedAll: boolean; studentIds: number[] }) =>
+    req<void>(`/api/admin/assignments/${id}/students`, json({ method: 'PUT', body: JSON.stringify(payload) })),
+  deleteAssignment: (id: number) => req<void>(`/api/admin/assignments/${id}`, { method: 'DELETE' }),
+  assignmentStudents: (id: number) => req<AssignmentStudents>(`/api/admin/assignments/${id}/students`),
+  assignmentStats: (id: number) => req<AssignmentStats>(`/api/admin/assignments/${id}/stats`),
 }
