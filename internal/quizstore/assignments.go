@@ -16,17 +16,17 @@ import (
 
 // Assignment 布置（管理员/学生通用视图）。
 type Assignment struct {
-	ID            int64     `json:"id"`
-	Kind          string    `json:"kind"` // training | practice
-	RepoID        int64     `json:"repoId"`
-	Title         string    `json:"title"`
-	Description   string    `json:"description"`
-	Tags          []string  `json:"tags"`
-	Published     bool      `json:"published"`
-	AssignedAll   bool      `json:"assignedAll"`
-	ProblemCount  int       `json:"problemCount"` // 实时主库题数（读取时填充）
-	StudentCount  int       `json:"studentCount"` // 定向学生数（assignedAll 时 = 全体学生数）
-	CreatedAt     time.Time `json:"createdAt"`
+	ID           int64     `json:"id"`
+	Kind         string    `json:"kind"` // training | practice
+	RepoID       int64     `json:"repoId"`
+	Title        string    `json:"title"`
+	Description  string    `json:"description"`
+	Tags         []string  `json:"tags"`
+	Published    bool      `json:"published"`
+	AssignedAll  bool      `json:"assignedAll"`
+	ProblemCount int       `json:"problemCount"` // 实时主库题数（读取时填充）
+	StudentCount int       `json:"studentCount"` // 定向学生数（assignedAll 时 = 全体学生数）
+	CreatedAt    time.Time `json:"createdAt"`
 }
 
 // AssignmentFilter 管理端列表条件。
@@ -319,11 +319,11 @@ func (s *Store) AssignmentStudentSet(assignmentID int64) ([]int64, error) {
 
 // ProblemStats 每题统计（管理端）：通过人数（学生集内 best_verdict=AC）+ 提交次数（submit/objective）。
 type ProblemStats struct {
-	ProblemID      int64  `json:"problemId"`
-	Title          string `json:"title"`
-	Type           string `json:"type"`
-	AcceptedUsers  int    `json:"accepted"`
-	SubmissionCount int   `json:"submissions"`
+	ProblemID       int64  `json:"problemId"`
+	Title           string `json:"title"`
+	Type            string `json:"type"`
+	AcceptedUsers   int    `json:"accepted"`
+	SubmissionCount int    `json:"submissions"`
 }
 
 // ProblemStatsOf 任务内各题统计：

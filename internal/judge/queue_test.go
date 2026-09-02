@@ -103,7 +103,7 @@ func seedSubmission(t *testing.T, db *sql.DB, userID, problemID int64, typ Submi
 
 func TestSelectCases(t *testing.T) {
 	body := ProgrammingBody{
-		Samples: []ProgrammingCase{{Input: "s1", Output: "o1"}},
+		Samples:   []ProgrammingCase{{Input: "s1", Output: "o1"}},
 		TestCases: []ProgrammingCase{{Input: "t1", Output: "o1"}, {Input: "t2", Output: "o2"}},
 	}
 	runCases := SelectCases(SubmitTypeRun, body, "custom")
@@ -238,9 +238,9 @@ func TestQueueFailJob(t *testing.T) {
 
 func TestNormalizeOutput(t *testing.T) {
 	cases := map[string]string{
-		"3\n":     "3",
-		"3\r\n":   "3",
-		"  3  \n": "3", // 行尾去空白 + 整体 TrimSpace（首行行首随整体 Trim 消失）
+		"3\n":       "3",
+		"3\r\n":     "3",
+		"  3  \n":   "3", // 行尾去空白 + 整体 TrimSpace（首行行首随整体 Trim 消失）
 		"a \n b \n": "a\n b",
 		"":          "",
 	}

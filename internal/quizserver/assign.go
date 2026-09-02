@@ -119,13 +119,13 @@ func (s *Server) handleAdminListAssignments(c *fiber.Ctx) error {
 }
 
 type createAssignmentRequest struct {
-	Kind        string   `json:"kind"`
-	RepoID      int64    `json:"repoId"`
-	Title       string   `json:"title"`
-	Description string   `json:"description"`
-	AssignedAll bool     `json:"assignedAll"`
-	Published   *bool    `json:"published"`
-	StudentIDs  []int64  `json:"studentIds"`
+	Kind        string  `json:"kind"`
+	RepoID      int64   `json:"repoId"`
+	Title       string  `json:"title"`
+	Description string  `json:"description"`
+	AssignedAll bool    `json:"assignedAll"`
+	Published   *bool   `json:"published"`
+	StudentIDs  []int64 `json:"studentIds"`
 }
 
 // handleAdminCreateAssignment POST /api/admin/assignments
@@ -363,9 +363,9 @@ func (s *Server) handleAdminAssignmentStats(c *fiber.Ctx) error {
 		view = []fiber.Map{}
 	}
 	return respondData(c, fiber.StatusOK, fiber.Map{
-		"title":        a.Title,
-		"kind":         a.Kind,
+		"title":         a.Title,
+		"kind":          a.Kind,
 		"totalStudents": len(students),
-		"problems":     view,
+		"problems":      view,
 	})
 }

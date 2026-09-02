@@ -161,13 +161,13 @@ type ojItem struct {
 
 // ojTrainingDetail 训练详情（章节化）。
 type ojTrainingDetail struct {
-	ID          int64             `json:"id"`
-	Title       string            `json:"title"`
-	Description string            `json:"description"`
-	Tags        []string          `json:"tags"`
-	Chapters    []ojChapter       `json:"chapters"`
-	Accepted    int               `json:"accepted"`
-	Total       int               `json:"total"`
+	ID          int64       `json:"id"`
+	Title       string      `json:"title"`
+	Description string      `json:"description"`
+	Tags        []string    `json:"tags"`
+	Chapters    []ojChapter `json:"chapters"`
+	Accepted    int         `json:"accepted"`
+	Total       int         `json:"total"`
 }
 
 type ojChapter struct {
@@ -449,9 +449,13 @@ func (s *Server) handleOJCodeAction(c *fiber.Ctx, submitType judge.SubmitType) e
 	return respondData(c, fiber.StatusCreated, fiber.Map{"submissionId": submissionID, "status": "queued"})
 }
 
-func (s *Server) handleOJRun(c *fiber.Ctx) error    { return s.handleOJCodeAction(c, judge.SubmitTypeRun) }
-func (s *Server) handleOJTest(c *fiber.Ctx) error   { return s.handleOJCodeAction(c, judge.SubmitTypeTest) }
-func (s *Server) handleOJSubmit(c *fiber.Ctx) error { return s.handleOJCodeAction(c, judge.SubmitTypeSubmit) }
+func (s *Server) handleOJRun(c *fiber.Ctx) error { return s.handleOJCodeAction(c, judge.SubmitTypeRun) }
+func (s *Server) handleOJTest(c *fiber.Ctx) error {
+	return s.handleOJCodeAction(c, judge.SubmitTypeTest)
+}
+func (s *Server) handleOJSubmit(c *fiber.Ctx) error {
+	return s.handleOJCodeAction(c, judge.SubmitTypeSubmit)
+}
 
 // handleOJObjectiveSubmit 客观题同步判定（写 submissions + progress）。
 func (s *Server) handleOJObjectiveSubmit(c *fiber.Ctx) error {

@@ -14,23 +14,23 @@ import (
 
 // Submission 提交记录（JSON 视图，判题结果完成态）。
 type Submission struct {
-	ID           int64             `json:"id"`
-	ProblemID    int64             `json:"problemId"`
-	QuestionType string            `json:"questionType"`
-	Language     string            `json:"language"`
-	SourceCode   string            `json:"sourceCode,omitempty"`
-	InputData    string            `json:"inputData,omitempty"`
-	SubmitType   judge.SubmitType  `json:"submitType"`
-	Status       string            `json:"status"`
-	Verdict      judge.Verdict     `json:"verdict"`
-	TimeMS       int               `json:"timeMs"`
-	MemoryKiB    int               `json:"memoryKiB"`
-	Score        int               `json:"score"`
-	Stdout       string            `json:"stdout,omitempty"`
-	Stderr       string            `json:"stderr,omitempty"`
+	ID           int64              `json:"id"`
+	ProblemID    int64              `json:"problemId"`
+	QuestionType string             `json:"questionType"`
+	Language     string             `json:"language"`
+	SourceCode   string             `json:"sourceCode,omitempty"`
+	InputData    string             `json:"inputData,omitempty"`
+	SubmitType   judge.SubmitType   `json:"submitType"`
+	Status       string             `json:"status"`
+	Verdict      judge.Verdict      `json:"verdict"`
+	TimeMS       int                `json:"timeMs"`
+	MemoryKiB    int                `json:"memoryKiB"`
+	Score        int                `json:"score"`
+	Stdout       string             `json:"stdout,omitempty"`
+	Stderr       string             `json:"stderr,omitempty"`
 	CaseDetails  []judge.CaseResult `json:"caseDetails,omitempty"`
-	CreatedAt    time.Time         `json:"createdAt"`
-	FinishedAt   *time.Time        `json:"finishedAt,omitempty"`
+	CreatedAt    time.Time          `json:"createdAt"`
+	FinishedAt   *time.Time         `json:"finishedAt,omitempty"`
 }
 
 // CreateProgrammingSubmission 事务内写入 submissions(queued) + judge_jobs(queued)。
@@ -90,7 +90,7 @@ func (s *Store) UpsertProgress(userID, problemID int64, verdict judge.Verdict, s
 // （quiz.db submissions + 主库 problems 运行时字段）。
 func (s *Store) LoadSubmission(ctx context.Context, submissionID int64) (*judge.RuntimeSubmission, error) {
 	var (
-		userID, problemID int64
+		userID, problemID            int64
 		typ, language, source, input string
 	)
 	err := s.DB.QueryRowContext(ctx, `SELECT user_id,problem_id,submit_type,language,source_code,input_data

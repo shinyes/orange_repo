@@ -79,14 +79,14 @@ type RunResult struct {
 
 // CaseResult 单个测试点结果。
 type CaseResult struct {
-	CaseNo         int    `json:"caseNo"`
+	CaseNo         int     `json:"caseNo"`
 	Verdict        Verdict `json:"verdict"`
-	Input          string `json:"input"`
-	Output         string `json:"output"`
-	ExpectedOutput string `json:"expectedOutput"`
-	Error          string `json:"error"`
-	TimeMS         int    `json:"timeMs"`
-	MemoryKiB      int    `json:"memoryKiB"`
+	Input          string  `json:"input"`
+	Output         string  `json:"output"`
+	ExpectedOutput string  `json:"expectedOutput"`
+	Error          string  `json:"error"`
+	TimeMS         int     `json:"timeMs"`
+	MemoryKiB      int     `json:"memoryKiB"`
 }
 
 // Runner 执行判题任务的抽象（HTTPRunner 为生产实现，测试可注入 fake）。
