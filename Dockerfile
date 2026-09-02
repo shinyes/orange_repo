@@ -1,16 +1,20 @@
 # syntax=docker/dockerfile:1.7
 
 # ---------- 前端构建 ----------
-FROM node:24-alpine AS web-build
+# node/npm 版本钉死：与本地生成 package-lock.json 的环境一致（node 24.15 / npm 11.12.1），
+# 避免浮点标签（node:24-alpine）漂移导致 npm ci 与 lockfile 的行为差异。
+FROM node:24.15-alpine AS web-build
 WORKDIR /src/web
+RUN npm install -g npm@11.12.1 --no-audit --no-fund
 COPY web/package.json web/package-lock.json ./
 RUN npm ci
 COPY web/ ./
 RUN npm run build
 
 # ---------- 刷题前端构建 ----------
-FROM node:24-alpine AS quiz-build
+FROM node:24.15-alpine AS quiz-build
 WORKDIR /src/web-quiz
+RUN npm install -g npm@11.12.1 --no-audit --no-fund
 COPY web-quiz/package.json web-quiz/package-lock.json ./
 RUN npm ci
 COPY web-quiz/ ./
