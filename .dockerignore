@@ -4,6 +4,8 @@ data
 docs
 web/node_modules
 web/dist
+web-quiz/node_modules
+web-quiz/dist
 *.exe
 *.zip
 *.tar.gz
