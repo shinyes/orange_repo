@@ -12,6 +12,7 @@ export default defineConfig({
     },
   },
   server: {
+    host: true, // 局域网设备可访问（默认仅 localhost）
     port: 5174,
     proxy: {
       '/api': 'http://127.0.0.1:8081',
