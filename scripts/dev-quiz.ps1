@@ -32,6 +32,21 @@ if (-not (Test-Path (Join-Path $quizDir "node_modules"))) {
 }
 $quizWeb = Start-Process -FilePath "npm.cmd" -ArgumentList "run", "dev" -WorkingDirectory $quizDir -PassThru -NoNewWindow
 
+# Wait-Health polls a backend /api/health until ready (go run needs to compile first).
+function Wait-Health($url, $name, $n = 60) {
+  for ($i = 0; $i -lt $n; $i++) {
+    try {
+      $r = Invoke-RestMethod $url -TimeoutSec 1
+      if ($r.ok) { Write-Host "[dev] $name ready" -ForegroundColor Green; return }
+    } catch { Start-Sleep -Milliseconds 500 }
+  }
+  Write-Host "[dev] WARN: $name not responding at $url - see error output above" -ForegroundColor Red
+}
+
+# 等待两个 Go 后端就绪（编译需要时间，避免 Vite 前端先行报 ECONNREFUSED）
+Wait-Health 'http://127.0.0.1:8080/api/health' 'OrangeRepo backend'
+Wait-Health 'http://127.0.0.1:8081/api/health' 'OrangeQuiz backend'
+
 Write-Host ""
 Write-Host "[dev] main app:  http://localhost:5173  (default password: 123456)" -ForegroundColor Green
 Write-Host "[dev] quiz app:  http://localhost:5174  (default admin: admin/123456)" -ForegroundColor Green
