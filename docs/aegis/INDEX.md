@@ -5,3 +5,5 @@
 - [spec] docs/aegis/specs/2026-08-29-quiz-service-design.md — 刷题服务设计规格（独立端口 quiz 服务）
 - [plan] docs/aegis/plans/2026-08-29-quiz-service.md — 刷题服务实施计划
 - [plan] docs/aegis/plans/2026-09-02-unified-accounts.md — 账号统一实施计划
+- [spec] docs/aegis/specs/2026-09-03-orangeroj-design.md — OrangeOJ 判题扩展设计规格（judge-runtime/布置/提交）
+- [plan] docs/aegis/plans/2026-09-03-orangeroj.md — OrangeOJ 判题扩展实施计划

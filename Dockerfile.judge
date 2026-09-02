@@ -1,0 +1,68 @@
+# syntax=docker/dockerfile:1.7
+
+# OrangeOJ judge-runtime 镜像：真正执行用户代码的沙箱评测服务（仅 Python 与 C++）。
+# 复刻上游 shinyes/OrangeOJ Dockerfile.judge：ubuntu 24.04 + g++/python3 + nsjail（源码编译）。
+
+# ---------- 构建 judge-runtime 二进制 ----------
+FROM --platform=$BUILDPLATFORM golang:1.25-alpine AS backend-build
+WORKDIR /src
+ARG TARGETOS
+ARG TARGETARCH
+ARG GOPROXY=https://goproxy.cn,direct
+ARG GOSUMDB=sum.golang.google.cn
+ENV GOPROXY=${GOPROXY}
+ENV GOSUMDB=${GOSUMDB}
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
+    go build -trimpath -ldflags "-s -w" -o /out/judge-runtime ./cmd/judge-runtime
+
+# ---------- 运行时：ubuntu 24.04 + 判题工具链 + nsjail ----------
+FROM --platform=$TARGETPLATFORM ubuntu:24.04
+ARG NSJAIL_REF=master
+
+RUN set -eux; \
+    apt-get update; \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+      autoconf \
+      bash \
+      binutils \
+      bison \
+      build-essential \
+      ca-certificates \
+      coreutils \
+      curl \
+      flex \
+      g++ \
+      gcc \
+      git \
+      libcap-dev \
+      libnl-route-3-dev \
+      libprotobuf-dev \
+      libseccomp-dev \
+      libtool \
+      make \
+      pkg-config \
+      protobuf-compiler \
+      python3; \
+    command -v ld; \
+    printf 'int main() { return 0; }\n' > /tmp/toolchain-check.cpp; \
+    g++ /tmp/toolchain-check.cpp -o /tmp/toolchain-check; \
+    /tmp/toolchain-check; \
+    rm -f /tmp/toolchain-check.cpp /tmp/toolchain-check; \
+    git clone --depth 1 --branch "$NSJAIL_REF" https://github.com/google/nsjail.git /tmp/nsjail; \
+    make -C /tmp/nsjail; \
+    install -m 0755 /tmp/nsjail/nsjail /usr/local/bin/nsjail; \
+    rm -rf /tmp/nsjail /var/lib/apt/lists/*
+
+WORKDIR /work
+COPY --from=backend-build /out/judge-runtime /usr/local/bin/judge-runtime
+RUN mkdir -p /work/jobs
+
+ENV ORANGEOJ_JUDGE_RUNTIME_PORT=9090
+ENV ORANGEOJ_JUDGE_WORKDIR=/work/jobs
+ENV ORANGEOJ_JUDGE_COMPILE_TIMEOUT_SEC=10
+
+EXPOSE 9090
+CMD ["/usr/local/bin/judge-runtime"]

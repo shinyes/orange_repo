@@ -1,11 +1,15 @@
-# OrangeRepo 生产部署示例（主站 + 刷题服务双容器）
-# docker compose up -d
-#   → http://localhost:8080（主站，默认密码 123456）
-#   → http://localhost:8081（刷题服务，初始管理员 admin/123456）
+# OrangeOJ 生产部署示例（主站 + 刷题服务 + 判题沙箱 三容器）
+# docker compose -f deploy/docker-compose.yml up -d --build
+#   → http://localhost:8080（主站，默认 admin/123456）
+#   → http://localhost:8081（刷题服务/OJ，默认 admin/123456）
+#   → judge-runtime :9090（判题沙箱，不对外）
+#
+# orangejudge 是真正执行学生代码的容器（nsjail 隔离），需要 privileged + cgroup v2 挂载，
+# 与上游 OrangeOJ 的 judge-runtime 容器配置一致；镜像需先本地构建：
+#   docker build -f Dockerfile.judge -t orangeoj-judge:local .
+# （主站+刷题服务镜像维持 ghcr.io/shinyes/orange_repo:<版本> 单镜像双二进制流程。）
 services:
   orangerepo:
-    # v1.0.2 起：容器启动时自动修正数据目录属主并降权运行，
-    # ./data 绑定挂载开箱即用，宿主机无需任何 chown/setfacl 操作。
     image: ghcr.io/shinyes/orange_repo:1.11.0
     container_name: orangerepo
     ports:
@@ -16,18 +20,63 @@ services:
 
   # 刷题服务：与主站共用同一镜像与数据卷（只读主库 orangerepo.db，
   # 自有数据写入同一卷内的 quiz.db）；主库表结构变化时请与主站同版本部署。
+  # 判题：连接 orangejudge（-judge-endpoint / -judge-token 必填否则判题 503）。
   orangequiz:
     image: ghcr.io/shinyes/orange_repo:1.11.0
     container_name: orangequiz
     entrypoint: ["/app/quiz"]
-    command: ["-addr", ":8081", "-data", "/app/data", "-web", "/app/web-quiz/dist"]
+    command: [
+      "-addr", ":8081",
+      "-data", "/app/data",
+      "-web", "/app/web-quiz/dist",
+      "-judge-endpoint", "http://orangejudge:9090",
+      "-judge-token", "${ORANGEOJ_JUDGE_SHARED_TOKEN:-change-this-in-production}",
+      "-judge-workers", "2",
+    ]
     ports:
       - "8081:8081"
     volumes:
       - ./data:/app/data
+    depends_on:
+      orangejudge:
+        condition: service_healthy
     restart: unless-stopped
 
-# 更想用命名卷？同样免配置，替换上面两个服务的 volumes 行即可：
+  # 判题沙箱：真正执行 Python/C++ 代码；nsjail 需要特权与宿主机 cgroup v2。
+  orangejudge:
+    image: orangeoj-judge:local
+    container_name: orangejudge
+    restart: unless-stopped
+    privileged: true
+    cgroup: host
+    environment:
+      ORANGEOJ_JUDGE_RUNTIME_PORT: "9090"
+      ORANGEOJ_JUDGE_WORKDIR: "/work/jobs"
+      ORANGEOJ_JUDGE_COMPILE_TIMEOUT_SEC: "10"
+      ORANGEOJ_JUDGE_SHARED_TOKEN: "${ORANGEOJ_JUDGE_SHARED_TOKEN:-change-this-in-production}"
+    cap_add:
+      - SYS_ADMIN
+      - SYS_RESOURCE
+      - SYS_PTRACE
+    security_opt:
+      - apparmor=unconfined
+      - seccomp=unconfined
+    volumes:
+      - judge-work:/work/jobs
+      - /sys/fs/cgroup:/sys/fs/cgroup:rw
+    tmpfs:
+      - /tmp
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:9090/healthz >/dev/null"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  judge-work:
+
+# 更想用命名卷？同样免配置，替换上面 orangerepo/orangequiz 的 volumes 行即可：
 #   volumes:
 #     - orangerepo-data:/app/data
 # 并保留顶层声明：
