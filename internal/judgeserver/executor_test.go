@@ -239,6 +239,22 @@ int main() { std::vector<int> v; return v[100]; }`
 	}
 }
 
+// TestCppTLE C++ 死循环 → TLE（编译产物被超时终止）。
+func TestCppTLE(t *testing.T) {
+	ex := newTestExecutor(t)
+	if ex.ToolchainMissing("g++") {
+		t.Skip("g++ 不可用")
+	}
+	code := `int main() { for (;;) {} return 0; }`
+	res, err := ex.Execute(context.Background(), cppTask(code, []judge.JudgeCase{{Input: "", Expected: ""}}, true))
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if res.Verdict != judge.VerdictTLE {
+		t.Fatalf("verdict = %s, want TLE; stderr=%s", res.Verdict, res.Stderr)
+	}
+}
+
 // TestUnsupportedLanguage go/turtle 等一律拒绝。
 func TestUnsupportedLanguage(t *testing.T) {
 	ex := newTestExecutor(t)
