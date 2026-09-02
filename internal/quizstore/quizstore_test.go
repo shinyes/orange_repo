@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"orangerepo/internal/accounts"
 	"orangerepo/internal/model"
 	"orangerepo/internal/quizstore"
 	"orangerepo/internal/store"
@@ -204,76 +205,6 @@ func TestGetExplanation(t *testing.T) {
 
 // ---------- quizstore_test ----------
 
-func TestUsers(t *testing.T) {
-	qs := newTestEnvironment(t)
-	adminID, err := qs.CreateUser("Admin", "pw-admin", quizstore.RoleAdmin)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := qs.CreateUser("alice", "pw-a", quizstore.RoleStudent); err != nil {
-		t.Fatal(err)
-	}
-	// 大小写不敏感唯一
-	if _, err := qs.CreateUser("ALICE", "pw-b", quizstore.RoleStudent); err == nil {
-		t.Fatal("重复用户名应冲突")
-	}
-	u, err := qs.GetUserByUsername("aDmIn")
-	if err != nil || u.ID != adminID {
-		t.Fatalf("大小写不敏感查询失败: %v %+v", err, u)
-	}
-	// 登录校验
-	lu, err := qs.CheckPassword("alice", "pw-a")
-	if err != nil || lu == nil || lu.Role != quizstore.RoleStudent {
-		t.Fatalf("alice 登录失败: %v", err)
-	}
-	if _, err := qs.CheckPassword("alice", "wrong"); err == nil {
-		t.Fatal("错误密码应失败")
-	}
-	// 学生列表与重置密码
-	students, err := qs.ListStudents()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(students) != 1 || students[0].Username != "alice" || students[0].WrongCount != 0 {
-		t.Fatalf("学生列表 = %+v", students)
-	}
-	if err := qs.SetStudentPassword(students[0].ID, "pw-new"); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := qs.CheckPassword("alice", "pw-new"); err != nil {
-		t.Fatal("重置后新密码登录失败")
-	}
-	// 删除学生
-	if err := qs.DeleteStudent(students[0].ID); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := qs.GetUserByID(students[0].ID); err == nil {
-		t.Fatal("删除后用户应不存在")
-	}
-}
-
-func TestSessions(t *testing.T) {
-	qs := newTestEnvironment(t)
-	id, err := qs.CreateUser("bob", "pw", quizstore.RoleStudent)
-	if err != nil {
-		t.Fatal(err)
-	}
-	token, err := qs.CreateSession(id)
-	if err != nil {
-		t.Fatal(err)
-	}
-	u, ok := qs.GetUserByToken(token)
-	if !ok || u.ID != id {
-		t.Fatalf("会话取用户失败: %v %v", u, ok)
-	}
-	if err := qs.DeleteSession(token); err != nil {
-		t.Fatal(err)
-	}
-	if _, ok := qs.GetUserByToken(token); ok {
-		t.Fatal("已删除会话不应有效")
-	}
-}
-
 func TestSubjectsAndCategories(t *testing.T) {
 	qs := newTestEnvironment(t)
 	s1, err := qs.CreateSubject("数学")
@@ -333,7 +264,7 @@ func TestSubjectsAndCategories(t *testing.T) {
 
 func TestWrongAnswersLifecycle(t *testing.T) {
 	qs := newTestEnvironment(t)
-	uid, err := qs.CreateUser("carol", "pw", quizstore.RoleStudent)
+	uid, err := qs.Accounts.CreateUser("carol", "pw", accounts.RoleStudent)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -380,7 +311,7 @@ func TestWrongAnswersLifecycle(t *testing.T) {
 		t.Fatalf("移除后总数 = %d, want 1", total)
 	}
 	// 学生删除级联
-	_ = qs.DeleteStudent(uid)
+	_ = qs.Accounts.DeleteStudent(uid)
 	total, _ = qs.WrongTotal(uid)
 	if total != 0 {
 		t.Fatalf("删除学生后错题 = %d, want 0", total)

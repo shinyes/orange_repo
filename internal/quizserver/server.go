@@ -1,4 +1,4 @@
-// Package quizserver 组装刷题服务 Fiber 应用：路由、会话认证、管理员鉴权、静态资源。
+﻿// Package quizserver 组装刷题服务 Fiber 应用：路由、会话认证、管理员鉴权、静态资源。
 package quizserver
 
 import (
@@ -11,6 +11,7 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 
+	"orangerepo/internal/accounts"
 	"orangerepo/internal/quizstore"
 )
 
@@ -97,7 +98,7 @@ func New(qs *quizstore.Store, uploadsDir, webDist string) *fiber.App {
 
 // requireSession 会话校验：token 有效则注入当前用户。
 func (s *Server) requireSession(c *fiber.Ctx) error {
-	u, ok := s.QS.GetUserByToken(c.Cookies(SessionCookie))
+	u, ok := s.QS.Accounts.GetUserByToken(c.Cookies(SessionCookie))
 	if !ok {
 		return respondError(c, fiber.StatusUnauthorized, "unauthorized")
 	}
@@ -108,15 +109,15 @@ func (s *Server) requireSession(c *fiber.Ctx) error {
 // requireAdmin 管理员鉴权（须置于 requireSession 之后）。
 func (s *Server) requireAdmin(c *fiber.Ctx) error {
 	u := currentUser(c)
-	if u == nil || u.Role != quizstore.RoleAdmin {
+	if u == nil || u.Role != accounts.RoleAdmin {
 		return respondError(c, fiber.StatusForbidden, "需要管理员权限")
 	}
 	return c.Next()
 }
 
-func currentUser(c *fiber.Ctx) *quizstore.User {
+func currentUser(c *fiber.Ctx) *accounts.User {
 	if v := c.Locals(userLocals); v != nil {
-		return v.(*quizstore.User)
+		return v.(*accounts.User)
 	}
 	return nil
 }

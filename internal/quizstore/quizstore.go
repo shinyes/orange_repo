@@ -1,15 +1,14 @@
 // Package quizstore 封装刷题服务的两级存储：
 //
-//   - quiz.db：刷题服务自有数据（用户、会话、科目、分类、错题、全局设置），本服务唯一写路径；
+//   - quiz.db：刷题服务自有数据（科目、分类、错题、全局设置）+ 共享账号表（users/sessions，
+//     表结构与账号/会话操作的唯一 owner 是 internal/accounts，本包经 Accounts 字段访问）；
 //   - orangerepo.db：只读访问主站题库（见 problems.go 的 RepoReader）。
 //
 // 标签匹配语义复用 internal/store.TagMatchesSelected（唯一权威实现，不重复发明）。
 package quizstore
 
 import (
-	"crypto/rand"
 	"database/sql"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -18,32 +17,17 @@ import (
 	"strings"
 	"time"
 
-	"golang.org/x/crypto/bcrypt"
 	_ "modernc.org/sqlite"
 
+	"orangerepo/internal/accounts"
 	"orangerepo/internal/store"
 )
 
 // ErrNotFound 统一的未找到错误。
 var ErrNotFound = errors.New("not found")
 
-// ErrConflict 唯一性冲突（用户名已存在等）。
-var ErrConflict = errors.New("conflict")
-
-// Role 用户角色。
-type Role string
-
-const (
-	RoleAdmin   Role = "admin"
-	RoleStudent Role = "student"
-)
-
-// User 会话上下文中的用户。
-type User struct {
-	ID       int64  `json:"id"`
-	Username string `json:"username"`
-	Role     Role   `json:"role"`
-}
+// ErrConflict 唯一性冲突（用户名已存在等；透传 accounts.ErrConflict）。
+var ErrConflict = accounts.ErrConflict
 
 // Student 学生账号管理视图（含错题数）。
 type Student struct {
@@ -85,10 +69,11 @@ type WrongProblem struct {
 	CategoryID int64
 }
 
-// Store 刷题服务存储：quiz.db 写 + 主库只读。
+// Store 刷题服务存储：quiz.db 写 + 主库只读。Accounts 是共享账号库（同一 quiz.db 连接）。
 type Store struct {
-	DB   *sql.DB
-	Repo *RepoReader
+	DB       *sql.DB
+	Repo     *RepoReader
+	Accounts *accounts.Store
 }
 
 // Open 打开（必要时创建）数据目录与 quiz.db 并迁移，同时以只读方式打开主库题库。
@@ -103,7 +88,7 @@ func Open(dataDir, repoPath string) (*Store, error) {
 		return nil, fmt.Errorf("open quiz sqlite: %w", err)
 	}
 	db.SetMaxOpenConns(1)
-	s := &Store{DB: db}
+	s := &Store{DB: db, Accounts: accounts.New(db)}
 	if err := s.migrate(); err != nil {
 		db.Close()
 		return nil, err
@@ -125,19 +110,11 @@ func (s *Store) Close() error {
 }
 
 func (s *Store) migrate() error {
+	// users/sessions 由 internal/accounts 负责（幂等），此处先行保证
+	if err := accounts.Migrate(s.DB); err != nil {
+		return err
+	}
 	stmts := []string{
-		`CREATE TABLE IF NOT EXISTS users (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			username TEXT NOT NULL UNIQUE COLLATE NOCASE,
-			password_hash TEXT NOT NULL,
-			role TEXT NOT NULL CHECK(role IN ('admin','student')),
-			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-		);`,
-		`CREATE TABLE IF NOT EXISTS sessions (
-			token TEXT PRIMARY KEY,
-			user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-		);`,
 		`CREATE TABLE IF NOT EXISTS subjects (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			name TEXT NOT NULL,
@@ -176,86 +153,7 @@ func (s *Store) migrate() error {
 	return nil
 }
 
-// ---------- 用户 ----------
-
-// ValidateUsername 校验用户名：trim 后 1–32 字符、无控制字符。
-func ValidateUsername(u string) error {
-	u = strings.TrimSpace(u)
-	if u == "" {
-		return errors.New("用户名不能为空")
-	}
-	if len([]rune(u)) > 32 {
-		return errors.New("用户名不能超过 32 个字符")
-	}
-	for _, r := range u {
-		if r < 0x20 {
-			return errors.New("用户名含非法字符")
-		}
-	}
-	return nil
-}
-
-// CreateUser 创建用户（用户名大小写不敏感唯一；role ∈ admin|student）。
-func (s *Store) CreateUser(username, password string, role Role) (int64, error) {
-	username = strings.TrimSpace(username)
-	if err := ValidateUsername(username); err != nil {
-		return 0, err
-	}
-	if password == "" {
-		return 0, errors.New("密码不能为空")
-	}
-	if role != RoleAdmin && role != RoleStudent {
-		return 0, errors.New("非法角色")
-	}
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-	if err != nil {
-		return 0, err
-	}
-	res, err := s.DB.Exec(`INSERT INTO users(username,password_hash,role) VALUES(?,?,?)`,
-		username, string(hash), string(role))
-	if err != nil {
-		if strings.Contains(err.Error(), "UNIQUE") {
-			return 0, ErrConflict
-		}
-		return 0, err
-	}
-	return res.LastInsertId()
-}
-
-// GetUserByUsername 按用户名（大小写不敏感）取用户。
-func (s *Store) GetUserByUsername(username string) (*User, error) {
-	u := &User{}
-	err := s.DB.QueryRow(`SELECT id,username,role FROM users WHERE username=? COLLATE NOCASE`, username).
-		Scan(&u.ID, &u.Username, &u.Role)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, ErrNotFound
-	}
-	if err != nil {
-		return nil, err
-	}
-	return u, nil
-}
-
-// GetUserByID 取用户。
-func (s *Store) GetUserByID(id int64) (*User, error) {
-	u := &User{}
-	err := s.DB.QueryRow(`SELECT id,username,role FROM users WHERE id=?`, id).
-		Scan(&u.ID, &u.Username, &u.Role)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, ErrNotFound
-	}
-	if err != nil {
-		return nil, err
-	}
-	return u, nil
-}
-
-// HasAdmin 是否存在管理员账号（用于首次引导）。
-func (s *Store) HasAdmin() (bool, error) {
-	var n int
-	err := s.DB.QueryRow(`SELECT COUNT(*) FROM users WHERE role='admin'`).Scan(&n)
-	return n > 0, err
-}
+// ---------- 学生列表（错题数 JOIN；账号/会话操作见 internal/accounts） ----------
 
 // ListStudents 学生账号列表（含各自错题数）。
 func (s *Store) ListStudents() ([]Student, error) {
@@ -275,118 +173,6 @@ func (s *Store) ListStudents() ([]Student, error) {
 		out = append(out, st)
 	}
 	return out, rows.Err()
-}
-
-// DeleteStudent 删除学生账号（级联清理会话与错题记录；仅允许学生角色）。
-func (s *Store) DeleteStudent(id int64) error {
-	res, err := s.DB.Exec(`DELETE FROM users WHERE id=? AND role='student'`, id)
-	if err != nil {
-		return err
-	}
-	n, _ := res.RowsAffected()
-	if n == 0 {
-		return ErrNotFound
-	}
-	return nil
-}
-
-// SetStudentPassword 重置学生密码。
-func (s *Store) SetStudentPassword(id int64, password string) error {
-	if password == "" {
-		return errors.New("密码不能为空")
-	}
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-	if err != nil {
-		return err
-	}
-	res, err := s.DB.Exec(`UPDATE users SET password_hash=? WHERE id=? AND role='student'`, string(hash), id)
-	if err != nil {
-		return err
-	}
-	n, _ := res.RowsAffected()
-	if n == 0 {
-		return ErrNotFound
-	}
-	return nil
-}
-
-// CheckPassword 校验用户名密码（登录用）。
-func (s *Store) CheckPassword(username, password string) (*User, error) {
-	u, err := s.GetUserByUsername(username)
-	if err != nil {
-		return nil, err
-	}
-	var hash string
-	if err := s.DB.QueryRow(`SELECT password_hash FROM users WHERE id=?`, u.ID).Scan(&hash); err != nil {
-		return nil, err
-	}
-	if bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) != nil {
-		return nil, errors.New("wrong password")
-	}
-	return u, nil
-}
-
-// SetPassword 修改当前用户密码（管理员或学生均可）。
-func (s *Store) SetPassword(userID int64, newPassword string) error {
-	if newPassword == "" {
-		return errors.New("密码不能为空")
-	}
-	hash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
-	if err != nil {
-		return err
-	}
-	_, err = s.DB.Exec(`UPDATE users SET password_hash=? WHERE id=?`, string(hash), userID)
-	return err
-}
-
-// ---------- 会话 ----------
-
-func newToken() (string, error) {
-	b := make([]byte, 32)
-	if _, err := rand.Read(b); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(b), nil
-}
-
-// CreateSession 为用户创建会话，返回 token。
-func (s *Store) CreateSession(userID int64) (string, error) {
-	token, err := newToken()
-	if err != nil {
-		return "", err
-	}
-	if _, err := s.DB.Exec(`INSERT INTO sessions(token,user_id) VALUES(?,?)`, token, userID); err != nil {
-		return "", err
-	}
-	return token, nil
-}
-
-// GetUserByToken 按会话 token 取用户；token 失效（用户被删）时自动清理。
-func (s *Store) GetUserByToken(token string) (*User, bool) {
-	if token == "" {
-		return nil, false
-	}
-	u := &User{}
-	err := s.DB.QueryRow(`SELECT u.id,u.username,u.role FROM sessions se
-		JOIN users u ON u.id=se.user_id WHERE se.token=?`, token).
-		Scan(&u.ID, &u.Username, &u.Role)
-	if err != nil {
-		_, _ = s.DB.Exec(`DELETE FROM sessions WHERE token=?`, token)
-		return nil, false
-	}
-	return u, true
-}
-
-// DeleteSession 删除会话。
-func (s *Store) DeleteSession(token string) error {
-	_, err := s.DB.Exec(`DELETE FROM sessions WHERE token=?`, token)
-	return err
-}
-
-// RotateSession 删除旧会话并创建新会话（改密码后轮换）。
-func (s *Store) RotateSession(oldToken string, userID int64) (string, error) {
-	_ = s.DeleteSession(oldToken)
-	return s.CreateSession(userID)
 }
 
 // ---------- 全局设置 ----------

@@ -1,4 +1,4 @@
-package quizserver
+﻿package quizserver
 
 import (
 	"log"
@@ -6,7 +6,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
-	"orangerepo/internal/quizstore"
+	"orangerepo/internal/accounts"
 )
 
 // BootstrapAdmin / BootstrapPassword 首次启动的默认管理员账号。
@@ -18,11 +18,11 @@ const (
 
 // EnsureBootstrap 保证存在管理员账号；返回是否执行了首次引导。
 func (s *Server) EnsureBootstrap() bool {
-	has, err := s.QS.HasAdmin()
+	has, err := s.QS.Accounts.HasAdmin()
 	if err != nil || has {
 		return false
 	}
-	if _, err := s.QS.CreateUser(BootstrapAdmin, BootstrapPassword, quizstore.RoleAdmin); err != nil {
+	if _, err := s.QS.Accounts.CreateUser(BootstrapAdmin, BootstrapPassword, accounts.RoleAdmin); err != nil {
 		log.Printf("[ERROR] 创建初始管理员失败: %v", err)
 		return false
 	}
@@ -40,11 +40,11 @@ func (s *Server) handleLogin(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil || strings.TrimSpace(req.Username) == "" || req.Password == "" {
 		return respondError(c, fiber.StatusBadRequest, "invalid request")
 	}
-	u, err := s.QS.CheckPassword(strings.TrimSpace(req.Username), req.Password)
+	u, err := s.QS.Accounts.CheckPassword(strings.TrimSpace(req.Username), req.Password)
 	if err != nil {
 		return respondError(c, fiber.StatusUnauthorized, "用户名或密码错误")
 	}
-	token, err := s.QS.CreateSession(u.ID)
+	token, err := s.QS.Accounts.CreateSession(u.ID)
 	if err != nil {
 		return err
 	}
@@ -60,13 +60,13 @@ func (s *Server) handleLogin(c *fiber.Ctx) error {
 }
 
 func (s *Server) handleLogout(c *fiber.Ctx) error {
-	_ = s.QS.DeleteSession(c.Cookies(SessionCookie))
+	_ = s.QS.Accounts.DeleteSession(c.Cookies(SessionCookie))
 	c.Cookie(&fiber.Cookie{Name: SessionCookie, Value: "", Path: "/", HTTPOnly: true, MaxAge: -1})
 	return c.SendStatus(fiber.StatusNoContent)
 }
 
 func (s *Server) handleMe(c *fiber.Ctx) error {
-	u, ok := s.QS.GetUserByToken(c.Cookies(SessionCookie))
+	u, ok := s.QS.Accounts.GetUserByToken(c.Cookies(SessionCookie))
 	if !ok {
 		return respondData(c, fiber.StatusOK, fiber.Map{"authenticated": false})
 	}
@@ -85,13 +85,13 @@ func (s *Server) handleChangePassword(c *fiber.Ctx) error {
 		return respondError(c, fiber.StatusBadRequest, "invalid request")
 	}
 	u := currentUser(c)
-	if _, err := s.QS.CheckPassword(u.Username, req.OldPassword); err != nil {
+	if _, err := s.QS.Accounts.CheckPassword(u.Username, req.OldPassword); err != nil {
 		return respondError(c, fiber.StatusUnauthorized, "原密码错误")
 	}
-	if err := s.QS.SetPassword(u.ID, req.NewPassword); err != nil {
+	if err := s.QS.Accounts.SetPassword(u.ID, req.NewPassword); err != nil {
 		return respondError(c, fiber.StatusBadRequest, err.Error())
 	}
-	token, err := s.QS.RotateSession(c.Cookies(SessionCookie), u.ID)
+	token, err := s.QS.Accounts.RotateSession(c.Cookies(SessionCookie), u.ID)
 	if err != nil {
 		return err
 	}

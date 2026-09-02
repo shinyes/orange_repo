@@ -1,4 +1,4 @@
-package quizserver
+﻿package quizserver
 
 import (
 	"errors"
@@ -6,6 +6,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
+	"orangerepo/internal/accounts"
 	"orangerepo/internal/quizstore"
 )
 
@@ -242,7 +243,7 @@ func (s *Server) handleAdminCreateStudent(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil {
 		return respondError(c, fiber.StatusBadRequest, "invalid request")
 	}
-	id, err := s.QS.CreateUser(req.Username, req.Password, quizstore.RoleStudent)
+	id, err := s.QS.Accounts.CreateUser(req.Username, req.Password, accounts.RoleStudent)
 	if err != nil {
 		if errors.Is(err, quizstore.ErrConflict) {
 			return respondError(c, fiber.StatusConflict, "用户名已存在")
@@ -263,7 +264,7 @@ func (s *Server) handleAdminResetStudentPassword(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil {
 		return respondError(c, fiber.StatusBadRequest, "invalid request")
 	}
-	if err := s.QS.SetStudentPassword(id, req.Password); err != nil {
+	if err := s.QS.Accounts.SetStudentPassword(id, req.Password); err != nil {
 		return respondError(c, fiber.StatusBadRequest, err.Error())
 	}
 	return c.SendStatus(fiber.StatusNoContent)
@@ -274,7 +275,7 @@ func (s *Server) handleAdminDeleteStudent(c *fiber.Ctx) error {
 	if err != nil {
 		return respondError(c, fiber.StatusBadRequest, "invalid id")
 	}
-	if err := s.QS.DeleteStudent(id); err != nil {
+	if err := s.QS.Accounts.DeleteStudent(id); err != nil {
 		return respondError(c, fiber.StatusNotFound, "学生不存在")
 	}
 	return c.SendStatus(fiber.StatusNoContent)
