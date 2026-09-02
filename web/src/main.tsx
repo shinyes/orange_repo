@@ -16,7 +16,7 @@ class AppErrorBoundary extends Component<{ children: ReactNode }, { error: Error
     if (this.state.error) {
       return (
         <div className="flex h-screen flex-col items-center justify-center gap-3 bg-background text-center">
-          <div className="text-4xl">🍊</div>
+          <img src="/favicon.png" alt="" className="size-14 rounded-2xl" />
           <div className="text-base font-medium">页面出了点问题</div>
           <div className="max-w-md px-6 text-xs text-muted-foreground">{String(this.state.error.message ?? this.state.error)}</div>
           <button

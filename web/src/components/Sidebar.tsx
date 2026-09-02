@@ -50,7 +50,7 @@ export function TagFilterColumn({ onLogout, onOpenSettings }: { onLogout: () => 
     <div className="flex h-full flex-col bg-sidebar">
       {/* 头部 */}
       <div className="flex items-center gap-2 px-3 pt-3">
-        <span className="flex size-8 items-center justify-center rounded-lg bg-primary text-lg text-primary-foreground">🍊</span>
+        <img src="/favicon.png" alt="OrangeRepo" className="size-8 rounded-lg" />
         <div className="min-w-0 flex-1 leading-tight">
           <div className="truncate text-sm font-semibold">OrangeRepo</div>
         </div>
