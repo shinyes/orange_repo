@@ -29,7 +29,7 @@ export function Login({ onSuccess }: { onSuccess: () => void }) {
       <form onSubmit={submit} className="w-full max-w-sm rounded-xl border bg-background p-6 shadow-sm">
         <div className="mb-6 text-center">
           <img src="/favicon.png" alt="OrangeRepo" className="mx-auto mb-3 size-14 rounded-xl" />
-          <h1 className="text-lg font-semibold">OrangeRepo 题库</h1>
+          <h1 className="text-lg font-semibold">OrangeRepo</h1>
           <p className="mt-1 text-xs text-muted-foreground">兼容 OrangeOJ 格式的题目仓库管理工具</p>
         </div>
         <div className="space-y-2">

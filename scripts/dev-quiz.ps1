@@ -9,7 +9,7 @@ $root = Split-Path -Parent $PSScriptRoot
 Write-Host "[dev] starting OrangeRepo backend on :8080 (data dir: $root\data) ..." -ForegroundColor Yellow
 $main = Start-Process -FilePath "go" -ArgumentList "run", "." -WorkingDirectory $root -PassThru -NoNewWindow
 
-Write-Host "[dev] starting OrangeQuiz backend on :8081 (same data dir) ..." -ForegroundColor Yellow
+Write-Host "[dev] starting Orange quiz backend on :8081 (same data dir) ..." -ForegroundColor Yellow
 $quiz = Start-Process -FilePath "go" -ArgumentList "run", "./cmd/quiz" -WorkingDirectory $root -PassThru -NoNewWindow
 
 Write-Host "[dev] starting OrangeRepo frontend on :5173 (/api proxied to 8080) ..." -ForegroundColor Yellow
@@ -22,7 +22,7 @@ if (-not (Test-Path (Join-Path $webDir "node_modules"))) {
 }
 $web = Start-Process -FilePath "npm.cmd" -ArgumentList "run", "dev" -WorkingDirectory $webDir -PassThru -NoNewWindow
 
-Write-Host "[dev] starting OrangeQuiz frontend on :5174 (/api proxied to 8081) ..." -ForegroundColor Yellow
+Write-Host "[dev] starting Orange quiz frontend on :5174 (/api proxied to 8081) ..." -ForegroundColor Yellow
 $quizDir = Join-Path $root "web-quiz"
 if (-not (Test-Path (Join-Path $quizDir "node_modules"))) {
   Write-Host "[dev] web-quiz/node_modules missing, running npm install first ..." -ForegroundColor Yellow
@@ -43,9 +43,9 @@ function Wait-Health($url, $name, $n = 60) {
   Write-Host "[dev] WARN: $name not responding at $url - see error output above" -ForegroundColor Red
 }
 
-# 等待两个 Go 后端就绪（编译需要时间，避免 Vite 前端先行报 ECONNREFUSED）
+# Wait for both Go backends (compilation takes time; avoids ECONNREFUSED noise in Vite).
 Wait-Health 'http://127.0.0.1:8080/api/health' 'OrangeRepo backend'
-Wait-Health 'http://127.0.0.1:8081/api/health' 'OrangeQuiz backend'
+Wait-Health 'http://127.0.0.1:8081/api/health' 'Orange quiz backend'
 
 Write-Host ""
 Write-Host "[dev] main app:  http://localhost:5173  (default password: 123456)" -ForegroundColor Green
@@ -55,7 +55,8 @@ Write-Host "[dev] press Ctrl+C to stop both servers." -ForegroundColor Green
 try {
   Wait-Process -Id $main.Id -ErrorAction SilentlyContinue
 } finally {
-  # 子进程可能已自行退出（如端口被占用时），taskkill 报错属正常，静默处理
+  # Sub-processes may exit on their own (e.g. port already in use);
+  # taskkill errors on already-dead PIDs are expected and silenced.
   $ErrorActionPreference = 'SilentlyContinue'
   # /T kills the whole process tree (go run spawns a child exe; npm spawns node)
   foreach ($p in @($quizWeb, $web, $quiz, $main)) {

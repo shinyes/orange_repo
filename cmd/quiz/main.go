@@ -1,4 +1,4 @@
-// OrangeQuiz — 独立端口刷题服务（与主站 OrangeRepo 共享题库）。
+// Orange 刷题 — 独立端口刷题服务（与主站 OrangeRepo 共享题库）。
 //
 // 数据边界：只读打开 <data>/orangerepo.db（主站权威题库，绝不写入/迁移）；
 // 自有数据（用户/科目/分类/错题/设置）写入 <data>/quiz.db。
@@ -43,7 +43,7 @@ func main() {
 	}
 
 	app := quizserver.New(qs, srv.UploadsDir, srv.WebDist)
-	log.Printf("[START] OrangeQuiz 刷题服务监听 http://localhost%s （题库: %s，前端: %s）", *addr, repoPath, *webDist)
+	log.Printf("[START] Orange 刷题服务监听 http://localhost%s （题库: %s，前端: %s）", *addr, repoPath, *webDist)
 	if err := app.Listen(*addr); err != nil {
 		log.Fatalf("[FATAL] 刷题服务退出: %v", err)
 	}

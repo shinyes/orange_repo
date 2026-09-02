@@ -108,7 +108,7 @@ function EmptyState() {
     <div className="mx-auto max-w-3xl px-6 py-12">
       <div className="mb-8 text-center">
         <img src="/favicon.png" alt="OrangeRepo" className="mx-auto mb-3 size-16 rounded-2xl" />
-        <h1 className="text-2xl font-semibold">OrangeRepo 题库</h1>
+        <h1 className="text-2xl font-semibold">OrangeRepo</h1>
         <p className="mt-2 text-sm text-muted-foreground">嵌套标签管理 · 标签树筛选 · OrangeOJ 格式双向兼容</p>
       </div>
 
