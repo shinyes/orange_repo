@@ -6,7 +6,7 @@ services:
   orangerepo:
     # v1.0.2 起：容器启动时自动修正数据目录属主并降权运行，
     # ./data 绑定挂载开箱即用，宿主机无需任何 chown/setfacl 操作。
-    image: ghcr.io/shinyes/orange_repo:1.10.0
+    image: ghcr.io/shinyes/orange_repo:1.11.0
     container_name: orangerepo
     ports:
       - "8080:8080"
@@ -17,7 +17,7 @@ services:
   # 刷题服务：与主站共用同一镜像与数据卷（只读主库 orangerepo.db，
   # 自有数据写入同一卷内的 quiz.db）；主库表结构变化时请与主站同版本部署。
   orangequiz:
-    image: ghcr.io/shinyes/orange_repo:1.10.0
+    image: ghcr.io/shinyes/orange_repo:1.11.0
     container_name: orangequiz
     entrypoint: ["/app/quiz"]
     command: ["-addr", ":8081", "-data", "/app/data", "-web", "/app/web-quiz/dist"]
