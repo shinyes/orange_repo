@@ -46,10 +46,10 @@ compose 中作为两个容器共享同一个数据卷启动。
 ```bash
 docker compose -f deploy/docker-compose.yml up -d
 # 或手动单起主站：
-docker run -d -p 8080:8080 -v ./data:/app/data ghcr.io/shinyes/orange_repo:1.9.5
+docker run -d -p 8080:8080 -v ./data:/app/data ghcr.io/shinyes/orange_repo:1.10.0
 # 手动单起刷题服务（同一数据卷）：
 docker run -d -p 8081:8081 --entrypoint /app/quiz \
-  -v ./data:/app/data ghcr.io/shinyes/orange_repo:1.9.5 \
+  -v ./data:/app/data ghcr.io/shinyes/orange_repo:1.10.0 \
   -addr :8081 -data /app/data -web /app/web-quiz/dist
 ```
 
