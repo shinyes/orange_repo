@@ -1,16 +1,19 @@
 import { useState } from 'react'
+import { useNavigate, useOutletContext } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { KeyRoundIcon, LogOutIcon, SettingsIcon } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { api } from '@/lib/api'
-import type { User } from '@/lib/types'
+import type { ShellContext } from '@/App'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { PasswordDialog } from '@/components/PasswordDialog'
 
-// 我的页：个人信息 + 修改密码 + 退出；管理员含「系统管理」入口。
-export function MyPage({ user, onOpenAdmin, onLogout }: { user: User; onOpenAdmin: () => void; onLogout: () => void }) {
+// 我的页：个人信息 + 修改密码 + 退出；管理员含「系统管理」入口（/admin 路由）。
+export function MyPage() {
+  const { user, onLogout } = useOutletContext<ShellContext>()
+  const navigate = useNavigate()
   const [pwOpen, setPwOpen] = useState(false)
   const wrong = useQuery({ queryKey: ['wrong-summary'], queryFn: api.wrongSummary })
 
@@ -38,7 +41,7 @@ export function MyPage({ user, onOpenAdmin, onLogout }: { user: User; onOpenAdmi
 
         <div className="mt-6 space-y-2.5">
           {user.role === 'admin' && (
-            <Button className="w-full min-h-10 justify-start" onClick={onOpenAdmin}>
+            <Button className="w-full min-h-10 justify-start" onClick={() => navigate('/admin')}>
               <SettingsIcon className="size-4" />
               系统管理
             </Button>
