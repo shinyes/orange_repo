@@ -1,6 +1,12 @@
 //go:build linux
 
-package main
+// 容器数据目录引导：解决“宿主机目录绑定挂载到 /app/data 时 uid 65532 无权限写入”的问题。
+//
+// 镜像默认以 root 启动 → 这里把数据目录整体属主修正为 65532:65532，
+// 然后立刻降权（setgroups/setgid/setuid），保证真正跑服务的进程永远不是 root。
+// 非 root 启动（自定义 --user 或非 Linux）时是空操作；任何一步失败都直接报错退出，
+// 绝不继续以 root 运行。
+package bootstrap
 
 import (
 	"fmt"
@@ -11,19 +17,13 @@ import (
 	"syscall"
 )
 
-// 容器内的目标运行身份（distroless nonroot 用户）。
 const (
 	containerUID = 65532
 	containerGID = 65532
 )
 
-// bootstrapDataDir 解决「宿主机目录绑定挂载到 /app/data 时 uid 65532 无权写入」的问题：
-//
-// 镜像默认以 root 启动 → 这里把数据目录整体属主修正为 65532:65532，
-// 然后立刻降权（setgroups/setgid/setuid），保证真正跑服务的进程永远不是 root。
-//
-// 非 root 启动（自定义 --user 或非 Linux）时是空操作；任何一步失败都直接报错退出，绝不以 root 继续运行。
-func bootstrapDataDir(dataDir string) error {
+// DataDir 修正数据目录属主并降权（仅在 Linux 且以 root 启动时生效）。
+func DataDir(dataDir string) error {
 	if os.Geteuid() != 0 {
 		return nil
 	}

@@ -2,7 +2,6 @@
 //
 // 数据边界：只读打开 <data>/orangerepo.db（主站权威题库，绝不写入/迁移）；
 // 自有数据（用户/科目/分类/错题/设置）写入 <data>/quiz.db。
-// 容器降权引导无需复制：刷题服务第一阶段不做 Docker 部署（见规格 §1 非目标）。
 package main
 
 import (
@@ -10,6 +9,7 @@ import (
 	"log"
 	"path/filepath"
 
+	"orangerepo/internal/bootstrap"
 	"orangerepo/internal/quizserver"
 	"orangerepo/internal/quizstore"
 )
@@ -20,6 +20,11 @@ func main() {
 	webDist := flag.String("web", "./web-quiz/dist", "刷题前端构建产物目录")
 	repoDB := flag.String("repo-db", "", "主站题库数据库路径（默认 <data>/orangerepo.db）")
 	flag.Parse()
+
+	// 容器以 root 启动时（绑定挂载宿主机目录的场景），先修正数据目录属主再降权到 65532。
+	if err := bootstrap.DataDir(*dataDir); err != nil {
+		log.Fatalf("[FATAL] 数据目录引导失败: %v", err)
+	}
 
 	repoPath := *repoDB
 	if repoPath == "" {

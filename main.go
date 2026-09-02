@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"orangerepo/internal/bootstrap"
 	"orangerepo/internal/server"
 	"orangerepo/internal/store"
 )
@@ -21,7 +22,7 @@ func main() {
 	flag.Parse()
 
 	// 容器以 root 启动时（绑定挂载宿主机目录的场景），先修正数据目录属主再降权到 65532。
-	if err := bootstrapDataDir(*dataDir); err != nil {
+	if err := bootstrap.DataDir(*dataDir); err != nil {
 		log.Fatalf("[FATAL] 数据目录引导失败: %v", err)
 	}
 
