@@ -4,8 +4,9 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { api, ApiError } from '@/lib/api'
 
-// 登录页：单用户密码登录。
+// 登录页：统一账号库（与刷题服务共享），仅管理员可登录主站。
 export function Login({ onSuccess }: { onSuccess: () => void }) {
+  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -15,10 +16,10 @@ export function Login({ onSuccess }: { onSuccess: () => void }) {
     setBusy(true)
     setError('')
     try {
-      await api.login(password)
+      await api.login(username.trim(), password)
       onSuccess()
     } catch (err) {
-      setError(err instanceof ApiError && err.status === 401 ? '密码错误' : '登录失败，请重试')
+      setError(err instanceof ApiError && err.status === 401 ? '用户名或密码错误' : '登录失败，请重试')
     } finally {
       setBusy(false)
     }
@@ -33,18 +34,27 @@ export function Login({ onSuccess }: { onSuccess: () => void }) {
           <p className="mt-1 text-xs text-muted-foreground">兼容 OrangeOJ 格式的题目仓库管理工具</p>
         </div>
         <div className="space-y-2">
-          <Label htmlFor="password">访问密码</Label>
+          <Label htmlFor="username">用户名</Label>
+          <Input
+            id="username"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            placeholder="默认 admin"
+            autoFocus
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="password">密码</Label>
           <Input
             id="password"
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="默认密码 123456"
-            autoFocus
           />
         </div>
         {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
-        <Button type="submit" className="mt-4 w-full" disabled={busy || !password}>
+        <Button type="submit" className="mt-4 w-full" disabled={busy || !password || !username.trim()}>
           {busy ? '登录中…' : '进入题库'}
         </Button>
       </form>

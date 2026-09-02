@@ -14,7 +14,9 @@ import (
 	"testing"
 
 	"github.com/gofiber/fiber/v2"
+	"golang.org/x/crypto/bcrypt"
 
+	"orangerepo/internal/accounts"
 	"orangerepo/internal/store"
 	"orangerepo/internal/zipio"
 )
@@ -27,9 +29,11 @@ func newTestApp(t *testing.T) (*fiber.App, *store.Store) {
 		t.Fatalf("open store: %v", err)
 	}
 	t.Cleanup(func() { st.Close() })
-	srv := &Server{Store: st, UploadsDir: filepath.Join(dir, "uploads")}
+	accDB, _ := accounts.OpenDB(dir)
+	t.Cleanup(func() { _ = accDB.Close() })
+	srv := &Server{Store: st, Accounts: accounts.New(accDB), UploadsDir: filepath.Join(dir, "uploads")}
 	srv.EnsureBootstrap()
-	app := New(st, srv.UploadsDir, "")
+	app := New(st, srv.Accounts, srv.UploadsDir, "")
 	return app, st
 }
 
@@ -63,7 +67,7 @@ func doJSON(t *testing.T, app *fiber.App, method, path, cookie string, body any)
 
 func sessionCookie(t *testing.T, app *fiber.App) string {
 	t.Helper()
-	resp, _ := doJSON(t, app, "POST", "/api/auth/login", "", map[string]string{"password": "123456"})
+	resp, _ := doJSON(t, app, "POST", "/api/auth/login", "", map[string]string{"username": "admin", "password": "123456"})
 	if resp.StatusCode != fiber.StatusNoContent {
 		t.Fatalf("login status = %d", resp.StatusCode)
 	}
@@ -74,6 +78,41 @@ func sessionCookie(t *testing.T, app *fiber.App) string {
 	return strings.Split(sc, ";")[0]
 }
 
+// TestLegacySettingsMigration 旧版 settings 单密码部署升级：自动迁移为 admin 账号（沿用原密码）。
+func TestLegacySettingsMigration(t *testing.T) {
+	dir := t.TempDir()
+	st, err := store.Open(dir)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() { st.Close() })
+	legacyHash, _ := bcrypt.GenerateFromPassword([]byte("legacy-pass"), bcrypt.DefaultCost)
+	_ = st.SetSetting("password_hash", string(legacyHash))
+	_ = st.SetSetting("session_token", "stale-token")
+	accDB, err := accounts.OpenDB(dir)
+	if err != nil {
+		t.Fatalf("open accounts: %v", err)
+	}
+	t.Cleanup(func() { _ = accDB.Close() })
+	srv := &Server{Store: st, Accounts: accounts.New(accDB), UploadsDir: filepath.Join(dir, "uploads")}
+	if !srv.EnsureBootstrap() {
+		t.Fatal("EnsureBootstrap 应执行迁移")
+	}
+	// 旧密码可登录（已迁移进账号库）
+	resp, _ := doJSON(t, New(st, srv.Accounts, srv.UploadsDir, ""), "POST", "/api/auth/login", "",
+		map[string]string{"username": "admin", "password": "legacy-pass"})
+	if resp.StatusCode != fiber.StatusNoContent {
+		t.Fatalf("旧密码登录 = %d, want 204", resp.StatusCode)
+	}
+	// 旧 settings 键已清理；再次引导为空操作
+	if hash, ok := st.GetSetting("password_hash"); ok && hash != "" {
+		t.Fatal("password_hash 应已清理")
+	}
+	if srv.EnsureBootstrap() {
+		t.Fatal("已存在管理员时不应重复引导")
+	}
+}
+
 func TestAuthFlow(t *testing.T) {
 	app, _ := newTestApp(t)
 	// 未认证 → 401
@@ -82,7 +121,7 @@ func TestAuthFlow(t *testing.T) {
 		t.Fatalf("unauthed /api/problems = %d, want 401", resp.StatusCode)
 	}
 	// 错误密码 → 401
-	resp, _ = doJSON(t, app, "POST", "/api/auth/login", "", map[string]string{"password": "wrong"})
+	resp, _ = doJSON(t, app, "POST", "/api/auth/login", "", map[string]string{"username": "admin", "password": "wrong"})
 	if resp.StatusCode != fiber.StatusUnauthorized {
 		t.Fatalf("wrong password = %d, want 401", resp.StatusCode)
 	}
@@ -98,7 +137,7 @@ func TestAuthFlow(t *testing.T) {
 	if resp.StatusCode != fiber.StatusNoContent {
 		t.Fatalf("change password = %d", resp.StatusCode)
 	}
-	resp, _ = doJSON(t, app, "POST", "/api/auth/login", "", map[string]string{"password": "123456"})
+	resp, _ = doJSON(t, app, "POST", "/api/auth/login", "", map[string]string{"username": "admin", "password": "123456"})
 	if resp.StatusCode != fiber.StatusUnauthorized {
 		t.Fatalf("old password should fail")
 	}

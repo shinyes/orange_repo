@@ -35,7 +35,8 @@ go run ./cmd/quiz -addr :8081
 
 访问 `http://localhost:5173`（主站开发）或 `http://localhost:8080`（主站生产）；
 刷题服务见 `http://localhost:5174`（开发）或 `http://localhost:8081`（生产）。
-刷题服务初始管理员 `admin/123456`，学生账号由管理员在「我的 → 系统管理」中创建。
+**主站与刷题服务共享同一账号库**：首次启动自动创建管理员 `admin/123456`（主站仅管理员可登录；
+学生账号由管理员在刷题服务「我的 → 系统管理」中创建），任一端修改密码两端同时生效。
 
 ## Docker 部署
 
@@ -61,8 +62,8 @@ docker run -d -p 8081:8081 --entrypoint /app/quiz \
 `./data` 卷内原样保留（主库 schema 无迁移；`quiz.db` 首次启动自动创建）。**注意**：刷题服务以只读方式访问主库，
 请与主站**同版本一起升级**，避免主库表结构变化导致旧版刷题服务不可用。
 
-**首次启动**：主站自动创建单用户密码，默认 `123456`，请登录后在左上角「⚙」中修改；
-刷题服务自动创建管理员 `admin/123456`，登录后在「我的」页修改。
+**首次启动**：主站与刷题服务共享账号库（users/sessions 位于 `data/quiz.db`），初始管理员 `admin/123456`
+（主站为用户名+密码登录；旧版主站的单密码会**自动迁移**为 admin 账号，原密码照常登录）。
 数据存储在 `data/` 目录（SQLite + 上传图片），删除该目录即可重置。
 
 ## 功能
@@ -76,7 +77,7 @@ docker run -d -p 8081:8081 --entrypoint /app/quiz \
 
 ## API 概览
 
-认证为单用户会话 Cookie。完整契约见 `docs/aegis/specs/2026-08-22-orangerepo-design.md` §5；**面向 AI/程序化调用的端点级参考见 `docs/api-reference.md`**（含请求/响应示例与工作流）。
+主站认证为**管理员**会话 Cookie（用户名+密码，统一账号库见内文）。完整契约见 `docs/aegis/specs/2026-08-22-orangerepo-design.md` §5；**面向 AI/程序化调用的端点级参考见 `docs/api-reference.md`**（含请求/响应示例与工作流）。
 
 ```
 POST /api/auth/login|logout   GET /api/auth/me      PUT /api/auth/password
@@ -107,7 +108,8 @@ main.go                  入口（-addr / -data / -seed）
 cmd/quiz/                刷题服务入口（独立端口，默认 :8081）
 internal/model           数据模型与 JSON 形状
 internal/store           SQLite 迁移与查询
-internal/quizstore       刷题数据层：quiz.db（用户/科目/分类/错题）+ orangerepo.db 只读 reader
+internal/accounts        共享账号库（users/sessions，主站与刷题服务统一账号的唯一 owner）
+internal/quizstore       刷题数据层：quiz.db（科目/分类/错题）+ orangerepo.db 只读 reader
 internal/quizserver      刷题 Fiber 路由与会话认证（多用户：管理员/学生）
 internal/zipio           OrangeOJ ZIP 兼容层（唯一权威实现，含单测）
 internal/server          Fiber 路由与会话认证（含 httptest 冒烟测试）

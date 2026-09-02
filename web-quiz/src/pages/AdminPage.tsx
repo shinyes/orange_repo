@@ -487,14 +487,15 @@ function CategoryDialog({
   )
 }
 
-// ---------- 学生 ----------
+// ---------- 学生与管理员 ----------
 
 function StudentsTab() {
   const qc = useQueryClient()
   const students = useQuery({ queryKey: ['admin-students'], queryFn: api.students })
+  const admins = useQuery({ queryKey: ['admin-admins'], queryFn: api.admins })
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
-  const [resetting, setResetting] = useState<{ id: number; username: string } | null>(null)
+  const [resetting, setResetting] = useState<{ id: number; username: string; kind: 'student' | 'admin' } | null>(null)
   const [deleting, setDeleting] = useState<{ id: number; username: string } | null>(null)
   const list = students.data?.students ?? []
 
@@ -512,8 +513,28 @@ function StudentsTab() {
     }
   }
 
+  function submitReset(id: number, pwd: string) {
+    return resetting?.kind === 'admin' ? api.resetAdminPassword(id, pwd) : api.resetStudentPassword(id, pwd)
+  }
+
   return (
     <div className="space-y-3 pt-4">
+      {/* 管理员账号（统一账号库：与主站共享，重置后全端重新登录） */}
+      <div className="rounded-xl border bg-card">
+        <div className="border-b px-4 py-2.5 text-sm font-semibold">管理员账号</div>
+        {(admins.data?.admins ?? []).map((a) => (
+          <div key={a.id} className="flex items-center gap-2 border-b px-4 py-2.5 last:border-b-0">
+            <div className="min-w-0 flex-1">
+              <span className="truncate text-sm font-medium">{a.username}</span>
+              <span className="ml-2 text-xs text-muted-foreground">主站与刷题服务共用</span>
+            </div>
+            <Button variant="ghost" size="icon" onClick={() => setResetting({ id: a.id, username: a.username, kind: 'admin' })} aria-label="重置密码">
+              <RotateCcwIcon className="size-4" />
+            </Button>
+          </div>
+        ))}
+      </div>
+
       <form onSubmit={create} className="flex flex-col gap-2 sm:flex-row">
         <Input placeholder="用户名" value={username} onChange={(e) => setUsername(e.target.value)} />
         <Input placeholder="初始密码" value={password} onChange={(e) => setPassword(e.target.value)} type="password" />
@@ -521,13 +542,14 @@ function StudentsTab() {
           <PlusIcon className="size-4" /> 新增
         </Button>
       </form>
+      <div className="text-xs text-muted-foreground">学生账号</div>
       {list.map((s) => (
         <div key={s.id} className="flex items-center gap-2 rounded-xl border bg-card p-3">
           <div className="min-w-0 flex-1">
             <div className="truncate text-sm font-medium">{s.username}</div>
             <div className="text-xs text-muted-foreground">错题 {s.wrongCount} 题 · 创建于 {s.createdAt.slice(0, 10)}</div>
           </div>
-          <Button variant="ghost" size="icon" onClick={() => setResetting({ id: s.id, username: s.username })} aria-label="重置密码">
+          <Button variant="ghost" size="icon" onClick={() => setResetting({ id: s.id, username: s.username, kind: 'student' })} aria-label="重置密码">
             <RotateCcwIcon className="size-4" />
           </Button>
           <Button variant="ghost" size="icon" className="text-red-600 hover:text-red-600" onClick={() => setDeleting({ id: s.id, username: s.username })} aria-label="删除">
@@ -544,12 +566,22 @@ function StudentsTab() {
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
             <DialogTitle>重置密码 — {resetting?.username}</DialogTitle>
+            <DialogDescription>
+              {resetting?.kind === 'admin'
+                ? '统一账号：重置后主站与刷题服务均使用新密码，且该账号全部在线会话立即失效。'
+                : '重置后该学生需用新密码登录。'}
+            </DialogDescription>
           </DialogHeader>
           <ResetPasswordForm
-            studentId={resetting?.id}
+            onSubmit={(pwd) => {
+              if (!resetting) return Promise.reject(new Error('缺少账号'))
+              return submitReset(resetting.id, pwd)
+            }}
             onDone={() => {
               setResetting(null)
               toast.success('密码已重置')
+              void qc.invalidateQueries({ queryKey: ['admin-students'] })
+              void qc.invalidateQueries({ queryKey: ['admin-admins'] })
             }}
           />
         </DialogContent>
@@ -582,15 +614,15 @@ function StudentsTab() {
   )
 }
 
-function ResetPasswordForm({ studentId, onDone }: { studentId?: number; onDone: () => void }) {
+function ResetPasswordForm({ onSubmit, onDone }: { onSubmit: (pwd: string) => Promise<void>; onDone: () => void }) {
   const [password, setPassword] = useState('')
   return (
     <form
       className="space-y-4"
       onSubmit={(e) => {
         e.preventDefault()
-        if (!studentId || !password) return
-        void api.resetStudentPassword(studentId, password).then(onDone).catch((err) => toast.error(err instanceof Error ? err.message : '重置失败'))
+        if (!password) return
+        void onSubmit(password).then(onDone).catch((err) => toast.error(err instanceof Error ? err.message : '重置失败'))
       }}
     >
       <Input type="password" placeholder="新密码" value={password} onChange={(e) => setPassword(e.target.value)} required />

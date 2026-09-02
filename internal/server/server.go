@@ -11,22 +11,24 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 
+	"orangerepo/internal/accounts"
 	"orangerepo/internal/store"
 )
 
 // SessionCookie 会话 Cookie 名。
 const SessionCookie = "orange_session"
 
-// Server 持有存储与上传目录。
+// Server 持有存储、共享账号库与上传目录。
 type Server struct {
 	Store      *store.Store
+	Accounts   *accounts.Store
 	UploadsDir string
 	WebDist    string
 }
 
 // New 创建 Fiber 应用（含路由与中间件）。
-func New(s *store.Store, uploadsDir, webDist string) *fiber.App {
-	srv := &Server{Store: s, UploadsDir: uploadsDir, WebDist: webDist}
+func New(s *store.Store, acc *accounts.Store, uploadsDir, webDist string) *fiber.App {
+	srv := &Server{Store: s, Accounts: acc, UploadsDir: uploadsDir, WebDist: webDist}
 	app := fiber.New(fiber.Config{
 		BodyLimit: 200 << 20,
 		ErrorHandler: func(c *fiber.Ctx, err error) error {

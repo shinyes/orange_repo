@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"orangerepo/internal/accounts"
 	"orangerepo/internal/bootstrap"
 	"orangerepo/internal/server"
 	"orangerepo/internal/store"
@@ -32,7 +33,14 @@ func main() {
 	}
 	defer st.Close()
 
-	srv := &server.Server{Store: st, UploadsDir: filepath.Join(*dataDir, "uploads"), WebDist: *webDist}
+	// 共享账号库（与刷题服务统一：users/sessions 位于 quiz.db）
+	accDB, err := accounts.OpenDB(*dataDir)
+	if err != nil {
+		log.Fatalf("[FATAL] 打开账号库失败: %v", err)
+	}
+	defer accDB.Close()
+
+	srv := &server.Server{Store: st, Accounts: accounts.New(accDB), UploadsDir: filepath.Join(*dataDir, "uploads"), WebDist: *webDist}
 	if srv.EnsureBootstrap() {
 		log.Printf("[BOOTSTRAP] 数据目录 %s 已初始化。", *dataDir)
 	}
@@ -49,7 +57,7 @@ func main() {
 		}
 	}
 
-	app := server.New(st, srv.UploadsDir, srv.WebDist)
+	app := server.New(st, srv.Accounts, srv.UploadsDir, srv.WebDist)
 	log.Printf("[START] OrangeRepo 监听 http://localhost%s （默认密码 123456，请登录后修改）", *addr)
 	if err := app.Listen(*addr); err != nil {
 		log.Fatalf("[FATAL] 服务退出: %v", err)

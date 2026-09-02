@@ -99,6 +99,9 @@ export const api = {
   resetStudentPassword: (id: number, password: string) =>
     req<void>(`/api/admin/students/${id}/password`, json({ method: 'PUT', body: JSON.stringify({ password }) })),
   deleteStudent: (id: number) => req<void>(`/api/admin/students/${id}`, { method: 'DELETE' }),
+  admins: () => req<{ admins: User[] }>('/api/admin/admins'),
+  resetAdminPassword: (id: number, password: string) =>
+    req<void>(`/api/admin/admins/${id}/password`, json({ method: 'PUT', body: JSON.stringify({ password }) })),
   settings: () => req<Settings>('/api/admin/settings'),
   putSettings: (roundSize: number) =>
     req<void>('/api/admin/settings', json({ method: 'PUT', body: JSON.stringify({ roundSize }) })),

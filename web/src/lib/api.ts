@@ -60,7 +60,8 @@ export function filterQuery(f: ProblemFilterState, extra?: Record<string, string
 export const api = {
   // ---- 认证 ----
   me: () => req<{ authenticated: boolean }>('/api/auth/me'),
-  login: (password: string) => req<void>('/api/auth/login', json({ method: 'POST', body: JSON.stringify({ password }) })),
+  login: (username: string, password: string) =>
+    req<void>('/api/auth/login', json({ method: 'POST', body: JSON.stringify({ username, password }) })),
   logout: () => req<void>('/api/auth/logout', { method: 'POST' }),
   changePassword: (oldPassword: string, newPassword: string) =>
     req<void>('/api/auth/password', json({ method: 'PUT', body: JSON.stringify({ oldPassword, newPassword }) })),

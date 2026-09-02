@@ -1,4 +1,4 @@
-﻿// Package quizserver 组装刷题服务 Fiber 应用：路由、会话认证、管理员鉴权、静态资源。
+// Package quizserver 组装刷题服务 Fiber 应用：路由、会话认证、管理员鉴权、静态资源。
 package quizserver
 
 import (
@@ -72,6 +72,8 @@ func New(qs *quizstore.Store, uploadsDir, webDist string) *fiber.App {
 	admin.Post("/students", srv.handleAdminCreateStudent)
 	admin.Put("/students/:id/password", srv.handleAdminResetStudentPassword)
 	admin.Delete("/students/:id", srv.handleAdminDeleteStudent)
+	admin.Get("/admins", srv.handleAdminListAdmins)
+	admin.Put("/admins/:id/password", srv.handleAdminResetAdminPassword)
 	admin.Get("/settings", srv.handleAdminGetSettings)
 	admin.Put("/settings", srv.handleAdminPutSettings)
 

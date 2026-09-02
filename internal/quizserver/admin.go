@@ -1,4 +1,4 @@
-﻿package quizserver
+package quizserver
 
 import (
 	"errors"
@@ -220,6 +220,37 @@ func splitCSV(s string) []string {
 		}
 	}
 	return out
+}
+
+// ---------- 管理员账号（统一账号库） ----------
+
+func (s *Server) handleAdminListAdmins(c *fiber.Ctx) error {
+	admins, err := s.QS.Accounts.ListAdmins()
+	if err != nil {
+		return respondError(c, fiber.StatusInternalServerError, err.Error())
+	}
+	if admins == nil {
+		admins = []accounts.User{}
+	}
+	return respondData(c, fiber.StatusOK, fiber.Map{"admins": admins})
+}
+
+// handleAdminResetAdminPassword 重置管理员密码（统一账号：清除该账号全部会话，全端重新登录）。
+func (s *Server) handleAdminResetAdminPassword(c *fiber.Ctx) error {
+	id, err := paramID(c, "id")
+	if err != nil {
+		return respondError(c, fiber.StatusBadRequest, "invalid id")
+	}
+	var req struct {
+		Password string `json:"password"`
+	}
+	if err := c.BodyParser(&req); err != nil {
+		return respondError(c, fiber.StatusBadRequest, "invalid request")
+	}
+	if err := s.QS.Accounts.SetUserPassword(id, req.Password); err != nil {
+		return respondError(c, fiber.StatusBadRequest, err.Error())
+	}
+	return c.SendStatus(fiber.StatusNoContent)
 }
 
 // ---------- 学生 ----------

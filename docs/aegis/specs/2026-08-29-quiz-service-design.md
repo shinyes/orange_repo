@@ -1,7 +1,8 @@
 # 刷题服务（quiz-service）设计规格
 
 日期：2026-08-29 · 状态：已确认（用户逐项拍板：共享 SQLite 只读、管理员建学生账号、解析=题解 markdown、每轮固定题数全局配置、任何模式答对即移出错题集、答后展示正确答案、错题页提供全部错题入口）
-修订：2026-09-02 —— Docker 双服务部署：同一镜像内构建 orangerepo + quiz 两个二进制，compose 两容器共享数据卷；CI 发布流程不变（单 tag 同时交付两服务）；原「不动 Docker 流程」非目标解除
+修订：2026-09-02a —— Docker 双服务部署：同一镜像内构建 orangerepo + quiz 两个二进制，compose 两容器共享数据卷；CI 发布流程不变（单 tag 同时交付两服务）；原「不动 Docker 流程」非目标解除
+修订：2026-09-02b —— 账号统一：users/sessions 表成为主站与刷题服务共享的唯一账号权威（物理位于 quiz.db）；主站认证改读账号库、登录限 admin 角色；旧 settings 密码哈希自动迁移为 admin 账号；改密码全端生效并清除该用户全部会话；系统管理页新增管理员账号管理
 
 ## 1. 目标与边界
 
@@ -150,6 +151,15 @@ GET /api/quiz/wrong-summary
 - 判题一律服务端完成，前端不接触 answerJson/solutions（仅提交后由服务端返回判定与解析）
 - 会话 token 为 32 字节随机 hex；bcrypt 存密码；管理员接口二次校验 role
 - 删除科目/分类/学生均级联清理错题记录，无孤儿引用
+
+## 7.1 账号统一（2026-09-02b 修订）
+
+- **唯一权威**：`users` / `sessions` 表物理位于 `quiz.db`，是主站与刷题服务唯一的账号与会话存储；迁移 DDL 收敛于 `internal/accounts` 包（幂等 `CREATE TABLE IF NOT EXISTS`），两个服务各自持有独立连接（同文件多连接，WAL + busy_timeout 支持）
+- **主站认证**：登录改为 `{username, password}` 且要求 `role=admin`（学生账号不可登录主站）；会话写入共享 `sessions` 表，淘汰 settings 单 token；`/api/auth/me` 返回 `{authenticated, user:{id,username,role}}`
+- **旧版迁移**：主站启动时若账号库无 admin 且旧 `settings.password_hash` 存在 → 以该哈希创建 `admin` 账号并清理 settings 键；已部署实例升级后原密码直接可用
+- **默认引导**：账号库无 admin 时创建 `admin/123456`（两进程并发引导以唯一约束容错）
+- **密码联动**：任一端修改密码影响同一账号；改密后清除该用户全部会话（全端强制重新登录）
+- **管理入口**：系统管理页新增「管理员账号」区块（列表 + 重置密码）；学生管理维持现状
 
 ## 8. 测试策略
 
