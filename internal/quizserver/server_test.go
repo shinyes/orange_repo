@@ -53,7 +53,7 @@ func newTestQuizApp(t *testing.T) *fiber.App {
 	if !srv.EnsureBootstrap() {
 		t.Fatal("bootstrap 管理员失败")
 	}
-	return New(qs, srv.UploadsDir, "")
+	return New(qs, srv.UploadsDir, "", nil, 1)
 }
 
 // doJSON 发送 JSON 请求（cookie 可空），返回响应与解析后的响应体。

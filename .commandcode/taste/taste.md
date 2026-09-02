@@ -1,0 +1,2 @@
+- Prefers to inspect `.github/workflows` (especially `release.yml`) before pushing a new version/tag to trigger a release. Confidence: 0.90
+- Uses `v*` Git tag push to trigger the release workflow (Docker build/publish to ghcr.io) for new versions. Confidence: 0.85

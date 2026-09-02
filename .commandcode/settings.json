@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Shell(npm:*)",
+      "Shell(npx tsc -b --verbose)",
+      "Shell(npx vite build)",
+      "powershell",
+      "Shell(git:*)",
+      "Shell(npx tsc -b)"
+    ],
+    "deny": [],
+    "defaultMode": "default"
+  }
+}

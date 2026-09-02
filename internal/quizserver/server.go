@@ -2,6 +2,7 @@
 package quizserver
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -12,6 +13,7 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/recover"
 
 	"orangerepo/internal/accounts"
+	"orangerepo/internal/judge"
 	"orangerepo/internal/quizstore"
 )
 
@@ -25,11 +27,39 @@ type Server struct {
 	QS         *quizstore.Store
 	UploadsDir string
 	WebDist    string
+	Runner     judge.Runner
+	// queue 判题队列（Runner 配置时由 New 启动）。
+	queue *judge.QueueService
+	// queueCtx/queueCancel 队列生命周期。
+	queueCtx    context.Context
+	queueCancel context.CancelFunc
+}
+
+// Queue 返回判题队列服务（nil 表示未启用——judge token 未配置）。
+func (s *Server) Queue() *judge.QueueService { return s.queue }
+
+// StopQueue 停止队列 worker（服务退出前调用）。
+func (s *Server) StopQueue() {
+	if s.queueCancel != nil {
+		s.queueCancel()
+	}
 }
 
 // New 创建刷题服务 Fiber 应用（含路由与中间件）。
-func New(qs *quizstore.Store, uploadsDir, webDist string) *fiber.App {
-	srv := &Server{QS: qs, UploadsDir: uploadsDir, WebDist: webDist}
+// runner 非空时启动判题队列 worker（workers<=0 用 1）。
+func New(qs *quizstore.Store, uploadsDir, webDist string, runner judge.Runner, workers int) *fiber.App {
+	srv := &Server{QS: qs, UploadsDir: uploadsDir, WebDist: webDist, Runner: runner}
+	if runner != nil {
+		srv.queueCtx, srv.queueCancel = context.WithCancel(context.Background())
+		srv.queue = judge.NewQueueService(qs.DB, runner, qs, workers)
+		srv.queue.Start(srv.queueCtx)
+	}
+	app := srv.buildApp()
+	return app
+}
+
+// buildApp 组装路由（拆出以便测试构造裸 Server 时复用）。
+func (s *Server) buildApp() *fiber.App {
 	app := fiber.New(fiber.Config{
 		BodyLimit: 200 << 20,
 		ErrorHandler: func(c *fiber.Ctx, err error) error {
@@ -45,51 +75,77 @@ func New(qs *quizstore.Store, uploadsDir, webDist string) *fiber.App {
 	app.Get("/api/health", func(c *fiber.Ctx) error { return c.JSON(fiber.Map{"ok": true}) })
 
 	auth := app.Group("/api/auth")
-	auth.Post("/login", srv.handleLogin)
-	auth.Post("/logout", srv.requireSession, srv.handleLogout)
-	auth.Get("/me", srv.handleMe)
-	auth.Put("/password", srv.requireSession, srv.handleChangePassword)
+	auth.Post("/login", s.handleLogin)
+	auth.Post("/logout", s.requireSession, s.handleLogout)
+	auth.Get("/me", s.handleMe)
+	auth.Put("/password", s.requireSession, s.handleChangePassword)
 
-	quiz := app.Group("/api/quiz", srv.requireSession)
-	quiz.Get("/subjects", srv.handleListSubjects)
-	quiz.Post("/round", srv.handleStartRound)
-	quiz.Post("/submit", srv.handleSubmit)
-	quiz.Post("/wrong-round", srv.handleStartWrongRound)
-	quiz.Get("/wrong-summary", srv.handleWrongSummary)
+	quiz := app.Group("/api/quiz", s.requireSession)
+	quiz.Get("/subjects", s.handleListSubjects)
+	quiz.Post("/round", s.handleStartRound)
+	quiz.Post("/submit", s.handleSubmit)
+	quiz.Post("/wrong-round", s.handleStartWrongRound)
+	quiz.Get("/wrong-summary", s.handleWrongSummary)
 
-	admin := app.Group("/api/admin", srv.requireSession, srv.requireAdmin)
-	admin.Get("/subjects", srv.handleAdminListSubjects)
-	admin.Post("/subjects", srv.handleAdminCreateSubject)
-	admin.Put("/subjects/order", srv.handleAdminSetSubjectOrder)
-	admin.Patch("/subjects/:id", srv.handleAdminRenameSubject)
-	admin.Delete("/subjects/:id", srv.handleAdminDeleteSubject)
-	admin.Post("/categories", srv.handleAdminCreateCategory)
-	admin.Patch("/categories/:id", srv.handleAdminUpdateCategory)
-	admin.Delete("/categories/:id", srv.handleAdminDeleteCategory)
-	admin.Put("/subjects/:id/categories/order", srv.handleAdminSetCategoryOrder)
-	admin.Get("/problems-count", srv.handleAdminProblemsCount)
-	admin.Get("/students", srv.handleAdminListStudents)
-	admin.Post("/students", srv.handleAdminCreateStudent)
-	admin.Put("/students/:id/password", srv.handleAdminResetStudentPassword)
-	admin.Delete("/students/:id", srv.handleAdminDeleteStudent)
-	admin.Get("/admins", srv.handleAdminListAdmins)
-	admin.Put("/admins/:id/password", srv.handleAdminResetAdminPassword)
-	admin.Get("/settings", srv.handleAdminGetSettings)
-	admin.Put("/settings", srv.handleAdminPutSettings)
+	// ---- OrangeOJ：学生端做题（/api/oj） ----
+	oj := app.Group("/api/oj", s.requireSession)
+	oj.Get("/assigned", s.handleOJAssigned)
+	oj.Get("/training/:id", s.handleOJTraining)
+	oj.Get("/practice/:id", s.handleOJPractice)
+	oj.Get("/problem/:id", s.handleOJProblem)
+	oj.Post("/problem/:id/run", s.handleOJRun)
+	oj.Post("/problem/:id/test", s.handleOJTest)
+	oj.Post("/problem/:id/submit", s.handleOJSubmit)
+	oj.Post("/problem/:id/objective-submit", s.handleOJObjectiveSubmit)
+	oj.Get("/problem/:id/submissions", s.handleOJSubmissions)
+	oj.Get("/submission/:id/poll", s.handleOJSubmissionPoll)
+
+	admin := app.Group("/api/admin", s.requireSession, s.requireAdmin)
+	admin.Get("/subjects", s.handleAdminListSubjects)
+	admin.Post("/subjects", s.handleAdminCreateSubject)
+	admin.Put("/subjects/order", s.handleAdminSetSubjectOrder)
+	admin.Patch("/subjects/:id", s.handleAdminRenameSubject)
+	admin.Delete("/subjects/:id", s.handleAdminDeleteSubject)
+	admin.Post("/categories", s.handleAdminCreateCategory)
+	admin.Patch("/categories/:id", s.handleAdminUpdateCategory)
+	admin.Delete("/categories/:id", s.handleAdminDeleteCategory)
+	admin.Put("/subjects/:id/categories/order", s.handleAdminSetCategoryOrder)
+	admin.Get("/problems-count", s.handleAdminProblemsCount)
+	admin.Get("/students", s.handleAdminListStudents)
+	admin.Post("/students", s.handleAdminCreateStudent)
+	admin.Put("/students/:id/password", s.handleAdminResetStudentPassword)
+	admin.Delete("/students/:id", s.handleAdminDeleteStudent)
+	admin.Get("/admins", s.handleAdminListAdmins)
+	admin.Put("/admins/:id/password", s.handleAdminResetAdminPassword)
+	admin.Get("/settings", s.handleAdminGetSettings)
+	admin.Put("/settings", s.handleAdminPutSettings)
+
+	// ---- OrangeOJ：管理员布置（/api/admin/assignments + repo 浏览） ----
+	admin.Get("/repo-trainings", s.handleAdminRepoTrainings)
+	admin.Get("/repo-practices", s.handleAdminRepoPractices)
+	admin.Get("/repo-trainings/:id", s.handleAdminRepoTraining)
+	admin.Get("/repo-practices/:id", s.handleAdminRepoPractice)
+	admin.Get("/assignments", s.handleAdminListAssignments)
+	admin.Post("/assignments", s.handleAdminCreateAssignment)
+	admin.Patch("/assignments/:id", s.handleAdminUpdateAssignment)
+	admin.Put("/assignments/:id/students", s.handleAdminSetAssignmentStudents)
+	admin.Delete("/assignments/:id", s.handleAdminDeleteAssignment)
+	admin.Get("/assignments/:id/students", s.handleAdminAssignmentStudents)
+	admin.Get("/assignments/:id/stats", s.handleAdminAssignmentStats)
 
 	// 上传图片与主站同路径约定（题面/解析中的 /api/uploads/... 可正常显示）
-	if uploadsDir != "" {
-		if _, err := os.Stat(uploadsDir); err == nil {
-			app.Group("/api").Static("/uploads", uploadsDir)
+	if s.UploadsDir != "" {
+		if _, err := os.Stat(s.UploadsDir); err == nil {
+			app.Group("/api").Static("/uploads", s.UploadsDir)
 		}
 	}
 
 	// 前端静态资源 + SPA 回退
-	if webDist != "" {
-		if _, err := os.Stat(filepath.Join(webDist, "index.html")); err == nil {
-			app.Static("/", webDist)
+	if s.WebDist != "" {
+		if _, err := os.Stat(filepath.Join(s.WebDist, "index.html")); err == nil {
+			app.Static("/", s.WebDist)
 			app.Get("*", func(c *fiber.Ctx) error {
-				return c.SendFile(filepath.Join(webDist, "index.html"))
+				return c.SendFile(filepath.Join(s.WebDist, "index.html"))
 			})
 		}
 	}

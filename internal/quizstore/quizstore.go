@@ -144,6 +144,67 @@ func (s *Store) migrate() error {
 		);`,
 		`INSERT INTO settings(key,value) VALUES('round_size','10')
 			ON CONFLICT(key) DO NOTHING;`,
+		// ---------- OrangeOJ 判题（v1.12：submissions/judge_jobs/progress，结构照搬上游 db.go） ----------
+		`CREATE TABLE IF NOT EXISTS submissions (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			problem_id INTEGER NOT NULL,
+			question_type TEXT NOT NULL,
+			language TEXT NOT NULL DEFAULT '',
+			source_code TEXT NOT NULL DEFAULT '',
+			input_data TEXT NOT NULL DEFAULT '',
+			submit_type TEXT NOT NULL,
+			status TEXT NOT NULL,
+			verdict TEXT NOT NULL DEFAULT 'PENDING',
+			time_ms INTEGER NOT NULL DEFAULT 0,
+			memory_kib INTEGER NOT NULL DEFAULT 0,
+			score INTEGER NOT NULL DEFAULT 0,
+			stdout TEXT NOT NULL DEFAULT '',
+			stderr TEXT NOT NULL DEFAULT '',
+			case_details_json TEXT NOT NULL DEFAULT '',
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			finished_at DATETIME
+		);`,
+		`CREATE TABLE IF NOT EXISTS judge_jobs (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			submission_id INTEGER NOT NULL UNIQUE REFERENCES submissions(id) ON DELETE CASCADE,
+			status TEXT NOT NULL,
+			priority INTEGER NOT NULL DEFAULT 0,
+			available_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			started_at DATETIME,
+			finished_at DATETIME,
+			worker_token TEXT
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_judge_jobs_status_priority ON judge_jobs(status, priority DESC, id ASC);`,
+		`CREATE INDEX IF NOT EXISTS idx_submissions_user_problem ON submissions(user_id, problem_id, id DESC);`,
+		`CREATE TABLE IF NOT EXISTS user_problem_progress (
+			user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			problem_id INTEGER NOT NULL,
+			best_verdict TEXT NOT NULL,
+			best_score INTEGER NOT NULL DEFAULT 0,
+			last_submission_id INTEGER NOT NULL REFERENCES submissions(id) ON DELETE CASCADE,
+			updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			PRIMARY KEY(user_id, problem_id)
+		);`,
+		// ---------- OrangeOJ 布置（指向主库训练/练习，结构实时跟随主库；problem_id 指主库，无外键） ----------
+		`CREATE TABLE IF NOT EXISTS assignments (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			kind TEXT NOT NULL CHECK(kind IN ('training','practice')),
+			repo_id INTEGER NOT NULL,
+			title TEXT NOT NULL,
+			description TEXT NOT NULL DEFAULT '',
+			tags_json TEXT NOT NULL DEFAULT '[]',
+			published INTEGER NOT NULL DEFAULT 1,
+			assigned_all INTEGER NOT NULL DEFAULT 1,
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			UNIQUE(kind, repo_id)
+		);`,
+		`CREATE TABLE IF NOT EXISTS assigned_students (
+			assignment_id INTEGER NOT NULL REFERENCES assignments(id) ON DELETE CASCADE,
+			user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			PRIMARY KEY(assignment_id, user_id)
+		);`,
 	}
 	for _, stmt := range stmts {
 		if _, err := s.DB.Exec(stmt); err != nil {
