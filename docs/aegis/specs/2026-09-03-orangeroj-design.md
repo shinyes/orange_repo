@@ -36,7 +36,7 @@ OrangeOJ 的判题运行时事实（已读源码，逐条映射到本仓库）�
   - 做题页对编程题提供 运行/测试/提交 + 测评记录，对单选/判断内联作答并即时反馈（AC=100/WA=0，与客观题 submit 一致）
 - 管理端每题统计：被布置任务内每题通过人数/提交数（不展示学生代码）
 
-**非目标（本期）**：题库浏览/自由刷编程题、学生代码在管理端可见、go/turtle 语言、题面测试用例增量编辑、训练多选作答、布置的题目结构变更跟随（主库训练/练习改动以布置时的快照为准——**镜像语义**）、多空间、比赛、Special Judge。
+**非目标（本期）**：题库浏览/自由刷编程题、学生代码在管理端可见、go/turtle 语言、题面测试用例增量编辑、训练多选作答、练习"整份提交/考试卷"模式（practice_records 结构留待二期）、多空间、比赛、Special Judge。
 
 ## 2. 架构
 
@@ -44,7 +44,7 @@ OrangeOJ 的判题运行时事实（已读源码，逐条映射到本仓库）�
 ┌─────────────┐  :8080 主站（现有，不变）—— 题库编辑/训练/练习编制（写入 orangerepo.db）
 └─────────────┘
 ┌─────────────┐  :8081 刷题服务（扩展）—— 一期刷题 + 布置/提交/评测队列（quiz.db 自有数据 + 只读 orangerepo.db）
-│  quiz.db    │      submissions/judge_jobs/user_problem_progress/assignments/assigned_*/practice_records/participants
+│  quiz.db    │      submissions/judge_jobs/user_problem_progress/assignments/assigned_students
 └─────────────┘
        │ HTTP POST /internal/judge/execute（X-Judge-Token）
 ┌─────────────┐  :9090 judge-runtime（新增，独立进程/容器）—— 唯一真正执行用户代码之处
@@ -70,9 +70,9 @@ internal/judgeserver/sandbox_linux.go    [新] Linux nsjail 后端（生产）
 internal/judgeserver/server.go  [新] HTTP server（/healthz /internal/judge/execute，token 校验）
 internal/judgeserver/executor_test.go    [新] 真实 Python/C++ 评测冒烟（本机可跑）
 internal/quizstore/quizstore.go [改] migrate 追加 §3 新表
-internal/quizstore/problems.go  [改] 只读 reader 增加题目详情/用例/答案读取与**快照**结构
+internal/quizstore/problems.go  [改] 只读 reader 增加题目详情/用例/答案读取与训练/练习结构读取（repo_oj.go）
 internal/quizstore/submissions.go [新] submissions/judge_jobs/progress 写与查（quiz.db 侧）
-internal/quizstore/assignments.go [新] 布置/记录/参与/目标/统计 CRUD
+internal/quizstore/assignments.go [新] 布置 CRUD/定向/统计
 internal/quizserver/server.go   [改] 挂载新路由、注入 runner/queue
 internal/quizserver/assign.go   [新] 管理员布置 API + 学生端任务列表/详情 API
 internal/quizserver/judge.go    [新] 学生提交 API（run/test/submit/objective-submit/历史）
@@ -84,7 +84,8 @@ scripts/dev-quiz.ps1            [改] 增加 judge-runtime :9090 进程（本机
 
 ## 3. 数据模型（quiz.db 增量迁移，全部 `CREATE TABLE IF NOT EXISTS` 幂等）
 
-沿用上游字段命名（snake_case 存储、JSON camelCase）。**problem_id 均为主库题目 id（int），不建外键**（主库在另一文件且只读；训练/练习内容同样按快照引用主库 id，主库删除的题目在读取时跳过）。
+沿用上游字段命名（snake_case 存储、JSON camelCase）。**problem_id 均为主库题目 id（int），不建外键**
+（主库在另一文件且只读；主库删除的题目在读取时跳过）。
 
 ```sql
 submissions(id PK, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -106,31 +107,23 @@ user_problem_progress(user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CA
   PRIMARY KEY(user_id, problem_id), FOREIGN KEY(last_submission_id) REFERENCES submissions(id) ON DELETE CASCADE)
 
 assignments(id PK, kind TEXT NOT NULL CHECK(kind IN ('training','practice')),
-  repo_id INTEGER NOT NULL,          -- 主库 trainings.id / practices.id（快照引用）
+  repo_id INTEGER NOT NULL,          -- 主库 trainings.id / practices.id（引用，非快照）
   title TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', tags_json TEXT NOT NULL DEFAULT '[]',
   published INTEGER NOT NULL DEFAULT 1,  -- 0 = 撤回（学生端隐藏，记录保留）
-  assigned_all INTEGER NOT NULL DEFAULT 0, -- 1 = 全体学生；0 = 按 assigned_students 定向
+  assigned_all INTEGER NOT NULL DEFAULT 1, -- 1 = 全体学生；0 = 按 assigned_students 定向
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   UNIQUE(kind, repo_id))
 assigned_students(assignment_id INTEGER NOT NULL REFERENCES assignments(id) ON DELETE CASCADE,
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY(assignment_id, user_id))
-practice_records(id PK, assignment_id INTEGER NOT NULL REFERENCES assignments(id) ON DELETE CASCADE,
-  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  practice_total INTEGER NOT NULL,     -- 布置当时题数快照（展示用）
-  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)
-practice_record_items(record_id INTEGER NOT NULL REFERENCES practice_records(id) ON DELETE CASCADE,
-  problem_id INTEGER NOT NULL, order_no INTEGER NOT NULL DEFAULT 0,
-  submission_id INTEGER NOT NULL REFERENCES submissions(id) ON DELETE CASCADE,
-  PRIMARY KEY(record_id, problem_id))
 ```
 
 > 注：训练/练习的章节与条目结构**不复制**——做题列表实时读主库
 > （`trainings/training_chapters/training_items`、`practices/practice_items`，按 order_no,id 排序）。
 > 与上游同构：上游训练/练习与题目同库，成员看到的即库内当前结构；主库结构/题目被改或删除时，
-> 学生端列表与做题页实时反映（题目被删 → 条目自动消失）。practice_records 仅作练习“整份提交”记录，
-> 本期前端不主动创建（保留表结构供二期练习卷模式），student 列表每题的 completed 直接来自
-> user_problem_progress JOIN 主库实时结构。
+> 学生端列表与做题页实时反映（题目被删 → 条目自动消失）。每题的 completed 直接来自
+> user_problem_progress JOIN 主库实时结构。**无 practice_records/assignment_train_*/assignment_practice_items
+> 快照表**（实施期已按「实时跟随」决策删除）。
 
 **客观题 submit 也写入 submissions**（submit_type='objective'，status='done'，score=100/0，finished_at 立即）与 user_problem_progress（模仿上游 objective-submit 的 handleObjectiveSubmit）。
 
@@ -139,7 +132,7 @@ practice_record_items(record_id INTEGER NOT NULL REFERENCES practice_records(id)
 ### 4.1 布置可见性与发布
 - `assignments.assigned_all=1` → 全部学生可见；`=0` → 仅 `assigned_students` 中的学生可见（模仿 practice_targets：has_targets=1 时仅目标可见）
 - 学生端列表与详情均要求 `published=1` 且（assigned_all 或本人 in assigned_students）；管理员无视两者
-- 删除布置 → 级联 assigned_students/practice_records（模仿 ON DELETE CASCADE）；学生历史提交不受影响（submissions 独立）
+- 删除布置 → 级联 assigned_students（ON DELETE CASCADE）；学生历史提交不受影响（submissions 独立）
 
 ### 4.2 题目集合与实时跟随
 - 训练布置：主库 `trainings/:id` → 章节（training_chapters ORDER BY order_no,id）→ 条目题目（training_items ORDER BY order_no,id）；**实时读取**，不落快照
@@ -179,7 +172,7 @@ GET /api/admin/assignments/:id/stats
 ```
 GET /api/oj/assigned          学生视角任务列表（训练/练习分组合并，仅 published 且可见）
   → {trainings:[{id,title,description,tags,publishedAt,problemCount,acceptedCount}], practices:[同练习]}
-  - problemCount 来自快照题目数（失效题目除外），acceptedCount = 本人 AC 数
+  - problemCount 来自主库实时结构（失效条目除外），acceptedCount = 本人 AC 数
 GET /api/oj/training/:id      → 详情（学生可见性校验）
   → {id,title,description,tags,chapters:[{id,title,items:[{problemId,orderNo,title,type,completed}]}],progress:{accepted,total}}
 GET /api/oj/practice/:id      → 详情
@@ -202,7 +195,7 @@ GET  /api/oj/problem/:id/submissions → 本人最近 50 条（含 caseDetails �
 ```
 GET /api/admin/repo-trainings     主库训练目录（只读，含章节题数与总题数）：[{id,title,tags,chapterCount,problemCount}]
 GET /api/admin/repo-practices     主库练习目录：[{id,title,tags,problemCount}]
-GET /api/admin/repo-trainings/:id 单训练快照预览（含章节结构，供布置确认）
+GET /api/admin/repo-trainings/:id 单训练结构预览（含章节，供布置确认）
 GET /api/admin/repo-practices/:id
 POST /api/admin/assignments {kind,repoId,title?,description?,assignedAll,published?,studentIds:[]} → {id}
      - title 缺省 = 主库原标题；kind+repoId 已布置 → 409
@@ -268,7 +261,7 @@ ORANGEOJ_JUDGE_READ_TIMEOUT_SEC（默认 15） / WRITE_TIMEOUT_SEC（默认 300�
 
 - `internal/judge`：单元测试（用例选择 run/test/submit、写回 verdict/score、progress upsert 语义、失败兜底 RE）
 - `internal/judgeserver`：**真实评测**冒烟（Windows 受限后端可跑）：Python AC 程序、C++ AC 程序（g++ 不可用则 t.Skip）、WA（NormalizeOutput 比对）、RE（panic/exit 1）、TLE（sleep 超时）、CE（语法错误）；HTTP server token 校验单测
-- `internal/quizstore`：迁移幂等；submissions/judge_jobs 事务写；assignments 快照/级联/定向语义单测（fake 主库经 store.Open 造数据）
+- `internal/quizstore`：迁移幂等；submissions/judge_jobs 事务写；assignments 级联/定向语义单测（fake 主库经 store.Open 造数据）
 - `internal/quizserver`：httptest 冒烟（admin 登录 → 建学生 → 主库造训练/练习 → 布置全体/定向 → 学生登录列表可见性 → objective-submit 同步判定 → 编程 run/test/submit 队列（runner=mock 或本机 executor 注入）→ poll → 提交历史 → 进度 → 管理统计；越权 403/404）
 - 前端：`tsc -b && vite build`
 - 全量：`go vet ./... ; go test ./...`；双 npm build；`GOOS=linux CGO_ENABLED=0 go build ./...`（含 cmd/judge-runtime）

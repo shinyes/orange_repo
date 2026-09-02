@@ -19,12 +19,11 @@
 
 ## 决策变更记录
 - 布置内容从「布置时快照冻结」修订为「实时跟随主库」（与上游同库同构，训练/练习结构与题目在同一库）：
-  spec §4.2 已同步；assignment 仅存 (kind, repo_id) 引用与可见性
+  spec §3/§4.2 已同步；assignment 仅存 (kind, repo_id) 引用与可见性；**practice_records/assignment_train_* 快照表已从迁移移除**
 - 一期「错题集」与 OJ 客观题提交解耦：OJ objective-submit 只写 submissions+progress，不进错题集
   （错题集语义绑定刷题分类，OJ 题不在分类体系内）
 - 前端编辑器用 textarea（无 Monaco 依赖），代码草稿 localStorage 按题目+语言分存
 
 ## 遗留/后续建议（非本期范围）
-- practice_records 表结构保留未用（上游「整份提交/练习卷」语义二期可启用）
 - GHCR 自动构建 judge 镜像的 CI workflow（本期 compose 本地构建）
 - 代码行内高亮/编辑增强、Special Judge、多文件
