@@ -12,7 +12,7 @@ import {
   FlaskConicalIcon,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { api } from '@/lib/api'
 import type { CaseDetail, CodeLang, OjProblem, Submission, SubmissionPoll } from '@/lib/types'
@@ -75,6 +75,7 @@ interface ObjSubmitResult {
 
 function ObjectiveSolve({ problem, backTo }: { problem: OjProblem; backTo: string }) {
   const navigate = useNavigate()
+  const qc = useQueryClient()
   const [picked, setPicked] = useState<number | null>(null)
   const [pickedTF, setPickedTF] = useState<boolean | null>(null)
   const [result, setResult] = useState<ObjSubmitResult | null>(null)
@@ -87,6 +88,9 @@ function ObjectiveSolve({ problem, backTo }: { problem: OjProblem; backTo: strin
     try {
       const r = await api.ojObjectiveSubmit(problem.id, payload.optionIndex ?? payload.answer ?? false)
       setResult({ correct: r.correct, verdict: r.verdict, correctAnswer: r.correctAnswer })
+      void qc.invalidateQueries({ queryKey: ['oj-assigned'] })
+      void qc.invalidateQueries({ queryKey: ['oj-training'] })
+      void qc.invalidateQueries({ queryKey: ['oj-practice'] })
     } catch (err) {
       toast.error(err instanceof Error ? err.message : '提交失败')
     } finally {
@@ -195,6 +199,7 @@ function ObjectiveSolve({ problem, backTo }: { problem: OjProblem; backTo: strin
 // ---------------- 编程题 ----------------
 
 function ProgrammingSolve({ problem, backTo }: { problem: OjProblem; backTo: string }) {
+  const qc = useQueryClient()
   const samples = (problem.bodyJson.samples as { input?: string; output?: string }[] | undefined) ?? []
   const [lang, setLang] = useState<CodeLang>(() => (localStorage.getItem(DRAFT_KEY + `-lang-${problem.id}`) as CodeLang) || 'python')
   const [code, setCode] = useState(() => localStorage.getItem(DRAFT_KEY + `-${problem.id}-${lang}`) ?? starterCode(lang))
@@ -285,6 +290,10 @@ function ProgrammingSolve({ problem, backTo }: { problem: OjProblem; backTo: str
     }
     if (kind === 'submit' || kind === 'test') {
       setVerdictBanner({ verdict: snap.verdict, score: snap.score, timeMs: snap.timeMs })
+      // 判题落定后刷新任务完成态（返回列表/详情时即时）
+      void qc.invalidateQueries({ queryKey: ['oj-assigned'] })
+      void qc.invalidateQueries({ queryKey: ['oj-training'] })
+      void qc.invalidateQueries({ queryKey: ['oj-practice'] })
     }
   }
 
