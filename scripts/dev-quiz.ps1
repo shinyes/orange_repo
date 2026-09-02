@@ -40,6 +40,8 @@ Write-Host "[dev] press Ctrl+C to stop both servers." -ForegroundColor Green
 try {
   Wait-Process -Id $main.Id -ErrorAction SilentlyContinue
 } finally {
+  # 子进程可能已自行退出（如端口被占用时），taskkill 报错属正常，静默处理
+  $ErrorActionPreference = 'SilentlyContinue'
   # /T kills the whole process tree (go run spawns a child exe; npm spawns node)
   foreach ($p in @($quizWeb, $web, $quiz, $main)) {
     if ($p -and -not $p.HasExited) {
