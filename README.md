@@ -40,18 +40,29 @@ go run ./cmd/quiz -addr :8081
 ## Docker 部署
 
 推送 `v*` 版本标签时，GitHub Actions 自动构建镜像发布到 GHCR，并创建对应 Release。
+**一个镜像同时包含两个二进制**：主站（orangerepo :8080）与刷题服务（quiz :8081），
+compose 中作为两个容器共享同一个数据卷启动。
 
 ```bash
 docker compose -f deploy/docker-compose.yml up -d
-# 或手动：
+# 或手动单起主站：
 docker run -d -p 8080:8080 -v ./data:/app/data ghcr.io/shinyes/orange_repo:1.9.5
+# 手动单起刷题服务（同一数据卷）：
+docker run -d -p 8081:8081 --entrypoint /app/quiz \
+  -v ./data:/app/data ghcr.io/shinyes/orange_repo:1.9.5 \
+  -addr :8081 -data /app/data -web /app/web-quiz/dist
 ```
 
-镜像基于 distroless/static。容器启动时若为 root，会自动把数据目录属主修正为运行用户 65532 并**立即降权**后再对外服务——因此 `./data:/app/data` 绑定挂载在 Linux 宿主机上开箱即用，无需手动 chown；命名卷（`-v orangerepo-data:/app/data`）同样免配置。
+镜像基于 distroless/static。容器启动时若为 root，两个二进制都会自动把数据目录属主修正为运行用户 65532 并**立即降权**后再对外服务——因此 `./data:/app/data` 绑定挂载在 Linux 宿主机上开箱即用，无需手动 chown；命名卷（`-v orangerepo-data:/app/data`）同样免配置。
 
 每个 Release 附件附带离线镜像包 `orangerepo-<版本>-linux-amd64-image.tar.gz`，在无法访问 GHCR 的机器上 `docker load -i <包名>` 导入即可使用。
 
-**首次启动**自动创建单用户密码，默认 `123456`，请登录后在左上角「⚙」中修改。
+**升级/更新**：新版发布后 `docker compose pull && docker compose up -d` 即可平滑升级——题库与刷题数据都在
+`./data` 卷内原样保留（主库 schema 无迁移；`quiz.db` 首次启动自动创建）。**注意**：刷题服务以只读方式访问主库，
+请与主站**同版本一起升级**，避免主库表结构变化导致旧版刷题服务不可用。
+
+**首次启动**：主站自动创建单用户密码，默认 `123456`，请登录后在左上角「⚙」中修改；
+刷题服务自动创建管理员 `admin/123456`，登录后在「我的」页修改。
 数据存储在 `data/` 目录（SQLite + 上传图片），删除该目录即可重置。
 
 ## 功能

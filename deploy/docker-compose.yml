@@ -1,5 +1,7 @@
-﻿# OrangeRepo 生产部署示例
-# docker compose up -d   →  http://localhost:8080（默认密码 123456）
+# OrangeRepo 生产部署示例（主站 + 刷题服务双容器）
+# docker compose up -d
+#   → http://localhost:8080（主站，默认密码 123456）
+#   → http://localhost:8081（刷题服务，初始管理员 admin/123456）
 services:
   orangerepo:
     # v1.0.2 起：容器启动时自动修正数据目录属主并降权运行，
@@ -12,7 +14,20 @@ services:
       - ./data:/app/data
     restart: unless-stopped
 
-# 更想用命名卷？同样免配置，替换上面的 volumes 行即可：
+  # 刷题服务：与主站共用同一镜像与数据卷（只读主库 orangerepo.db，
+  # 自有数据写入同一卷内的 quiz.db）；主库表结构变化时请与主站同版本部署。
+  orangequiz:
+    image: ghcr.io/shinyes/orange_repo:1.9.5
+    container_name: orangequiz
+    entrypoint: ["/app/quiz"]
+    command: ["-addr", ":8081", "-data", "/app/data", "-web", "/app/web-quiz/dist"]
+    ports:
+      - "8081:8081"
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+
+# 更想用命名卷？同样免配置，替换上面两个服务的 volumes 行即可：
 #   volumes:
 #     - orangerepo-data:/app/data
 # 并保留顶层声明：
