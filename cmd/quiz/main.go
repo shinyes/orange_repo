@@ -60,7 +60,8 @@ func main() {
 		log.Printf("[BOOTSTRAP] 已创建初始管理员 %s/%s，请登录后在「我的」页修改密码。", quizserver.BootstrapAdmin, quizserver.BootstrapPassword)
 	}
 
-	app := quizserver.New(qs, srv.UploadsDir, srv.WebDist, runner, *judgeWorkers)
+	app := quizserver.New(srv, runner, *judgeWorkers)
+	defer srv.StopQueue()
 	log.Printf("[START] OrangeOJ 刷题服务监听 http://localhost%s （题库: %s，前端: %s）", *addr, repoPath, *webDist)
 	if err := app.Listen(*addr); err != nil {
 		log.Fatalf("[FATAL] 刷题服务退出: %v", err)

@@ -159,7 +159,8 @@ func newTestOJApp(t *testing.T) (*fiber.App, *Server, map[string]int64, bool) {
 	if !srv.EnsureBootstrap() {
 		t.Fatal("bootstrap 管理员失败")
 	}
-	app := New(qs, filepath.Join(dir, "uploads"), "", &executorRunner{ex: executor}, 2)
+	app := New(srv, &executorRunner{ex: executor}, 2)
+	t.Cleanup(srv.StopQueue)
 	return app, srv, ids, pyOK
 }
 

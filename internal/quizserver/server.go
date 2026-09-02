@@ -45,17 +45,16 @@ func (s *Server) StopQueue() {
 	}
 }
 
-// New 创建刷题服务 Fiber 应用（含路由与中间件）。
-// runner 非空时启动判题队列 worker（workers<=0 用 1）。
-func New(qs *quizstore.Store, uploadsDir, webDist string, runner judge.Runner, workers int) *fiber.App {
-	srv := &Server{QS: qs, UploadsDir: uploadsDir, WebDist: webDist, Runner: runner}
+// New 在 srv 上组装 Fiber 应用（路由/中间件/判题队列），并返回应用。
+// runner 非空时启动判题队列 worker（workers<=0 用 1）；服务退出前调用 srv.StopQueue()。
+func New(srv *Server, runner judge.Runner, workers int) *fiber.App {
+	srv.Runner = runner
 	if runner != nil {
 		srv.queueCtx, srv.queueCancel = context.WithCancel(context.Background())
-		srv.queue = judge.NewQueueService(qs.DB, runner, qs, workers)
+		srv.queue = judge.NewQueueService(srv.QS.DB, runner, srv.QS, workers)
 		srv.queue.Start(srv.queueCtx)
 	}
-	app := srv.buildApp()
-	return app
+	return srv.buildApp()
 }
 
 // buildApp 组装路由（拆出以便测试构造裸 Server 时复用）。
