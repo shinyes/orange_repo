@@ -3,6 +3,7 @@ import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Markdown, preserveLineBreaks } from '@/lib/markdown'
+import { CodeBlock } from '@/lib/code-highlight'
 import type {
   Problem,
   ProgrammingBody,
@@ -192,11 +193,7 @@ function SolutionsView({ solutions }: { solutions: Solution[] }) {
           </div>
           <div className="space-y-3 p-4">
             {s.markdown && <Markdown text={s.markdown} className="markdown-body text-sm" />}
-            {s.code && (
-              <pre className="overflow-x-auto rounded-lg bg-muted p-3 text-xs leading-relaxed">
-                <code>{s.code}</code>
-              </pre>
-            )}
+            {s.code && <CodeBlock code={s.code} language={s.language} />}
           </div>
         </div>
       ))}

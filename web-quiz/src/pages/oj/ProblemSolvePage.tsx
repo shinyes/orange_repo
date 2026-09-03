@@ -17,6 +17,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import type { CaseDetail, CodeLang, OjProblem, Submission, SubmissionPoll } from '@/lib/types'
 import { Markdown, preserveLineBreaks } from '@/lib/markdown'
+import { CodeBlock } from '@/lib/code-highlight'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Textarea } from '@/components/ui/textarea'
@@ -594,7 +595,11 @@ function SelectedView({ sub, tab, setTab, caseIdx, setCaseIdx, onBack }: {
         </TabsList>
       </Tabs>
       <div className="mt-2 min-h-0 flex-1 overflow-auto rounded-lg border bg-muted/30 p-3">
-        {tab === 'code' && <pre className="font-mono text-xs whitespace-pre-wrap">{sub.sourceCode || '（无）'}</pre>}
+        {tab === 'code' && (
+          sub.sourceCode
+            ? <CodeBlock code={sub.sourceCode} language={sub.language} className="[&_pre]:whitespace-pre-wrap" />
+            : <pre className="font-mono text-xs whitespace-pre-wrap">（无）</pre>
+        )}
         {tab === 'input' && <pre className="font-mono text-xs whitespace-pre-wrap">{selCase?.input ?? sub.inputData ?? '（空）'}</pre>}
         {tab === 'output' && <pre className="font-mono text-xs whitespace-pre-wrap">{selCase?.output ?? sub.stdout ?? '（无输出）'}</pre>}
         {tab === 'expected' && <pre className="font-mono text-xs whitespace-pre-wrap">{selCase?.expectedOutput ?? '（无）'}</pre>}
