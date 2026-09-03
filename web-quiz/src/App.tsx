@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { BrowserRouter, Navigate, NavLink, Outlet, Route, Routes } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { BookOpenIcon, ClipboardXIcon, FolderKanbanIcon, ClipboardListIcon, SettingsIcon, UserRoundIcon } from 'lucide-react'
+import { BookOpenIcon, ClipboardXIcon, FolderKanbanIcon, ClipboardListIcon, UserRoundIcon } from 'lucide-react'
 
 import { api } from '@/lib/api'
 import { Toaster } from '@/components/ui/sonner'
@@ -121,13 +121,14 @@ function PracticeHome() {
 
 // 主壳：PC（lg+）顶部导航 + 内容区；移动端底部导航（同一套路由）。
 function MainShell({ user, onLogout }: { user: User; onLogout: () => void }) {
+  // 导航项（不含「我的」：PC 放最右个人入口，移动端固定在底部最右）
   const items: { to: string; label: string; icon: typeof BookOpenIcon }[] = [
     { to: '/quiz', label: '刷题', icon: BookOpenIcon },
     { to: '/training', label: '训练', icon: FolderKanbanIcon },
     { to: '/practice', label: '练习', icon: ClipboardListIcon },
     { to: '/wrong', label: '错题', icon: ClipboardXIcon },
-    { to: '/mine', label: '我的', icon: UserRoundIcon },
   ]
+  const mineItem = { to: '/mine', label: '我的', icon: UserRoundIcon }
   return (
     <div className="flex h-dvh flex-col overflow-hidden">
       {/* PC 顶部导航 */}
@@ -156,27 +157,24 @@ function MainShell({ user, onLogout }: { user: User; onLogout: () => void }) {
               </NavLink>
             ))}
           </nav>
-          <div className="flex shrink-0 items-center gap-1">
-            {user.role === 'admin' && (
-              <NavLink
-                to="/admin"
-                className={({ isActive }) =>
-                  cn(
-                    'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm transition-colors',
-                    isActive
-                      ? 'bg-primary/10 font-medium text-primary'
-                      : 'text-muted-foreground hover:bg-muted hover:text-foreground',
-                  )
-                }
-              >
-                <SettingsIcon className="size-4" />
-                管理
-              </NavLink>
-            )}
-            <span className="rounded-full bg-muted px-2.5 py-1 text-xs text-muted-foreground">
-              {user.username}
+          {/* 最右：我的（个人入口）；管理入口保留在「我的」页内 */}
+          <NavLink
+            to={mineItem.to}
+            className={({ isActive }) =>
+              cn(
+                'flex shrink-0 items-center gap-2 rounded-full border py-1 pl-1 pr-3 text-sm transition-colors',
+                isActive
+                  ? 'border-primary/40 bg-primary/10 font-medium text-primary'
+                  : 'border-border text-muted-foreground hover:border-primary/40 hover:text-foreground',
+              )
+            }
+          >
+            <span className="flex size-6 items-center justify-center rounded-full bg-primary/15 text-xs font-semibold text-primary">
+              {user.username.slice(0, 1).toUpperCase()}
             </span>
-          </div>
+            <span className="max-w-28 truncate">{user.username}</span>
+            {user.role === 'admin' && <span className="rounded bg-muted px-1 py-0.5 text-[10px]">管理</span>}
+          </NavLink>
         </div>
       </header>
 
@@ -187,7 +185,7 @@ function MainShell({ user, onLogout }: { user: User; onLogout: () => void }) {
 
       {/* 移动端底部导航 */}
       <nav className="flex shrink-0 border-t bg-background px-1 pb-[env(safe-area-inset-bottom)] lg:hidden">
-        {items.map((it) => (
+        {[...items, mineItem].map((it) => (
           <NavLink
             key={it.to}
             to={it.to}

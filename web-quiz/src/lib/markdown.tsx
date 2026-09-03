@@ -23,6 +23,8 @@ export function renderMarkdown(text: string): string {
 // 代码围栏等场景不受影响。
 export function preserveLineBreaks(text: string): string {
   const lines = (text ?? '').split('\n')
+  let inFence = false
+  let prevWasList = false // 上一行是否为列表项（后续缩进续行需保持列表结构）
   for (let i = 0; i < lines.length - 1; i++) {
     const line = lines[i]
     const nextBlank = lines[i + 1].trim() === ''
@@ -30,9 +32,31 @@ export function preserveLineBreaks(text: string): string {
     if (/ {2,}$/.test(line)) continue // 已显式硬换行
     if (line.endsWith('\\')) continue // 反斜杠换行（部分方言硬换行）
     if (line.trim() === '') continue // 空行自身不动
-    // 行首为代码围栏/列表等块级语法时，行尾补两空格可能改变其含义；
-    // 选项文本多为纯文本/公式，此处仅跳过围栏行（``` 等）
-    if (/^\s*(```|~~~|>\s|[-*+]\s|\d+\.\s)/.test(line)) continue
+    const trimmed = line.trim()
+    // 代码围栏开始/结束：围栏内一律不动
+    if (/^```|^~~~/.test(trimmed)) {
+      inFence = !inFence
+      continue
+    }
+    if (inFence) continue
+    const isListItem = /^\s*[-+*]\s/.test(line) || /^\s*\d+[.)]\s/.test(line)
+    // 块级语法行跳过（行尾补两空格会改变语义）：
+    //   表格（含分隔行）、引用、列表项及其缩进续行、setext 标题（===/--- 下划线）、
+    //   缩进代码块、HTML 块、主题分隔线
+    if (
+      /^\s*\|/.test(line) || // 表格行（含对齐分隔行）
+      /^\s*>\s?/.test(line) || // 引用
+      isListItem || // 列表项
+      prevWasList || // 列表项缩进续行
+      /^\s*([-=])\1{2,}\s*$/.test(line) || // setext 标题下划线
+      /^\s{4,}\S/.test(line) || // 缩进代码块
+      /^\s*<\/?[a-zA-Z][^>]*>$/.test(line) || // HTML 块
+      /^\s*([-*_])\s*\1\s*\1/.test(line) // 分隔线
+    ) {
+      prevWasList = isListItem
+      continue
+    }
+    prevWasList = false
     lines[i] = line + '  '
   }
   return lines.join('\n')

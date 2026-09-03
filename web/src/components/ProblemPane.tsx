@@ -22,7 +22,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { api } from '@/lib/api'
 import { useAppState } from '@/lib/app-context'
-import { Markdown } from '@/lib/markdown'
+import { Markdown, preserveLineBreaks } from '@/lib/markdown'
 import type {
   Problem,
   ProblemPayload,
@@ -389,7 +389,7 @@ export function ProblemEditor({ problem, onSaved }: { problem: Problem; onSaved:
         />
         {previewStatement ? (
           <div className="min-h-40 rounded-lg border p-3">
-            <Markdown text={s.statementMd || '（空）'} className="markdown-body text-sm" />
+            <Markdown text={preserveLineBreaks(s.statementMd || '（空）')} className="markdown-body text-sm" />
           </div>
         ) : (
           <Textarea

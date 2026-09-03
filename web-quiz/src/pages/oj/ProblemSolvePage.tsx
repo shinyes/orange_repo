@@ -110,7 +110,7 @@ function ObjectiveSolve({ problem, backTo }: { problem: OjProblem; backTo: strin
           <Badge>{typeLabel(problem.type)}</Badge>
           <h2 className="min-w-0 flex-1 truncate text-base font-semibold">{problem.title}</h2>
         </div>
-        <Markdown text={problem.statementMd || '（暂无题面）'} className="markdown-body text-[17px] leading-relaxed" />
+        <Markdown text={preserveLineBreaks(problem.statementMd || '（暂无题面）')} className="markdown-body text-[17px] leading-relaxed" />
 
         {problem.type === 'single_choice' ? (
           <div className="mt-5 space-y-2.5">
@@ -307,7 +307,7 @@ function ProgrammingSolve({ problem, backTo }: { problem: OjProblem; backTo: str
         <TopBar backTo={backTo} problem={problem} />
         <div className="mt-3 space-y-3">
           <div className="rounded-xl bg-muted/50 p-3 text-sm leading-relaxed">
-            <Markdown text={problem.statementMd || '（暂无题面）'} className="markdown-body" />
+            <Markdown text={preserveLineBreaks(problem.statementMd || '（暂无题面）')} className="markdown-body" />
           </div>
           {problemBody.inputFormat && (
             <Section title="输入格式"><Markdown text={problemBody.inputFormat} className="markdown-body text-sm" /></Section>

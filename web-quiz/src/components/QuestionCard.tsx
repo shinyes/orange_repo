@@ -70,7 +70,7 @@ export function QuestionCard({ problem, submit, onNext, index, total, nextLabel 
       </div>
 
       <div className="rounded-2xl border bg-card p-5">
-        <Markdown text={problem.statementMd || '（暂无题面）'} className="markdown-body text-[17px] leading-relaxed" />
+        <Markdown text={preserveLineBreaks(problem.statementMd || '（暂无题面）')} className="markdown-body text-[17px] leading-relaxed" />
 
         {/* 选项区 */}
         <div className="mt-5 space-y-2.5">

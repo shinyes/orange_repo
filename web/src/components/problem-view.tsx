@@ -67,7 +67,7 @@ function StatementView({ problem }: { problem: Problem }) {
   const body = (problem.bodyJson ?? {}) as ProgrammingBody
   return (
     <div>
-      <Markdown text={problem.statementMd || '（暂无题面）'} className="markdown-body" />
+      <Markdown text={preserveLineBreaks(problem.statementMd || '（暂无题面）')} className="markdown-body" />
       {problem.type === 'programming' && (
         <div className="mt-4 space-y-3">
           {(body.inputFormat || body.outputFormat) && (
