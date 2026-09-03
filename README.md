@@ -54,18 +54,20 @@ go run ./cmd/quiz -judge-endpoint http://127.0.0.1:9090 -judge-token dev-token -
 
 ## Docker 部署
 
-推送 `v*` 版本标签时，GitHub Actions 自动构建主镜像（orangerepo + quiz 双二进制）发布到 GHCR，并创建 Release。
-**判题沙箱是独立镜像**（需 nsjail/g++/python3，非 distroless），先本地构建再 compose 一键起三服务：
+推送 `v*` 版本标签时，GitHub Actions 自动构建**两个镜像**发布到 GHCR 并创建 Release：
+主镜像 `ghcr.io/shinyes/orange_repo:<版本>`（orangerepo + quiz 双二进制，distroless）
+与判题沙箱镜像 `ghcr.io/shinyes/orange_repo-judge:<版本>`（ubuntu + nsjail + g++ + python3）。compose 一键起三服务：
 
 ```bash
-docker build -f Dockerfile.judge -t orangeoj-judge:local .
-ORANGEOJ_JUDGE_SHARED_TOKEN=换成你的随机token docker compose -f deploy/docker-compose.yml up -d --build
+ORANGEOJ_JUDGE_SHARED_TOKEN=换成你的随机token docker compose -f deploy/docker-compose.yml up -d
 # 主站 http://localhost:8080 · 刷题/OJ http://localhost:8081 · 判题沙箱 :9090（不对外）
 ```
 
 `orangejudge` 容器以 privileged + cgroup host 运行（nsjail 需要），仅暴露给内网 `orangequiz`；
-`orangequiz` 必须配置与 `orangejudge` 一致的 `-judge-token`，否则判题接口返回 503。
-主镜像保持 distroless/static；三容器共享 `./data` 卷（判题工作目录在命名卷 `judge-work`）。
+`orangequiz` 必须配置与 `orangejudge` 一致的 `-judge-token`（compose 中同一
+`ORANGEOJ_JUDGE_SHARED_TOKEN` 注入两侧），否则判题接口返回 503。
+如需指定其他判题镜像/版本：`ORANGEOJ_JUDGE_IMAGE=ghcr.io/shinyes/orange_repo-judge:其他版本`。
+三容器共享 `./data` 卷（判题工作目录在命名卷 `judge-work`）。
 
 ## 功能
 
