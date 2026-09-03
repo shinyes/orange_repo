@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type DragEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
@@ -866,6 +866,8 @@ function ProblemList() {
   const listQuery = useQuery({
     queryKey: ['problems', filter],
     queryFn: () => api.problems(filter),
+    // 切标签/搜索时保留上一列表直到新数据返回，避免列表闪没与滚动状态丢失
+    placeholderData: keepPreviousData,
   })
   const problems = listQuery.data?.problems ?? []
   // Shift 范围选择的锚点（最近一次普通勾选的位置）
@@ -873,6 +875,23 @@ function ProblemList() {
   // 虚拟滚动状态
   const [scrollTop, setScrollTop] = useState(0)
   const viewportRef = useRef<HTMLDivElement | null>(null)
+
+  // 过滤条件变化或列表内容整体替换（点标签/搜索/切类型/删题后刷新）后重置滚动到顶部。
+  // 旧滚动位置残留会让切换后的短列表可见区间为空且无法滚动——题目将永远无法显示。
+  // 用 (filterKey, 首题 id) 标识列表身份：仅内容真正变化时重置，普通缓存刷新不打断浏览。
+  const filterKey = JSON.stringify(filter)
+  const firstProblemId = problems[0]?.id ?? null
+  const listIdentity = `${filterKey}|${firstProblemId}`
+  const prevIdentity = useRef<string | null>(null)
+  useEffect(() => {
+    if (prevIdentity.current !== null && prevIdentity.current !== listIdentity) {
+      if (viewportRef.current) viewportRef.current.scrollTop = 0
+      setScrollTop(0)
+      setAnchorIndex(null)
+    }
+    prevIdentity.current = listIdentity
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [listIdentity])
 
   /** 勾选处理：Shift+点击=从锚点到当前项的整段范围选择；普通点击=切换单项并更新锚点。 */
   function handleCheck(i: number, shiftKey: boolean) {
@@ -892,7 +911,9 @@ function ProblemList() {
 
   const total = problems.length
   const viewH = viewportRef.current?.clientHeight ?? 600
-  const start = Math.max(0, Math.floor(scrollTop / PROBLEM_ROW_H) - OVERSCAN)
+  let start = Math.max(0, Math.floor(scrollTop / PROBLEM_ROW_H) - OVERSCAN)
+  // 防御：旧滚动位置残留导致 start 越界时（如切到更短的列表），从头显示，避免空白
+  if (start >= total) start = Math.max(0, total - 1)
   const end = Math.min(total, Math.ceil((scrollTop + viewH) / PROBLEM_ROW_H) + OVERSCAN)
   const visible = problems.slice(start, end)
 
