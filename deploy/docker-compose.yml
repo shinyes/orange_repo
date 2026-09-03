@@ -10,7 +10,7 @@
 # 其余版本沿用 latest（compose 默认引用 latest，可用 ORANGEOJ_JUDGE_IMAGE 覆盖）。
 services:
   orangerepo:
-    image: ghcr.io/shinyes/orange_repo:1.12.5
+    image: ghcr.io/shinyes/orange_repo:1.12.6
     container_name: orangerepo
     ports:
       - "8080:8080"
@@ -22,7 +22,7 @@ services:
   # 自有数据写入同一卷内的 quiz.db）；主库表结构变化时请与主站同版本部署。
   # 判题：连接 orangejudge（-judge-endpoint / -judge-token 必填否则判题 503）。
   orangequiz:
-    image: ghcr.io/shinyes/orange_repo:1.12.5
+    image: ghcr.io/shinyes/orange_repo:1.12.6
     container_name: orangequiz
     entrypoint: ["/app/quiz"]
     command: [
