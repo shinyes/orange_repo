@@ -163,6 +163,16 @@ cd web ; npm run build              # 主站前端
 cd web-quiz ; npm run build         # 刷题/OJ 前端
 ```
 
+### 一键测试（含真实评测端到端）
+
+```powershell
+.\scripts\test-oj.ps1                # 全量：静态检查 + 双前端构建 + 三进程真实 Python/C++ 评测 E2E
+.\scripts\test-oj.ps1 -StaticOnly    # 仅 go vet/test + linux 交叉编译（+前端构建）
+.\scripts\test-oj.ps1 -SkipFrontends # 跳过 npm build
+# E2E 使用独立端口（默认 18090/18091/19090）与 %TEMP%\orangeoj-test-* 临时数据，
+# 结束自动清理；无本地 g++/python 的机器对应断言自动 SKIP。
+```
+
 ### 判题安全须知
 - 学生代码只在 **judge-runtime** 内执行：Linux 生产为 nsjail（无网络、无 proc、降权 nobody、cgroup 内存/PID 限制）；
   Windows/本地开发为进程级受限运行（限时/隔离目录/精简环境），**无安全隔离承诺**，仅用于联调
