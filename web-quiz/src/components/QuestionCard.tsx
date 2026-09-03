@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { CheckCircle2Icon, ChevronRightIcon, XCircleIcon } from 'lucide-react'
 import { toast } from 'sonner'
 
-import { Markdown } from '@/lib/markdown'
+import { Markdown, preserveLineBreaks } from '@/lib/markdown'
 import type { QuizProblem, SubmitResult } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -101,7 +101,7 @@ export function QuestionCard({ problem, submit, onNext, index, total, nextLabel 
                     {OPTION_LABELS[i] ?? i + 1}
                   </span>
                   <span className="min-w-0 flex-1">
-                    <Markdown text={opt} className="markdown-body text-sm" />
+                    <Markdown text={preserveLineBreaks(opt)} className="markdown-body text-sm" />
                   </span>
                   {isCorrect && <CheckCircle2Icon className="mt-0.5 size-4 shrink-0 text-emerald-600" />}
                   {isWrongPick && <XCircleIcon className="mt-0.5 size-4 shrink-0 text-red-600" />}

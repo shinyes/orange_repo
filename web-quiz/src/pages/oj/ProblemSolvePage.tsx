@@ -16,7 +16,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { api } from '@/lib/api'
 import type { CaseDetail, CodeLang, OjProblem, Submission, SubmissionPoll } from '@/lib/types'
-import { Markdown } from '@/lib/markdown'
+import { Markdown, preserveLineBreaks } from '@/lib/markdown'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Textarea } from '@/components/ui/textarea'
@@ -138,7 +138,7 @@ function ObjectiveSolve({ problem, backTo }: { problem: OjProblem; backTo: strin
                   )}>
                     {String.fromCharCode(65 + i)}
                   </span>
-                  <span className="min-w-0 flex-1"><Markdown text={opt} className="markdown-body text-sm" /></span>
+                  <span className="min-w-0 flex-1"><Markdown text={preserveLineBreaks(opt)} className="markdown-body text-sm" /></span>
                   {(isRightPick || isRight) && <CheckCircle2Icon className="mt-0.5 size-4 shrink-0 text-emerald-600" />}
                   {isWrongPick && <XCircleIcon className="mt-0.5 size-4 shrink-0 text-red-600" />}
                 </button>
