@@ -17,57 +17,48 @@
 | 渲染 | marked + DOMPurify + KaTeX（与 OrangeOJ 一致） |
 | 判题 | judge-runtime 独立进程（Linux: nsjail + cgroup v2 沙箱；Windows 开发机: 进程级受限运行，无安全承诺） |
 
-## 快速开始
+## 快速开始（Docker Compose 部署）
 
-```powershell
-# 方式一：开发模式（主站前端 :5173 热更新，后端 :8080）
-.\scripts\dev.ps1
+### 前置要求
+- 安装 Docker Engine（含 Compose v2）
+- Linux 宿主机需支持 **cgroup v2**（判题沙箱 nsjail 需要，容器会以 privileged 运行）
+- 数据保存在 compose 文件所在目录的 `./data`（删除即可重置）
 
-# 方式二：开发模式（主站 + 刷题/OJ + 判题沙箱：:5173/:8080、:5174/:8081、:9090）
-.\scripts\dev-quiz.ps1
-
-# 方式三：生产模式（Go 直接托管前端构建产物）
-cd web ; npm install ; npm run build ; cd ..
-go run . -seed          # 首次可加 -seed 导入示例包
-```
-
-判题三服务（生产模式）——两个进程 + 一个判题运行器：
-
-```powershell
-# 1. 主站先启动至少一次，初始化题库（含账号库）
-cd web ; npm install ; npm run build ; cd ..
-go run . -seed
-
-# 2. 判题运行器（真实执行代码；本机为受限模式）
-$env:ORANGEOJ_JUDGE_SHARED_TOKEN = 'dev-token'
-go run ./cmd/judge-runtime
-
-# 3. 刷题/OJ 服务（连接判题运行器）
-cd web-quiz ; npm install ; npm run build ; cd ..
-go run ./cmd/quiz -judge-endpoint http://127.0.0.1:9090 -judge-token dev-token -judge-workers 2
-```
-
-访问 `http://localhost:5173`（主站开发）或 `http://localhost:8080`（主站生产）；
-刷题/OJ 见 `http://localhost:5174`（开发）或 `http://localhost:8081`（生产）。
-**主站与刷题服务共享同一账号库**：首次启动自动创建管理员 `admin/123456`（主站仅管理员可登录）；
-学生账号由管理员在刷题服务「我的 → 系统管理 → 学生」创建。
-
-## Docker 部署
-
-推送 `v*` 版本标签时，GitHub Actions 自动构建**两个镜像**发布到 GHCR 并创建 Release：
-主镜像 `ghcr.io/shinyes/orange_repo:<版本>`（orangerepo + quiz 双二进制，distroless）
-与判题沙箱镜像 `ghcr.io/shinyes/orange_repo-judge:<版本>`（ubuntu + nsjail + g++ + python3）。compose 一键起三服务：
+### 部署步骤
 
 ```bash
-ORANGEOJ_JUDGE_SHARED_TOKEN=换成你的随机token docker compose -f deploy/docker-compose.yml up -d
-# 主站 http://localhost:8080 · 刷题/OJ http://localhost:8081 · 判题沙箱 :9090（不对外）
+# 1. 准备 compose 文件（可来自仓库 deploy/ 目录或直接下载）
+git clone https://github.com/shinyes/orange_repo.git
+cd orange_repo
+
+# 2. 设置判题共享 token（生产务必用随机长字符串；主站/刷题/判题三容器共用同一份 compose 自动注入）
+export ORANGEOJ_JUDGE_SHARED_TOKEN='换成你的随机token'
+
+# 3. 一键启动（自动从 GHCR 拉取主镜像与判题沙箱镜像）
+docker compose -f deploy/docker-compose.yml up -d
 ```
 
-`orangejudge` 容器以 privileged + cgroup host 运行（nsjail 需要），仅暴露给内网 `orangequiz`；
-`orangequiz` 必须配置与 `orangejudge` 一致的 `-judge-token`（compose 中同一
-`ORANGEOJ_JUDGE_SHARED_TOKEN` 注入两侧），否则判题接口返回 503。
-如需指定其他判题镜像/版本：`ORANGEOJ_JUDGE_IMAGE=ghcr.io/shinyes/orange_repo-judge:其他版本`。
-三容器共享 `./data` 卷（判题工作目录在命名卷 `judge-work`）。
+访问：
+- 主站（题库管理）：http://localhost:8080
+- 刷题 / OJ（学生做题、判题）：http://localhost:8081
+- 判题沙箱 :9090 仅容器内网使用，不对外
+
+首次启动自动创建管理员 `admin / 123456`（主站与刷题服务共享账号库，改密两端联动），请登录后修改。
+
+### 说明
+- 主镜像 `ghcr.io/shinyes/orange_repo:<版本>` 与判题沙箱镜像 `ghcr.io/shinyes/orange_repo-judge:<版本>` 均由 GitHub Actions 随版本标签自动发布，无需本地构建；如需覆盖判题镜像可设 `ORANGEOJ_JUDGE_IMAGE` 环境变量
+- 升级：拉取新版本后重新 `docker compose up -d`（题库与判题数据都在 `./data` 卷内原样保留）
+- 判题功能要求 `ORANGEOJ_JUDGE_SHARED_TOKEN` 非默认值且三容器配置一致，否则刷题页面的运行/测试/提交返回 503
+
+### 本地开发（可选）
+
+仅面向开发者，普通部署请用上方 Compose 方式：
+
+```powershell
+.\scripts\dev.ps1        # 仅主站开发（:8080 + :5173 热更新）
+.\scripts\dev-quiz.ps1   # 主站 + 刷题/OJ + 判题沙箱全部开发（:8080/:5173、:8081/:5174、:9090）
+.\scripts\test-oj.ps1    # 全量测试（静态检查 + 真实 Python/C++ 评测 E2E）
+```
 
 ## 功能
 
