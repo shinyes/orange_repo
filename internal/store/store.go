@@ -639,14 +639,31 @@ func (s *Store) ListTagFacets(f ProblemFilter) ([]TagCount, int, error) {
 
 	counts := make(map[string]int, len(candidates))
 	total := 0
+	// 前缀命中语义：题目命中候选 C ⇔ 题目某标签 == C 或 C 是该标签的祖先。
+	// 因此单题的“命中候选集合” = 其全部标签 ∪ 各标签的全部祖先——直接桶计数，
+	// 无需对每个候选反查（原实现 O(题目数×候选数)，此处降为 O(题目数×标签深度)）。
 	for _, tags := range tagLists {
 		if TagMatchesSelected(tags, selected) {
 			total++
 		}
-		for t := range candidates {
-			if TagMatchesSelected(tags, []string{t}) {
+		seen := make(map[string]bool, len(tags)*2)
+		for _, t := range tags {
+			// 标签自身与全部祖先（含完整串，避免重复计数）
+			for {
+				if seen[t] || !candidates[t] {
+					break
+				}
+				seen[t] = true
 				counts[t]++
+				idx := strings.LastIndexByte(t, '/')
+				if idx < 0 {
+					break
+				}
+				t = t[:idx]
 			}
+		}
+		if len(tags) == 0 && candidates[NoneTag] {
+			counts[NoneTag]++
 		}
 	}
 

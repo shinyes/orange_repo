@@ -41,13 +41,16 @@ type AnswerEnvelope struct {
 var defaultQuizTypes = []string{"single_choice", "true_false"}
 
 // OpenRepoReader 只读打开主库题库并探活（确认存在 problems 表）。
+// 只读连接放开并发上限：主库为 WAL 模式（主站维护），多连接只读可并行，
+// 避免大量并发读被单连接串行化（原 SetMaxOpenConns(1) 在刷题/判题读密集下是瓶颈）。
 func OpenRepoReader(path string) (*RepoReader, error) {
 	dsn := "file:" + filepath.ToSlash(path) + "?mode=ro&_pragma=busy_timeout(5000)"
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open repo sqlite: %w", err)
 	}
-	db.SetMaxOpenConns(1)
+	db.SetMaxOpenConns(8)
+	db.SetMaxIdleConns(8)
 	var n int
 	if err := db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='problems'`).Scan(&n); err != nil || n == 0 {
 		db.Close()

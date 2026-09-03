@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
-// katex 0.16+ 的 auto-render 以 default 形式导出 renderMathInElement（类型见 src/types/katex-auto-render.d.ts）
-import renderMathInElementDefault from 'katex/contrib/auto-render'
 
 interface KatexDelimiter {
   left: string
@@ -13,10 +11,6 @@ interface RenderMathInElementOptions {
   delimiters?: KatexDelimiter[]
   throwOnError?: boolean
 }
-const renderMathInElement = renderMathInElementDefault as (
-  element: HTMLElement,
-  options?: RenderMathInElementOptions,
-) => void
 
 // 与上游 OrangeOJ 相同的渲染链路：marked → DOMPurify → KaTeX auto-render。
 export function renderMarkdown(text: string): string {
@@ -58,7 +52,19 @@ export function Markdown({ text, className }: { text: string; className?: string
   const html = useMemo(() => renderMarkdown(text), [text])
   const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
-    if (ref.current) renderMathInElement(ref.current, KATEX_OPTIONS)
+    if (!ref.current) return
+    // 仅当渲染结果里疑似含公式定界符时才动态加载 KaTeX（体积大，避免进首屏）
+    const looksMath = /\$|\\\(|\\\[/.test(html)
+    if (!looksMath) return
+    let alive = true
+    void import('katex/contrib/auto-render').then((mod) => {
+      if (!alive || !ref.current) return
+      const renderMathInElement = (mod as { default?: unknown }).default ?? mod
+      ;(renderMathInElement as (el: HTMLElement, opts?: RenderMathInElementOptions) => void)(ref.current, KATEX_OPTIONS)
+    }).catch(() => { /* 公式渲染失败不影响正文 */ })
+    return () => {
+      alive = false
+    }
   }, [html])
   return <div ref={ref} className={className} dangerouslySetInnerHTML={{ __html: html }} />
 }

@@ -1,16 +1,24 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query'
 import { Toaster } from '@/components/ui/sonner'
 import { BookOpenIcon, ListChecksIcon, TagsIcon } from 'lucide-react'
 
 import { api } from '@/lib/api'
 import { AppStateProvider, useAppState } from '@/lib/app-context'
-import { BookletColumn } from '@/components/BookletColumn'
 import { Login } from '@/components/Login'
 import { PasswordDialog } from '@/components/PasswordDialog'
 import { ProblemListColumn, TagFilterColumn } from '@/components/Sidebar'
-import { ProblemPane } from '@/components/ProblemPane'
-import { PracticeDetail, TrainingDetail } from '@/components/GroupsPane'
+
+// 右侧详情/编辑区按需懒加载（ProblemPane 含编辑器与 KaTeX 渲染，体积大且仅点选题目后需要）。
+const ProblemPane = lazy(() => import('@/components/ProblemPane').then((m) => ({ default: m.ProblemPane })))
+const BookletColumn = lazy(() => import('@/components/BookletColumn').then((m) => ({ default: m.BookletColumn })))
+const TrainingDetail = lazy(() => import('@/components/GroupsPane').then((m) => ({ default: m.TrainingDetail })))
+const PracticeDetail = lazy(() => import('@/components/GroupsPane').then((m) => ({ default: m.PracticeDetail })))
+
+// 右栏懒加载占位。
+function PaneFallback() {
+  return <div className="flex h-full items-center justify-center text-sm text-muted-foreground">加载中…</div>
+}
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -64,9 +72,17 @@ function Main({ onLogout }: { onLogout: () => void }) {
       <aside className="w-[320px] shrink-0 border-r">
         <ProblemListColumn showBooklets={showBooklets} onToggleBooklets={() => setShowBooklets((v) => !v)} />
       </aside>
-      {showBooklets && <aside className="w-[280px] shrink-0 border-r"><BookletColumn /></aside>}
+      {showBooklets && (
+        <aside className="w-[280px] shrink-0 border-r">
+          <Suspense fallback={null}>
+            <BookletColumn />
+          </Suspense>
+        </aside>
+      )}
       <main className="min-w-0 flex-1 overflow-y-auto">
-        <RightPane />
+        <Suspense fallback={<PaneFallback />}>
+          <RightPane />
+        </Suspense>
       </main>
       <PasswordDialog open={pwOpen} onOpenChange={setPwOpen} />
     </div>

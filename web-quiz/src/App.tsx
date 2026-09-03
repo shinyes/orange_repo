@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { BrowserRouter, Navigate, NavLink, Outlet, Route, Routes } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { BookOpenIcon, ClipboardXIcon, FolderKanbanIcon, ClipboardListIcon, SettingsIcon, UserRoundIcon } from 'lucide-react'
@@ -8,17 +8,28 @@ import { Toaster } from '@/components/ui/sonner'
 import { Login } from '@/components/Login'
 import { QuizSubjectsPage } from '@/pages/QuizSubjectsPage'
 import { QuizCategoriesPage } from '@/pages/QuizCategoriesPage'
-import { QuizRoundPage } from '@/pages/QuizRoundPage'
 import { WrongListPage } from '@/pages/WrongListPage'
-import { WrongRoundPage } from '@/pages/WrongRoundPage'
 import { MyPage } from '@/pages/MyPage'
-import { AdminPage } from '@/pages/AdminPage'
 import { TrainingCards, PracticeCards } from '@/pages/oj/AssignmentCards'
-import { TrainingPage } from '@/pages/oj/TrainingPage'
-import { PracticePage } from '@/pages/oj/PracticePage'
-import { ProblemSolvePage } from '@/pages/oj/ProblemSolvePage'
 import type { User } from '@/lib/types'
 import { cn } from '@/lib/utils'
+
+// 重量级页面按路由懒加载（做题/管理/错题轮等大组件不进首屏主包）。
+const QuizRoundPage = lazy(() => import('@/pages/QuizRoundPage').then((m) => ({ default: m.QuizRoundPage })))
+const WrongRoundPage = lazy(() => import('@/pages/WrongRoundPage').then((m) => ({ default: m.WrongRoundPage })))
+const AdminPage = lazy(() => import('@/pages/AdminPage').then((m) => ({ default: m.AdminPage })))
+const TrainingPage = lazy(() => import('@/pages/oj/TrainingPage').then((m) => ({ default: m.TrainingPage })))
+const PracticePage = lazy(() => import('@/pages/oj/PracticePage').then((m) => ({ default: m.PracticePage })))
+const ProblemSolvePage = lazy(() => import('@/pages/oj/ProblemSolvePage').then((m) => ({ default: m.ProblemSolvePage })))
+
+// 路由切换时的轻量加载占位。
+function PageFallback() {
+  return (
+    <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+      加载中…
+    </div>
+  )
+}
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -52,28 +63,30 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         {authed && user ? (
-          <Routes>
-            <Route path="/login" element={<Navigate to="/quiz" replace />} />
-            <Route element={<MainShell user={user} onLogout={() => void api.logout().finally(() => setAuthed(false))} />}>
-              <Route path="/" element={<Navigate to="/quiz" replace />} />
-              <Route path="/quiz" element={<QuizSubjectsPage />} />
-              <Route path="/quiz/:subjectId" element={<QuizCategoriesPage />} />
-              <Route path="/quiz/:subjectId/:categoryId" element={<QuizRoundPage />} />
-              <Route path="/training" element={<TrainingHome />} />
-              <Route path="/training/:id" element={<TrainingPage />} />
-              <Route path="/practice" element={<PracticeHome />} />
-              <Route path="/practice/:id" element={<PracticePage />} />
-              <Route path="/problem/:problemId" element={<ProblemSolvePage />} />
-              <Route path="/wrong" element={<WrongListPage />} />
-              <Route path="/wrong/:scope" element={<WrongRoundPage />} />
-              <Route path="/mine" element={<MyPage />} />
-              <Route
-                path="/admin"
-                element={user.role === 'admin' ? <AdminPage /> : <Navigate to="/mine" replace />}
-              />
-              <Route path="*" element={<Navigate to="/quiz" replace />} />
-            </Route>
-          </Routes>
+          <Suspense fallback={<PageFallback />}>
+            <Routes>
+              <Route path="/login" element={<Navigate to="/quiz" replace />} />
+              <Route element={<MainShell user={user} onLogout={() => void api.logout().finally(() => setAuthed(false))} />}>
+                <Route path="/" element={<Navigate to="/quiz" replace />} />
+                <Route path="/quiz" element={<QuizSubjectsPage />} />
+                <Route path="/quiz/:subjectId" element={<QuizCategoriesPage />} />
+                <Route path="/quiz/:subjectId/:categoryId" element={<QuizRoundPage />} />
+                <Route path="/training" element={<TrainingHome />} />
+                <Route path="/training/:id" element={<TrainingPage />} />
+                <Route path="/practice" element={<PracticeHome />} />
+                <Route path="/practice/:id" element={<PracticePage />} />
+                <Route path="/problem/:problemId" element={<ProblemSolvePage />} />
+                <Route path="/wrong" element={<WrongListPage />} />
+                <Route path="/wrong/:scope" element={<WrongRoundPage />} />
+                <Route path="/mine" element={<MyPage />} />
+                <Route
+                  path="/admin"
+                  element={user.role === 'admin' ? <AdminPage /> : <Navigate to="/mine" replace />}
+                />
+                <Route path="*" element={<Navigate to="/quiz" replace />} />
+              </Route>
+            </Routes>
+          </Suspense>
         ) : (
           <Login onSuccess={(u) => { setUser(u); setAuthed(true) }} />
         )}
