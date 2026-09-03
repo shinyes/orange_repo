@@ -102,7 +102,7 @@ function ObjectiveSolve({ problem, backTo }: { problem: OjProblem; backTo: strin
   const rightIdx = answered && !result.correct ? (result.correctAnswer?.answerIndex ?? -1) : -1
   const rightTF = answered && !result.correct ? (result.correctAnswer?.answer ?? null) : null
   return (
-    <div className="mx-auto w-full max-w-2xl px-4 py-5">
+    <div className="mx-auto w-full max-w-2xl px-4 py-5 lg:max-w-3xl lg:px-8 lg:py-8">
       <TopBar backTo={backTo} problem={problem} />
       <div className="mt-3 rounded-2xl border bg-card p-5">
         <div className="mb-3 flex items-center gap-2">
@@ -300,7 +300,7 @@ function ProgrammingSolve({ problem, backTo }: { problem: OjProblem; backTo: str
   const problemBody = problem.bodyJson as { inputFormat?: string; outputFormat?: string }
 
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 px-3 py-3 lg:h-full lg:flex-row lg:overflow-hidden lg:px-4 lg:py-4">
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 px-3 py-3 lg:h-full lg:flex-row lg:overflow-hidden lg:px-5 lg:py-4 2xl:max-w-7xl">
       {/* 左：题面 */}
       <div className="min-w-0 flex-1 overflow-y-auto rounded-2xl border bg-card p-4">
         <TopBar backTo={backTo} problem={problem} />
@@ -334,7 +334,7 @@ function ProgrammingSolve({ problem, backTo }: { problem: OjProblem; backTo: str
       </div>
 
       {/* 右：编辑器 */}
-      <div className="flex min-h-[420px] min-w-0 flex-1 flex-col rounded-2xl border bg-card lg:h-full">
+      <div className="flex min-h-[420px] min-w-0 flex-1 flex-col rounded-2xl border bg-card lg:h-full xl:flex-[1.15]">
         <div className="flex flex-wrap items-center gap-1.5 border-b p-2">
           <Select value={lang} onValueChange={(v) => switchLang(v as CodeLang)}>
             <SelectTrigger className="h-8 w-[130px] text-xs">

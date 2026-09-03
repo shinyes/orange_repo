@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { BrowserRouter, Navigate, NavLink, Outlet, Route, Routes } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { BookOpenIcon, ClipboardXIcon, FolderKanbanIcon, ClipboardListIcon, UserRoundIcon } from 'lucide-react'
+import { BookOpenIcon, ClipboardXIcon, FolderKanbanIcon, ClipboardListIcon, SettingsIcon, UserRoundIcon } from 'lucide-react'
 
 import { api } from '@/lib/api'
 import { Toaster } from '@/components/ui/sonner'
@@ -88,7 +88,7 @@ export type ShellContext = { user: User; onLogout: () => void }
 // 训练 / 练习 首页（共用卡片列表，仅文案差异）。
 function TrainingHome() {
   return (
-    <div className="mx-auto w-full max-w-2xl px-4 py-6">
+    <div className="mx-auto w-full max-w-2xl px-4 py-6 lg:max-w-4xl lg:px-8 lg:py-8">
       <h1 className="mb-1 text-lg font-semibold">训练</h1>
       <p className="mb-4 text-xs text-muted-foreground">按章节组织的布置训练（编程题提交评测，客观题即答即判）</p>
       <TrainingCards />
@@ -98,7 +98,7 @@ function TrainingHome() {
 
 function PracticeHome() {
   return (
-    <div className="mx-auto w-full max-w-2xl px-4 py-6">
+    <div className="mx-auto w-full max-w-2xl px-4 py-6 lg:max-w-4xl lg:px-8 lg:py-8">
       <h1 className="mb-1 text-lg font-semibold">练习</h1>
       <p className="mb-4 text-xs text-muted-foreground">布置给本班的练习题单</p>
       <PracticeCards />
@@ -106,7 +106,7 @@ function PracticeHome() {
   )
 }
 
-// 主壳：内容区（Outlet）+ 底部导航（刷题/训练/练习/错题/我的）。
+// 主壳：PC（lg+）顶部导航 + 内容区；移动端底部导航（同一套路由）。
 function MainShell({ user, onLogout }: { user: User; onLogout: () => void }) {
   const items: { to: string; label: string; icon: typeof BookOpenIcon }[] = [
     { to: '/quiz', label: '刷题', icon: BookOpenIcon },
@@ -117,10 +117,63 @@ function MainShell({ user, onLogout }: { user: User; onLogout: () => void }) {
   ]
   return (
     <div className="flex h-dvh flex-col overflow-hidden">
+      {/* PC 顶部导航 */}
+      <header className="hidden shrink-0 border-b bg-background lg:block">
+        <div className="mx-auto flex h-14 w-full max-w-6xl items-center gap-6 px-6">
+          <NavLink to="/quiz" className="flex shrink-0 items-center gap-2 text-base font-semibold">
+            <img src="/favicon.png" alt="OrangeOJ" className="size-7 rounded-lg" />
+            OrangeOJ
+          </NavLink>
+          <nav className="flex min-w-0 flex-1 items-center gap-1">
+            {items.map((it) => (
+              <NavLink
+                key={it.to}
+                to={it.to}
+                className={({ isActive }) =>
+                  cn(
+                    'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm transition-colors',
+                    isActive
+                      ? 'bg-primary/10 font-medium text-primary'
+                      : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                  )
+                }
+              >
+                <it.icon className="size-4" />
+                {it.label}
+              </NavLink>
+            ))}
+          </nav>
+          <div className="flex shrink-0 items-center gap-1">
+            {user.role === 'admin' && (
+              <NavLink
+                to="/admin"
+                className={({ isActive }) =>
+                  cn(
+                    'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm transition-colors',
+                    isActive
+                      ? 'bg-primary/10 font-medium text-primary'
+                      : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                  )
+                }
+              >
+                <SettingsIcon className="size-4" />
+                管理
+              </NavLink>
+            )}
+            <span className="rounded-full bg-muted px-2.5 py-1 text-xs text-muted-foreground">
+              {user.username}
+            </span>
+          </div>
+        </div>
+      </header>
+
+      {/* 内容区 */}
       <main className="min-h-0 flex-1 overflow-y-auto">
         <Outlet context={{ user, onLogout }} />
       </main>
-      <nav className="flex shrink-0 border-t bg-background px-1 pb-[env(safe-area-inset-bottom)] sm:px-4">
+
+      {/* 移动端底部导航 */}
+      <nav className="flex shrink-0 border-t bg-background px-1 pb-[env(safe-area-inset-bottom)] lg:hidden">
         {items.map((it) => (
           <NavLink
             key={it.to}

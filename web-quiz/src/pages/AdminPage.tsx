@@ -62,7 +62,7 @@ function moveItem<T>(arr: T[], from: number, to: number): T[] {
 // 系统管理页（仅管理员）：科目 / 分类 / 学生 / 布置 / 设置。
 export function AdminPage() {
   return (
-    <div className="mx-auto w-full max-w-3xl px-4 py-6">
+    <div className="mx-auto w-full max-w-3xl px-4 py-6 lg:max-w-5xl lg:px-8 lg:py-8">
       <h1 className="mb-4 text-lg font-semibold">系统管理</h1>
       <Tabs defaultValue="subjects">
         <TabsList className="w-full">

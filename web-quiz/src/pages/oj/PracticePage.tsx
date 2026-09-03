@@ -24,7 +24,7 @@ export function PracticePage() {
   }
   const pct = data.total > 0 ? Math.round((data.accepted / data.total) * 100) : 0
   return (
-    <div className="mx-auto w-full max-w-3xl px-4 py-5">
+    <div className="mx-auto w-full max-w-3xl px-4 py-5 lg:max-w-5xl lg:px-8">
       <Link to="/practice">
         <Button variant="ghost" size="sm" className="-ml-2 text-muted-foreground">
           <ArrowLeftIcon className="size-4" /> 返回练习
@@ -57,7 +57,7 @@ export function PracticePage() {
 
 function ErrorBox({ msg }: { msg: string }) {
   return (
-    <div className="mx-auto w-full max-w-3xl px-4 py-16 text-center">
+    <div className="mx-auto w-full max-w-3xl px-4 py-16 text-center lg:max-w-5xl">
       <div className="rounded-2xl border bg-card p-8">
         <p className="text-sm text-muted-foreground">{msg}</p>
         <Link to="/practice" className="mt-4 inline-block">

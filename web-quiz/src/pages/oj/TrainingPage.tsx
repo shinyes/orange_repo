@@ -26,7 +26,7 @@ export function TrainingPage() {
   }
   const pct = data.total > 0 ? Math.round((data.accepted / data.total) * 100) : 0
   return (
-    <div className="mx-auto w-full max-w-3xl px-4 py-5">
+    <div className="mx-auto w-full max-w-3xl px-4 py-5 lg:max-w-5xl lg:px-8">
       <Link to="/training">
         <Button variant="ghost" size="sm" className="-ml-2 text-muted-foreground">
           <ArrowLeftIcon className="size-4" /> 返回训练
@@ -64,7 +64,7 @@ function ChapterBlock({ chId, title, items }: { chId: number; title: string; ite
         {allDone && <Badge className="bg-emerald-50 text-emerald-700 hover:bg-emerald-50">已完成</Badge>}
         <span className="text-xs font-normal text-muted-foreground">{items.length} 题</span>
       </div>
-      <div className="grid grid-cols-1 gap-2 p-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-2 p-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
         {items.map((it, idx) => (
           <ProblemRow key={it.problemId} problemId={it.problemId} title={it.title} type={it.type} completed={it.completed} idx={idx} />
         ))}
@@ -102,7 +102,7 @@ export function ProblemRow({ problemId, title, type, completed, idx }: {
 
 function ErrorBox({ msg }: { msg: string }) {
   return (
-    <div className="mx-auto w-full max-w-3xl px-4 py-16 text-center">
+    <div className="mx-auto w-full max-w-3xl px-4 py-16 text-center lg:max-w-5xl">
       <div className="rounded-2xl border bg-card p-8">
         <p className="text-sm text-muted-foreground">{msg}</p>
         <Link to="/training" className="mt-4 inline-block">

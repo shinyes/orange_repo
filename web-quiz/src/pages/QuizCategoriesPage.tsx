@@ -12,14 +12,14 @@ export function QuizCategoriesPage() {
   const subject = subjects.data?.subjects.find((s) => String(s.id) === subjectId)
 
   return (
-    <div className="mx-auto w-full max-w-2xl px-4 py-6">
+    <div className="mx-auto w-full max-w-2xl px-4 py-6 lg:max-w-4xl lg:px-8 lg:py-8">
       <Link to="/quiz">
         <Button variant="ghost" size="sm" className="-ml-2 mb-3 text-muted-foreground">
           <ArrowLeftIcon className="size-4" /> 返回科目
         </Button>
       </Link>
       <h1 className="mb-4 text-lg font-semibold">{subject?.name ?? '分类'}</h1>
-      <div className="space-y-3">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         {(subject?.categories ?? []).map((c) => (
           <Link
             key={c.id}
@@ -38,12 +38,12 @@ export function QuizCategoriesPage() {
           </Link>
         ))}
         {subject && subject.categories.length === 0 && (
-          <div className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
+          <div className="col-span-full rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
             该科目下暂无分类
           </div>
         )}
         {!subject && !subjects.isLoading && (
-          <div className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
+          <div className="col-span-full rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
             科目不存在，请返回重新选择
           </div>
         )}

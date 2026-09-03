@@ -11,12 +11,14 @@ export function TrainingCards() {
   const q = useQuery({ queryKey: ['oj-assigned'], queryFn: api.ojAssigned })
   const list = q.data?.trainings ?? []
   return (
-    <div className="space-y-3">
+    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
       {list.map((t) => (
         <TrainingCard key={t.id} t={t} />
       ))}
       {!q.isLoading && list.length === 0 && (
-        <Empty text="暂无训练任务" hint="管理员布置训练后会显示在这里" />
+        <div className="col-span-full">
+          <Empty text="暂无训练任务" hint="管理员布置训练后会显示在这里" />
+        </div>
       )}
     </div>
   )
@@ -46,12 +48,14 @@ export function PracticeCards() {
   const q = useQuery({ queryKey: ['oj-assigned'], queryFn: api.ojAssigned })
   const list = q.data?.practices ?? []
   return (
-    <div className="space-y-3">
+    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
       {list.map((p) => (
         <PracticeCard key={p.id} p={p} />
       ))}
       {!q.isLoading && list.length === 0 && (
-        <Empty text="暂无练习任务" hint="管理员布置练习后会显示在这里" />
+        <div className="col-span-full">
+          <Empty text="暂无练习任务" hint="管理员布置练习后会显示在这里" />
+        </div>
       )}
     </div>
   )
