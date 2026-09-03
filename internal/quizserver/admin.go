@@ -192,9 +192,16 @@ func (s *Server) handleAdminSetCategoryOrder(c *fiber.Ctx) error {
 	return c.SendStatus(fiber.StatusNoContent)
 }
 
-// handleAdminProblemsCount 分类编辑时的实时题目数预览（query: tags=a,b&types=single_choice）。
+// handleAdminProblemsCount 分类编辑时的实时题目数预览
+// （query: tags 重复参数 tags=a&tags=b，标签文本可含逗号；types=single_choice 逗号分隔兼容）。
 func (s *Server) handleAdminProblemsCount(c *fiber.Ctx) error {
-	tags := splitCSV(c.Query("tags"))
+	// tags 按重复参数解析，每个值是一个完整标签（可含逗号）
+	var tags []string
+	for _, t := range multiQueryTags(c) {
+		if t = strings.TrimSpace(t); t != "" {
+			tags = append(tags, t)
+		}
+	}
 	types := splitCSV(c.Query("types"))
 	if _, err := quizstore.NormalizeTypes(types); err != nil {
 		return respondError(c, fiber.StatusBadRequest, err.Error())
@@ -207,6 +214,17 @@ func (s *Server) handleAdminProblemsCount(c *fiber.Ctx) error {
 		return respondError(c, fiber.StatusInternalServerError, err.Error())
 	}
 	return respondData(c, fiber.StatusOK, fiber.Map{"count": n})
+}
+
+// multiQueryTags 取 tags 参数的全部值（tags=a&tags=b 重复参数；值已百分号解码）。
+func multiQueryTags(c *fiber.Ctx) []string {
+	args := c.Request().URI().QueryArgs()
+	items := args.PeekMulti("tags")
+	out := make([]string, 0, len(items))
+	for _, it := range items {
+		out = append(out, string(it))
+	}
+	return out
 }
 
 func splitCSV(s string) []string {

@@ -16,11 +16,11 @@ import (
 // parseProblemFilter 从查询参数解析题目过滤条件（列表 / 导出 / 标签 facets 共用）。
 func parseProblemFilter(c *fiber.Ctx) (store.ProblemFilter, error) {
 	f := store.ProblemFilter{Q: c.Query("q")}
-	if tags := c.Query("tags"); tags != "" {
-		for _, t := range strings.Split(tags, ",") {
-			if t = strings.TrimSpace(t); t != "" {
-				f.Tags = append(f.Tags, t)
-			}
+	// tags 一律按“重复参数 = 多标签”解析（tags=a&tags=b），标签文本可含逗号，
+	// 不再以逗号作多标签分隔（含逗号标签旧版无法选中，属缺陷修复）。
+	for _, t := range multiQuery(c, "tags") {
+		if t = strings.TrimSpace(t); t != "" {
+			f.Tags = append(f.Tags, t)
 		}
 	}
 	f.Type = c.Query("type")
@@ -34,6 +34,17 @@ func parseProblemFilter(c *fiber.Ctx) (store.ProblemFilter, error) {
 		}
 	}
 	return f, nil
+}
+
+// multiQuery 取某 query 参数的全部值（支持 tags=a&tags=b 重复参数；值已百分号解码）。
+func multiQuery(c *fiber.Ctx, key string) []string {
+	args := c.Request().URI().QueryArgs()
+	items := args.PeekMulti(key)
+	out := make([]string, 0, len(items))
+	for _, it := range items {
+		out = append(out, string(it))
+	}
+	return out
 }
 
 // ---------- 题目 ----------

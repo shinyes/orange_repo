@@ -50,7 +50,8 @@ function json(init?: RequestInit): RequestInit {
 export function filterQuery(f: ProblemFilterState, extra?: Record<string, string>): string {
   const p = new URLSearchParams()
   if (f.q) p.set('q', f.q)
-  if (f.tags.length) p.set('tags', f.tags.join(','))
+  // 标签逐个 append（tags=a&tags=b）：标签文本本身可含逗号，多值参数不会误拆
+  for (const t of f.tags) p.append('tags', t)
   if (f.type) p.set('type', f.type)
   for (const [k, v] of Object.entries(extra ?? {})) p.set(k, v)
   const s = p.toString()

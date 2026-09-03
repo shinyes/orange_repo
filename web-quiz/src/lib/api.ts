@@ -99,7 +99,8 @@ export const api = {
     req<void>(`/api/admin/subjects/${subjectId}/categories/order`, json({ method: 'PUT', body: JSON.stringify({ ids }) })),
   problemsCount: (tags: string[], types: ProblemType[]) => {
     const p = new URLSearchParams()
-    if (tags.length) p.set('tags', tags.join(','))
+    // 标签逐个 append（可含逗号）；types 维持逗号分隔
+    for (const t of tags) p.append('tags', t)
     if (types.length) p.set('types', types.join(','))
     const s = p.toString()
     return req<{ count: number }>(`/api/admin/problems-count${s ? `?${s}` : ''}`)
