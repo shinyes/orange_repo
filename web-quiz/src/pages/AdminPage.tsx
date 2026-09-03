@@ -50,6 +50,10 @@ export function parseTags(text: string): string[] {
     .split(/[,，、\s]+/)
     .map((s) => s.trim())
     .filter(Boolean)
+    // 规范化标签路径：去首尾斜杠（CIE/ → CIE）、合并连续斜杠（a//b → a/b）。
+    // 分类选父标签即按前缀包含其子树，末尾斜杠无意义且会被服务端校验拒绝。
+    .map((s) => s.replace(/^\/+|\/+$/g, '').replace(/\/{2,}/g, '/'))
+    .filter(Boolean)
 }
 
 function moveItem<T>(arr: T[], from: number, to: number): T[] {
