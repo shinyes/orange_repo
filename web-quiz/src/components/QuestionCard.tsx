@@ -5,7 +5,6 @@ import { toast } from 'sonner'
 import { Markdown } from '@/lib/markdown'
 import type { QuizProblem, SubmitResult } from '@/lib/types'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 
 interface QuestionCardProps {
@@ -71,10 +70,6 @@ export function QuestionCard({ problem, submit, onNext, index, total, nextLabel 
       </div>
 
       <div className="rounded-2xl border bg-card p-5">
-        <div className="mb-3 flex items-center gap-2">
-          <Badge>{problem.type === 'single_choice' ? '单选题' : '判断题'}</Badge>
-          <h2 className="min-w-0 flex-1 truncate text-base font-semibold">{problem.title}</h2>
-        </div>
         <Markdown text={problem.statementMd || '（暂无题面）'} className="markdown-body text-[17px] leading-relaxed" />
 
         {/* 选项区 */}
