@@ -46,7 +46,9 @@ docker compose -f deploy/docker-compose.yml up -d
 首次启动自动创建管理员 `admin / 123456`（主站与刷题服务共享账号库，改密两端联动），请登录后修改。
 
 ### 说明
-- 主镜像 `ghcr.io/shinyes/orange_repo:<版本>` 与判题沙箱镜像 `ghcr.io/shinyes/orange_repo-judge:<版本>` 均由 GitHub Actions 随版本标签自动发布，无需本地构建；如需覆盖判题镜像可设 `ORANGEOJ_JUDGE_IMAGE` 环境变量
+- 主镜像 `ghcr.io/shinyes/orange_repo:<版本>` 由 GitHub Actions 随每个版本自动发布；判题沙箱镜像
+  `ghcr.io/shinyes/orange_repo-judge` **仅当版本含 judge 相关变更时构建**（并刷新 `:latest`——nsjail 编译耗时，
+  避免无谓重建），compose 默认引用 `:latest` 自动沿用最新判题镜像；如需固定其他版本可设 `ORANGEOJ_JUDGE_IMAGE` 环境变量
 - 升级：拉取新版本后重新 `docker compose up -d`（题库与判题数据都在 `./data` 卷内原样保留）
 - 判题功能要求 `ORANGEOJ_JUDGE_SHARED_TOKEN` 非默认值且三容器配置一致，否则刷题页面的运行/测试/提交返回 503
 

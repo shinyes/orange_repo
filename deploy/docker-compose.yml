@@ -5,8 +5,9 @@
 #   → judge-runtime :9090（判题沙箱，不对外）
 #
 # orangejudge 是真正执行学生代码的容器（nsjail 隔离），需要 privileged + cgroup v2 挂载，
-# 与上游 OrangeOJ 的 judge-runtime 容器配置一致；镜像随版本发布在 GHCR
-# （ghcr.io/shinyes/orange_repo-judge:<版本>，可用 ORANGEOJ_JUDGE_IMAGE 环境变量覆盖版本）。
+# 与上游 OrangeOJ 的 judge-runtime 容器配置一致；镜像由 GitHub Actions 发布：
+# judge 相关文件变更的版本会构建 ghcr.io/shinyes/orange_repo-judge:<版本> 并刷新 :latest，
+# 其余版本沿用 latest（compose 默认引用 latest，可用 ORANGEOJ_JUDGE_IMAGE 覆盖）。
 services:
   orangerepo:
     image: ghcr.io/shinyes/orange_repo:1.12.2
@@ -43,7 +44,7 @@ services:
 
   # 判题沙箱：真正执行 Python/C++ 代码；nsjail 需要特权与宿主机 cgroup v2。
   orangejudge:
-    image: ${ORANGEOJ_JUDGE_IMAGE:-ghcr.io/shinyes/orange_repo-judge:1.12.2}
+    image: ${ORANGEOJ_JUDGE_IMAGE:-ghcr.io/shinyes/orange_repo-judge:latest}
     container_name: orangejudge
     restart: unless-stopped
     privileged: true

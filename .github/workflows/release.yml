@@ -15,6 +15,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Compute image names
         id: vars
@@ -22,6 +24,28 @@ jobs:
         run: |
           echo "image=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
           echo "judge_image=ghcr.io/${GITHUB_REPOSITORY,,}-judge" >> "$GITHUB_OUTPUT"
+
+      # judge 镜像仅在其相关文件自上一 tag 有变更时才重建（nsjail 编译耗时；
+      # compose 默认引用 judge:latest，未变更时沿用既有镜像）。
+      - name: Detect judge changes since last tag
+        id: judge
+        shell: bash
+        run: |
+          LAST="$(git describe --abbrev=0 --tags "${{ github.ref_name }}^" 2>/dev/null || true)"
+          if [ -z "$LAST" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"   # 首个 tag：构建
+            echo "reason=first release tag" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          CHANGED="$(git diff --name-only "$LAST..${{ github.ref_name }}" -- \
+            Dockerfile.judge cmd/judge-runtime internal/judge internal/judgeserver go.mod go.sum | head -1)"
+          if [ -n "$CHANGED" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "reason=$CHANGED" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "reason=no judge-related changes since $LAST" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Setup Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -57,9 +81,10 @@ jobs:
           cache-from: type=gha,scope=release
           cache-to: type=gha,mode=max,scope=release
 
-      # ---------- 判题沙箱镜像（ubuntu + nsjail + g++ + python3） ----------
+      # ---------- 判题沙箱镜像（ubuntu + nsjail + g++ + python3；仅 judge 相关变更时构建） ----------
       - name: Extract judge image metadata
         id: meta-judge
+        if: steps.judge.outputs.changed == 'true'
         uses: docker/metadata-action@v5
         with:
           images: ${{ steps.vars.outputs.judge_image }}
@@ -70,6 +95,7 @@ jobs:
             type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') }}
 
       - name: Build and push judge image
+        if: steps.judge.outputs.changed == 'true'
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -94,8 +120,9 @@ jobs:
           mv orangerepo-image.tar.gz "${ASSET}"
           echo "ASSET=${ASSET}" >> "$GITHUB_ENV"
 
-      # ---------- Release 附件：判题沙箱离线包 ----------
+      # ---------- Release 附件：判题沙箱离线包（仅 judge 变更时构建） ----------
       - name: Export judge image tarball
+        if: steps.judge.outputs.changed == 'true'
         env:
           JUDGE_IMAGE: ${{ steps.vars.outputs.judge_image }}
         run: |
@@ -124,10 +151,11 @@ jobs:
             docker pull ${{ steps.vars.outputs.image }}:${{ github.ref_name }}
             ```
 
-            判题沙箱（judge-runtime，nsjail 隔离）：
+            判题沙箱（judge-runtime，nsjail 隔离）——**仅当本版本包含 judge 相关变更时构建**：
+            若未随本版发布，则沿用 `ghcr.io/shinyes/orange_repo-judge:latest`（compose 默认引用 latest）：
 
             ```bash
-            docker pull ${{ steps.vars.outputs.judge_image }}:${{ github.ref_name }}
+            docker pull ${{ steps.vars.outputs.judge_image }}:latest
             ```
 
             ## 离线安装
@@ -135,8 +163,8 @@ jobs:
             下载附件中的镜像包，在无外网（或无法访问 GHCR）的机器上导入：
 
             ```bash
-            docker load -i orangerepo-*-linux-amd64-image.tar.gz        # 主站 + 刷题服务
-            docker load -i orangerepo-*-judge-linux-amd64-image.tar.gz  # 判题沙箱
+            docker load -i orangerepo-*-linux-amd64-image.tar.gz          # 主站 + 刷题服务
+            docker load -i orangerepo-*-judge-linux-amd64-image.tar.gz    # 判题沙箱（有则存在）
             ```
 
             首次启动默认密码 `123456`，请登录后修改。数据持久化目录：容器内 `/app/data`。

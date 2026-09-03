@@ -529,23 +529,25 @@ function ChoiceEditor({ s, patch }: { s: EditState; patch: (p: Partial<EditState
         </div>
         <div className="space-y-1.5">
           {s.options.map((opt, i) => (
-            <div key={i} className="flex items-center gap-2">
+            <div key={i} className="flex items-start gap-2">
               <button
                 type="button"
                 onClick={() => patch({ answerIndex: i })}
-                className={`flex size-6 shrink-0 items-center justify-center rounded-full text-xs ${
+                className={`mt-1.5 flex size-6 shrink-0 items-center justify-center rounded-full text-xs ${
                   i === s.answerIndex ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'
                 }`}
                 title="设为正确答案"
               >
                 {String.fromCharCode(65 + i)}
               </button>
-              <Input
+              <Textarea
                 value={opt}
                 onChange={(e) => patch({ options: s.options.map((x, j) => (j === i ? e.target.value : x)) })}
-                placeholder={`选项 ${String.fromCharCode(65 + i)}`}
+                placeholder={`选项 ${String.fromCharCode(65 + i)}（支持多行，回车换行）`}
+                rows={1}
+                className="min-h-9 flex-1 resize-y py-1.5 text-sm leading-relaxed"
               />
-              <Button size="icon-xs" variant="ghost" className="text-destructive" onClick={() => {
+              <Button size="icon-xs" variant="ghost" className="mt-1 text-destructive" onClick={() => {
                 const options = s.options.filter((_, j) => j !== i)
                 patch({ options, answerIndex: Math.min(s.answerIndex, Math.max(0, options.length - 1)) })
               }}>

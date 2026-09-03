@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Markdown } from '@/lib/markdown'
+import { Markdown, preserveLineBreaks } from '@/lib/markdown'
 import type {
   Problem,
   ProgrammingBody,
@@ -150,8 +150,8 @@ function AnswerView({ problem }: { problem: Problem }) {
               {String.fromCharCode(65 + i)}
             </span>
             <span className="min-w-0 flex-1">
-              {/* 选项支持 Markdown / KaTeX（与题面同一渲染管线） */}
-              <Markdown text={opt} className="markdown-body text-sm" />
+              {/* 选项支持 Markdown / KaTeX（与题面同一渲染管线）；孤立换行保真显示 */}
+              <Markdown text={preserveLineBreaks(opt)} className="markdown-body text-sm" />
             </span>
             {i === idx && <Badge className=" shrink-0">正确答案</Badge>}
           </div>
