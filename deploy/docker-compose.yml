@@ -10,7 +10,7 @@
 # （主站+刷题服务镜像维持 ghcr.io/shinyes/orange_repo:<版本> 单镜像双二进制流程。）
 services:
   orangerepo:
-    image: ghcr.io/shinyes/orange_repo:1.11.0
+    image: ghcr.io/shinyes/orange_repo:1.12.0
     container_name: orangerepo
     ports:
       - "8080:8080"
@@ -22,7 +22,7 @@ services:
   # 自有数据写入同一卷内的 quiz.db）；主库表结构变化时请与主站同版本部署。
   # 判题：连接 orangejudge（-judge-endpoint / -judge-token 必填否则判题 503）。
   orangequiz:
-    image: ghcr.io/shinyes/orange_repo:1.11.0
+    image: ghcr.io/shinyes/orange_repo:1.12.0
     container_name: orangequiz
     entrypoint: ["/app/quiz"]
     command: [
