@@ -1,6 +1,7 @@
 package server
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -111,11 +112,20 @@ func (s *Server) ImportZipData(data []byte, mode, nameHint string, folderID *int
 			mode = "practice"
 		}
 	}
-	// Step 1: 落盘图片
+	// Step 1: 落盘图片——统一改为短 nano 随机名（避免不同包同名图片互相覆盖），
+	// 并记录 old→new 映射供 Step 2 重写题目中的图片引用。
+	imageRename := map[string]string{}
 	for name, content := range images {
-		if _, err := s.SaveUpload(name, strings.NewReader(string(content))); err != nil {
+		ext := filepath.Ext(name)
+		newName, err := NanoName(16)
+		if err != nil {
 			return nil, err
 		}
+		newName += ext
+		if _, err := s.SaveUpload(newName, strings.NewReader(string(content))); err != nil {
+			return nil, err
+		}
+		imageRename[name] = newName
 	}
 	// Step 2: 归一化并插入题目
 	createdIDs := make([]int64, 0, len(problems))
@@ -123,6 +133,14 @@ func (s *Server) ImportZipData(data []byte, mode, nameHint string, folderID *int
 	for i := range problems {
 		p := problems[i]
 		zipio.ApplyImportRewrite(&p)
+		// 图片引用 (images/x.png) 已在 ApplyImportRewrite 重写为 (/api/uploads/x.png)，
+		// 此处再按映射把 x.png 换为 nano 名
+		if len(imageRename) > 0 {
+			p.StatementMD = rewriteUploadRefs(p.StatementMD, imageRename)
+			p.BodyJSON = json.RawMessage(rewriteUploadRefs(string(p.BodyJSON), imageRename))
+			p.AnswerJSON = json.RawMessage(rewriteUploadRefs(string(p.AnswerJSON), imageRename))
+			p.Solutions = json.RawMessage(rewriteUploadRefs(string(p.Solutions), imageRename))
+		}
 		payload := zipio.ProblemPayload{
 			Type: p.Type, Title: p.Title, Tags: p.Tags, StatementMD: p.StatementMD,
 			BodyJSON: p.BodyJSON, AnswerJSON: p.AnswerJSON, Solutions: p.Solutions,
@@ -371,4 +389,12 @@ func (s *Server) handleExportPractice(c *fiber.Ctx) error {
 		return err
 	}
 	return sendZip(c, data, exportFilename("practice_"+strconv.FormatInt(id, 10), p.Title))
+}
+
+// rewriteUploadRefs 将文本中 /api/uploads/<old> 引用替换为 nano 新名（仅替换映射内存在的旧名）。
+func rewriteUploadRefs(s string, rename map[string]string) string {
+	for old, newName := range rename {
+		s = strings.ReplaceAll(s, "/api/uploads/"+old, "/api/uploads/"+newName)
+	}
+	return s
 }

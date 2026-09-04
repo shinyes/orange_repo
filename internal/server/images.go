@@ -1,8 +1,6 @@
 package server
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"io"
 	"os"
 	"path/filepath"
@@ -19,7 +17,7 @@ var allowedImageExts = map[string]bool{
 // uploadRefPattern 匹配题面文本中的 /api/uploads/<file> 图片引用（与 zipio 一致）。
 var uploadRefPattern = regexp.MustCompile(`/api/uploads/([a-zA-Z0-9_-]+\.(?:png|jpe?g|gif|webp|svg))`)
 
-// handleUploadImage 接收 multipart(file)，存为 32 位随机十六进制文件名，返回 /api/uploads/ URL。
+// handleUploadImage 接收 multipart(file)，存为 16 位 URL-safe 随机文件名（nano 命名避免重名），返回 /api/uploads/ URL。
 func (s *Server) handleUploadImage(c *fiber.Ctx) error {
 	file, err := c.FormFile("file")
 	if err != nil {
@@ -35,11 +33,11 @@ func (s *Server) handleUploadImage(c *fiber.Ctx) error {
 	}
 	defer src.Close()
 
-	buf := make([]byte, 32)
-	if _, err := rand.Read(buf); err != nil {
+	name, err := NanoName(16)
+	if err != nil {
 		return err
 	}
-	name := hex.EncodeToString(buf) + ext
+	name += ext
 	dst, err := s.SaveUpload(name, src)
 	if err != nil {
 		return err

@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -304,19 +305,21 @@ func TestExportImportRoundTrip(t *testing.T) {
 	if len(items) != 2 || items[0].(map[string]any)["problemTitle"] != "题目一" {
 		t.Fatalf("items = %v", items)
 	}
-	// 图片已随导入落盘
-	if _, err := os.Stat(filepath.Join(dstStore.DataDir, "uploads", "img_test.png")); err != nil {
-		t.Fatalf("imported image missing: %v", err)
-	}
-	// 题面引用被重写回 /api/uploads/
+	// 图片已随导入落盘——nano 随机命名（不再保留原文件名），校验：题面引用与落盘文件名一致
 	_, pl := doJSON(t, dstApp, "GET", "/api/problems", sessionCookie(t, dstApp), nil)
 	firstID := int64(pl["problems"].([]any)[len(list)-1].(map[string]any)["id"].(float64))
 	_, pd := doJSON(t, dstApp, "GET", fmt.Sprintf("/api/problems/%d", firstID), sessionCookie(t, dstApp), nil)
 	stmt := pd["problem"].(map[string]any)["statementMd"].(string)
-	if !strings.Contains(stmt, "(images/img_test.png)") && !strings.Contains(stmt, "(images/") {
-		t.Logf("note: statementMd = %q（导入重写仅处理 images/ 相对引用，本包为绝对引用属正常）", stmt)
-	} else if strings.Contains(stmt, "(images/") {
+	if strings.Contains(stmt, "(images/") {
 		t.Errorf("statementMd should be rewritten to /api/uploads/: %q", stmt)
+	}
+	// 从引用中取出文件名并断言已落盘（nano 名：16 位 URL-safe 随机）
+	m := regexp.MustCompile(`/api/uploads/([A-Za-z0-9_-]{16}\.png)`).FindStringSubmatch(stmt)
+	if m == nil {
+		t.Fatalf("statementMd 应含 nano 命名的图片引用: %q", stmt)
+	}
+	if _, err := os.Stat(filepath.Join(dstStore.DataDir, "uploads", m[1])); err != nil {
+		t.Fatalf("imported image missing (nano %s): %v", m[1], err)
 	}
 }
 
