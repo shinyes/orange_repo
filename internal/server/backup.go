@@ -227,26 +227,27 @@ func (s *Server) folderIDByPath(dirs []model.BookletDirectory, path string) (*in
 	return parentID, nil
 }
 
-// importBackup 全库恢复：题目全部新建 → 目录树 → 训练/练习（引用新题目 id）。
+// importBackup 全库恢复：题目按 uuid 去重（已存在则引用，否则新建）→ 目录树 → 训练/练习。
 func (s *Server) importBackup(manifest *backupManifest, problems []zipio.ExportProblem) error {
 	if manifest.Version != 1 {
 		return errors.New("不支持的备份版本")
 	}
 
-	// 1) 题目全部新建（可能重复——按备份"全部新建副本"语义）
-	createdIDs := make([]int64, 0, len(problems))
+	// 1) 题目：uuid 去重；createdIDs 按下标映射最终题 id，训练/练习引用不错位
+	createdIDs := make([]int64, len(problems))
 	for i := range problems {
 		p := problems[i]
 		zipio.ApplyImportRewrite(&p)
 		payload := zipio.ProblemPayload{
-			Type: p.Type, Title: p.Title, Tags: p.Tags, StatementMD: p.StatementMD,
+			UUID: p.UUID, Type: p.Type, Title: p.Title, Tags: p.Tags, StatementMD: p.StatementMD,
 			BodyJSON: p.BodyJSON, AnswerJSON: p.AnswerJSON, Solutions: p.Solutions,
 			TimeLimitMS: p.TimeLimitMS, MemoryLimitMiB: p.MemoryLimitMiB,
 		}
 		if err := zipio.NormalizeProblemPayload(&payload); err != nil {
 			return fmt.Errorf("题目 %q: %v", payload.Title, err)
 		}
-		id, err := s.Store.CreateProblem(model.Problem{
+		prob := model.Problem{
+			UUID:           payload.UUID,
 			Type:           model.ProblemType(payload.Type),
 			Title:          payload.Title,
 			Tags:           payload.Tags,
@@ -256,11 +257,24 @@ func (s *Server) importBackup(manifest *backupManifest, problems []zipio.ExportP
 			Solutions:      payload.Solutions,
 			TimeLimitMS:    payload.TimeLimitMS,
 			MemoryLimitMiB: payload.MemoryLimitMiB,
-		})
+		}
+		if prob.UUID != "" {
+			if exists, err := s.Store.ProblemUUIDExists(prob.UUID); err != nil {
+				return err
+			} else if exists {
+				id, err := s.Store.ProblemIDByUUID(prob.UUID)
+				if err != nil {
+					return err
+				}
+				createdIDs[i] = id
+				continue
+			}
+		}
+		id, err := s.Store.CreateProblem(prob)
 		if err != nil {
 			return err
 		}
-		createdIDs = append(createdIDs, id)
+		createdIDs[i] = id
 	}
 
 	// 2) 目录树（manifest.Directories 顺序即创建序——父先于子）

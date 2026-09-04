@@ -1131,14 +1131,54 @@ func TestBackupRoundTrip(t *testing.T) {
 		t.Fatalf("practice items = %d, want 3", got)
 	}
 
-	// 再次导入同库 → 全新建副本（题目 6、训练 2、练习 2）
+	// 再次导入同库 → 题目按 uuid 去重不翻倍（仍 3），训练/练习建新副本（2/2）
 	importBackupZip(t, dstApp, dstCookie, zipData)
 	_, dl2 := doJSON(t, dstApp, "GET", "/api/problems", dstCookie, nil)
-	if len(dl2["problems"].([]any)) != 6 {
-		t.Fatalf("problems after second import = %d, want 6（副本语义）", len(dl2["problems"].([]any)))
+	if len(dl2["problems"].([]any)) != 3 {
+		t.Fatalf("problems after second import = %d, want 3（uuid 去重，不建重复题目）", len(dl2["problems"].([]any)))
 	}
 	_, tl2 := doJSON(t, dstApp, "GET", "/api/trainings", dstCookie, nil)
 	if len(tl2["trainings"].([]any)) != 2 {
 		t.Fatalf("trainings after second import = %d, want 2", len(tl2["trainings"].([]any)))
+	}
+}
+
+// TestProblemUUID 题目 uuid 列：创建自动生成 UUIDv7、列表/详情可见、导入按 uuid 去重。
+func TestProblemUUID(t *testing.T) {
+	app, _ := newTestApp(t)
+	cookie := sessionCookie(t, app)
+
+	// 创建后应带 uuid
+	resp, pOut := doJSON(t, app, "POST", "/api/problems", cookie, map[string]any{"type": "programming", "title": "UUID题"})
+	if resp.StatusCode != fiber.StatusCreated {
+		t.Fatalf("create = %d", resp.StatusCode)
+	}
+	prob := pOut["problem"].(map[string]any)
+	u := prob["uuid"].(string)
+	// UUIDv7：8-4-4-4-12 形态，第 15 字符（版本位）为 '7'
+	if len(u) != 36 || u[14] != '7' {
+		t.Fatalf("uuid = %q, want UUIDv7（36 字符、版本位 7）", u)
+	}
+	id := int64(prob["id"].(float64))
+
+	// 列表可见 uuid
+	_, lOut := doJSON(t, app, "GET", "/api/problems", cookie, nil)
+	found := false
+	for _, it := range lOut["problems"].([]any) {
+		m := it.(map[string]any)
+		if int64(m["id"].(float64)) == id && m["uuid"] == u {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("列表未包含题目 uuid %q", u)
+	}
+
+	// 导出带 uuid → 同库重复导入：uuid 去重不新增
+	zipData := getZip(t, app, cookie, "/api/export/problems")
+	importZipAs(t, app, cookie, zipData, "problems", "dup.zip")
+	_, l2 := doJSON(t, app, "GET", "/api/problems", cookie, nil)
+	if len(l2["problems"].([]any)) != 1 {
+		t.Fatalf("problems after dedup import = %d, want 1（uuid 去重）", len(l2["problems"].([]any)))
 	}
 }

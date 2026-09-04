@@ -28,8 +28,10 @@ var imageRefPattern = regexp.MustCompile(`/api/uploads/([a-zA-Z0-9_-]+\.(?:png|j
 // imagesPathPattern 匹配导入包内相对图片引用 (images/<file>)。
 var imagesPathPattern = regexp.MustCompile(`\(images/`)
 
-// ExportProblem 与上游 problemExportEntry 字段完全一致。
+// ExportProblem 与上游 problemExportEntry 字段一致（额外 uuid 字段供跨库去重/稳定引用，
+// 上游/旧版导入器不识别则自然忽略）。
 type ExportProblem struct {
+	UUID           string          `json:"uuid,omitempty"`
 	Type           string          `json:"type"`
 	Title          string          `json:"title"`
 	Tags           []string        `json:"tags"`
@@ -58,6 +60,7 @@ type PlanMeta struct {
 
 // ProblemPayload 服务端题目请求体（导出条目 + API 创建/更新共用）。
 type ProblemPayload struct {
+	UUID           string          `json:"uuid,omitempty"`
 	Type           string          `json:"type"`
 	Title          string          `json:"title"`
 	Tags           []string        `json:"tags"`
@@ -353,6 +356,7 @@ func NormalizeProblemPayload(p *ProblemPayload) error {
 // ToExportProblem 转为导出条目（solutions 恒为数组）。
 func (p *ProblemPayload) ToExportProblem() ExportProblem {
 	return ExportProblem{
+		UUID:           p.UUID,
 		Type:           p.Type,
 		Title:          p.Title,
 		Tags:           p.Tags,

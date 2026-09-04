@@ -33,9 +33,10 @@ type Solution struct {
 }
 
 // Problem 题目完整实体。BodyJSON/AnswerJSON/Solutions 以原始 JSON 存储，
-// 结构约束由 zipio 的归一化逻辑负责。
+// 结构约束由 zipio 的归一化逻辑负责。UUID 为跨库稳定标识（UUIDv7，导入缺则生成）。
 type Problem struct {
 	ID             int64           `json:"id"`
+	UUID           string          `json:"uuid,omitempty"`
 	Type           ProblemType     `json:"type"`
 	Title          string          `json:"title"`
 	Tags           []string        `json:"tags"`
@@ -51,6 +52,7 @@ type Problem struct {
 // ProblemSummary 列表视图，不含大字段。
 type ProblemSummary struct {
 	ID             int64       `json:"id"`
+	UUID           string      `json:"uuid,omitempty"`
 	Type           ProblemType `json:"type"`
 	Title          string      `json:"title"`
 	Tags           []string    `json:"tags"`

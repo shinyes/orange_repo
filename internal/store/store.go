@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/google/uuid"
 	_ "modernc.org/sqlite"
 
 	"orangerepo/internal/model"
@@ -122,7 +123,43 @@ func (s *Store) migrate() error {
 	if err := s.dropColumn("practice_items", "score"); err != nil {
 		return err
 	}
-	return s.migrateLegacyDirectories()
+	// legacy（v1.0 directories 时代）迁移会重建 problems 表，须先执行再补 uuid
+	if err := s.migrateLegacyDirectories(); err != nil {
+		return err
+	}
+	// 题目 UUIDv7 稳定标识（跨库去重/引用）；存量行补 uuid
+	if err := s.ensureColumn("problems", "uuid", `uuid TEXT`); err != nil {
+		return err
+	}
+	return s.backfillProblemUUIDs()
+}
+
+// backfillProblemUUIDs 为 uuid 为空的存量题目生成 UUIDv7（幂等）。
+func (s *Store) backfillProblemUUIDs() error {
+	rows, err := s.DB.Query(`SELECT id FROM problems WHERE uuid IS NULL OR uuid=''`)
+	if err != nil {
+		return err
+	}
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return err
+		}
+		ids = append(ids, id)
+	}
+	rows.Close()
+	for _, id := range ids {
+		u, err := NewUUIDv7()
+		if err != nil {
+			return err
+		}
+		if _, err := s.DB.Exec(`UPDATE problems SET uuid=? WHERE id=?`, u, id); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // ensureColumn 幂等补列：仅当目标表缺少该列时执行 ALTER TABLE ADD COLUMN。
@@ -184,6 +221,7 @@ func (s *Store) migrateLegacyDirectories() error {
 	stmts := []string{
 		`CREATE TABLE problems_new (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			uuid TEXT,
 			type TEXT NOT NULL,
 			title TEXT NOT NULL,
 			tags_json TEXT NOT NULL DEFAULT '[]',
@@ -232,6 +270,50 @@ func (s *Store) SetSetting(key, value string) error {
 	return err
 }
 
+// NewUUIDv7 生成 UUIDv7（google/uuid 支持；失败极少，透传错误）。
+func NewUUIDv7() (string, error) {
+	u, err := uuid.NewV7()
+	if err != nil {
+		return "", err
+	}
+	return u.String(), nil
+}
+
+// EnsureProblemUUID 若 p.UUID 为空则生成 UUIDv7 并回填（导入/创建共用）。
+func (s *Store) EnsureProblemUUID(p *model.Problem) error {
+	if p.UUID == "" {
+		u, err := NewUUIDv7()
+		if err != nil {
+			return err
+		}
+		p.UUID = u
+	}
+	return nil
+}
+
+// ProblemUUIDExists 该 uuid 是否已存在（导入去重）。
+func (s *Store) ProblemUUIDExists(u string) (bool, error) {
+	if u == "" {
+		return false, nil
+	}
+	var n int
+	err := s.DB.QueryRow(`SELECT COUNT(1) FROM problems WHERE uuid=?`, u).Scan(&n)
+	return n > 0, err
+}
+
+// ProblemIDByUUID 按 uuid 取题目 id（不存在返回 ErrNotFound）。
+func (s *Store) ProblemIDByUUID(u string) (int64, error) {
+	var id int64
+	err := s.DB.QueryRow(`SELECT id FROM problems WHERE uuid=?`, u).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, ErrNotFound
+	}
+	if err != nil {
+		return 0, err
+	}
+	return id, nil
+}
+
 // ---------- 题目 ----------
 
 func encodeTags(tags []string) string {
@@ -263,7 +345,7 @@ type ProblemFilter struct {
 	IDs  []int64
 }
 
-const problemSummaryCols = `id,type,title,tags_json,time_limit_ms,memory_limit_mib,created_at`
+const problemSummaryCols = `id,uuid,type,title,tags_json,time_limit_ms,memory_limit_mib,created_at`
 
 func scanProblemSummaries(rows *sql.Rows) ([]model.ProblemSummary, error) {
 	defer rows.Close()
@@ -271,7 +353,7 @@ func scanProblemSummaries(rows *sql.Rows) ([]model.ProblemSummary, error) {
 	for rows.Next() {
 		var p model.ProblemSummary
 		var tagsJSON string
-		if err := rows.Scan(&p.ID, &p.Type, &p.Title, &tagsJSON, &p.TimeLimitMS, &p.MemoryLimitMiB, &p.CreatedAt); err != nil {
+		if err := rows.Scan(&p.ID, &p.UUID, &p.Type, &p.Title, &tagsJSON, &p.TimeLimitMS, &p.MemoryLimitMiB, &p.CreatedAt); err != nil {
 			return nil, err
 		}
 		p.Tags = decodeTags(tagsJSON)
@@ -356,12 +438,15 @@ func (s *Store) ListProblems(f ProblemFilter) ([]model.ProblemSummary, error) {
 	return out, nil
 }
 
-// CreateProblem 写入题目，返回新 id。
+// CreateProblem 写入题目，返回新 id。p.UUID 为空时自动生成 UUIDv7。
 func (s *Store) CreateProblem(p model.Problem) (int64, error) {
+	if err := s.EnsureProblemUUID(&p); err != nil {
+		return 0, err
+	}
 	res, err := s.DB.Exec(`INSERT INTO problems
-		(type,title,tags_json,statement_md,body_json,answer_json,solutions_json,time_limit_ms,memory_limit_mib)
-		VALUES(?,?,?,?,?,?,?,?,?)`,
-		string(p.Type), p.Title, encodeTags(p.Tags), p.StatementMD,
+		(uuid,type,title,tags_json,statement_md,body_json,answer_json,solutions_json,time_limit_ms,memory_limit_mib)
+		VALUES(?,?,?,?,?,?,?,?,?,?)`,
+		p.UUID, string(p.Type), p.Title, encodeTags(p.Tags), p.StatementMD,
 		string(p.BodyJSON), string(p.AnswerJSON), string(p.Solutions),
 		p.TimeLimitMS, p.MemoryLimitMiB)
 	if err != nil {
@@ -374,9 +459,9 @@ func (s *Store) CreateProblem(p model.Problem) (int64, error) {
 func (s *Store) GetProblem(id int64) (*model.Problem, error) {
 	p := &model.Problem{}
 	var tagsJSON, body, answer, solutions string
-	err := s.DB.QueryRow(`SELECT id,type,title,tags_json,statement_md,body_json,answer_json,solutions_json,
+	err := s.DB.QueryRow(`SELECT id,uuid,type,title,tags_json,statement_md,body_json,answer_json,solutions_json,
 		time_limit_ms,memory_limit_mib,created_at FROM problems WHERE id=?`, id).
-		Scan(&p.ID, &p.Type, &p.Title, &tagsJSON, &p.StatementMD, &body, &answer, &solutions,
+		Scan(&p.ID, &p.UUID, &p.Type, &p.Title, &tagsJSON, &p.StatementMD, &body, &answer, &solutions,
 			&p.TimeLimitMS, &p.MemoryLimitMiB, &p.CreatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound

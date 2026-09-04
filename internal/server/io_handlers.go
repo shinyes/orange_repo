@@ -20,6 +20,7 @@ import (
 // problemToExport 将存储实体转为导出条目。
 func problemToExport(p *model.Problem) zipio.ExportProblem {
 	return zipio.ExportProblem{
+		UUID:           p.UUID,
 		Type:           string(p.Type),
 		Title:          p.Title,
 		Tags:           p.Tags,
@@ -127,8 +128,9 @@ func (s *Server) ImportZipData(data []byte, mode, nameHint string, folderID *int
 		}
 		imageRename[name] = newName
 	}
-	// Step 2: 归一化并插入题目
-	createdIDs := make([]int64, 0, len(problems))
+	// Step 2: 归一化并插入题目（uuid 去重：problems.json 带 uuid 且库中已存在 → 跳过新建，
+	// 下标槽位仍填充已存在题 id，保证训练/练习引用不错位）
+	createdIDs := make([]int64, len(problems))
 	createdTitles := make([]fiber.Map, 0, len(problems))
 	for i := range problems {
 		p := problems[i]
@@ -142,14 +144,15 @@ func (s *Server) ImportZipData(data []byte, mode, nameHint string, folderID *int
 			p.Solutions = json.RawMessage(rewriteUploadRefs(string(p.Solutions), imageRename))
 		}
 		payload := zipio.ProblemPayload{
-			Type: p.Type, Title: p.Title, Tags: p.Tags, StatementMD: p.StatementMD,
+			UUID: p.UUID, Type: p.Type, Title: p.Title, Tags: p.Tags, StatementMD: p.StatementMD,
 			BodyJSON: p.BodyJSON, AnswerJSON: p.AnswerJSON, Solutions: p.Solutions,
 			TimeLimitMS: p.TimeLimitMS, MemoryLimitMiB: p.MemoryLimitMiB,
 		}
 		if err := zipio.NormalizeProblemPayload(&payload); err != nil {
 			return nil, fiber.NewError(fiber.StatusBadRequest, fmt.Sprintf("题目 %q: %v", payload.Title, err))
 		}
-		id, err := s.Store.CreateProblem(model.Problem{
+		prob := model.Problem{
+			UUID:           payload.UUID,
 			Type:           model.ProblemType(payload.Type),
 			Title:          payload.Title,
 			Tags:           payload.Tags,
@@ -159,11 +162,25 @@ func (s *Server) ImportZipData(data []byte, mode, nameHint string, folderID *int
 			Solutions:      payload.Solutions,
 			TimeLimitMS:    payload.TimeLimitMS,
 			MemoryLimitMiB: payload.MemoryLimitMiB,
-		})
+		}
+		// uuid 去重：若已存在，直接引用旧题
+		if prob.UUID != "" {
+			if exists, err := s.Store.ProblemUUIDExists(prob.UUID); err != nil {
+				return nil, err
+			} else if exists {
+				id, err := s.Store.ProblemIDByUUID(prob.UUID)
+				if err != nil {
+					return nil, err
+				}
+				createdIDs[i] = id
+				continue
+			}
+		}
+		id, err := s.Store.CreateProblem(prob)
 		if err != nil {
 			return nil, err
 		}
-		createdIDs = append(createdIDs, id)
+		createdIDs[i] = id
 		createdTitles = append(createdTitles, fiber.Map{"id": id, "title": payload.Title})
 	}
 
