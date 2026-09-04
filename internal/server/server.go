@@ -84,6 +84,31 @@ func New(s *store.Store, acc *accounts.Store, uploadsDir, webDist string) *fiber
 	api.Get("/export/backup", srv.handleExportBackup)
 	api.Post("/import/backup", srv.handleImportBackup)
 
+	// 域管理（系统管理员）：域 CRUD + 域管理员
+	domainAdmin := api.Group("/admin/domains", srv.requireGlobalAdmin)
+	domainAdmin.Get("/", srv.handleListDomains)
+	domainAdmin.Post("/", srv.handleCreateDomain)
+	domainAdmin.Patch("/:id", srv.handleRenameDomain)
+	domainAdmin.Delete("/:id", srv.handleDeleteDomain)
+	domainAdmin.Put("/:id/admin", srv.handleSetDomainAdmin)
+	domainAdmin.Get("/:id/admins", srv.handleListDomainAdmins)
+
+	// 空间管理（系统/域管理员；/api 组已限管理员，handler 内再按域校验）
+	spaceAdmin := api.Group("/admin/spaces")
+	spaceAdmin.Get("/", srv.handleListSpaces)
+	spaceAdmin.Post("/", srv.handleCreateSpace)
+	spaceAdmin.Patch("/:id", srv.handleRenameSpace)
+	spaceAdmin.Delete("/:id", srv.handleDeleteSpace)
+	spaceAdmin.Get("/:id/members", srv.handleListSpaceMembers)
+	spaceAdmin.Put("/:id/members", srv.handleSetSpaceMembers)
+
+	// 空间成员账号管理（系统/域管理员）：member 账号 CRUD
+	userAdmin := api.Group("/admin/users")
+	userAdmin.Post("/", srv.handleCreateUser)
+	userAdmin.Get("/", srv.handleListUsers)
+	userAdmin.Delete("/:id", srv.handleDeleteUser)
+	userAdmin.Put("/:id/password", srv.handleResetUserPassword)
+
 	api.Get("/trainings", srv.handleListTrainings)
 	api.Post("/trainings", srv.handleCreateTraining)
 	api.Get("/trainings/:id", srv.handleGetTraining)
@@ -126,8 +151,10 @@ func respondData(c *fiber.Ctx, status int, data fiber.Map) error {
 	return c.Status(status).JSON(data)
 }
 
+// respondError 返回 *fiber.Error（不写响应）：由全局 ErrorHandler 统一输出 JSON。
+// 返回非 nil 保证中间件/调用链正确中断（nil 会让 Fiber 继续执行后续 handler）。
 func respondError(c *fiber.Ctx, status int, msg string) error {
-	return c.Status(status).JSON(fiber.Map{"error": msg})
+	return fiber.NewError(status, msg)
 }
 
 // paramID 解析路径参数中的正整数 id。

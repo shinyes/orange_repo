@@ -235,6 +235,12 @@ func (s *Store) UserSpaceIDs(userID int64) ([]int64, error) {
 	return out, rows.Err()
 }
 
+// RemoveUserFromAllSpaces 将用户从全部空间移除（删成员账号时清理）。
+func (s *Store) RemoveUserFromAllSpaces(userID int64) error {
+	_, err := s.DB.Exec(`DELETE FROM space_members WHERE user_id=?`, userID)
+	return err
+}
+
 // UserInSpace 用户是否为空间成员。
 func (s *Store) UserInSpace(spaceID, userID int64) (bool, error) {
 	var n int
@@ -247,4 +253,41 @@ func (s *Store) SpaceOfDomain(spaceID, domainID int64) (bool, error) {
 	var n int
 	err := s.DB.QueryRow(`SELECT COUNT(1) FROM spaces WHERE id=? AND domain_id=?`, spaceID, domainID).Scan(&n)
 	return n > 0, err
+}
+
+// DeleteDomainProblems 删除域内全部题目（含训练/练习条目引用清理），
+// 供删域（?deleteProblems=true）级联使用。
+func (s *Store) DeleteDomainProblems(domainID int64) error {
+	tx, err := s.DB.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	// 收集域内题目 id
+	rows, err := tx.Query(`SELECT id FROM problems WHERE domain_id=?`, domainID)
+	if err != nil {
+		return err
+	}
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return err
+		}
+		ids = append(ids, id)
+	}
+	rows.Close()
+	for _, id := range ids {
+		if _, err := tx.Exec(`DELETE FROM training_items WHERE problem_id=?`, id); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`DELETE FROM practice_items WHERE problem_id=?`, id); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`DELETE FROM problems WHERE id=?`, id); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }

@@ -190,8 +190,10 @@ func respondData(c *fiber.Ctx, status int, data any) error {
 	return c.Status(status).JSON(data)
 }
 
+// respondError 返回 *fiber.Error（不写响应）：由全局 ErrorHandler 统一输出 JSON。
+// 返回非 nil 保证中间件/调用链正确中断。
 func respondError(c *fiber.Ctx, status int, msg string) error {
-	return c.Status(status).JSON(fiber.Map{"error": msg})
+	return fiber.NewError(status, msg)
 }
 
 // paramID 解析路径参数中的正整数 id。

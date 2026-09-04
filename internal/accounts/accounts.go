@@ -436,6 +436,62 @@ func (s *Store) CheckPassword(username, password string) (*User, error) {
 	return u, nil
 }
 
+// SetUserRole 修改用户角色（member→domain_admin 等）与归属域；domainID 仅 domain_admin 使用。
+// 返回 ErrNotFound（用户不存在）。
+func (s *Store) SetUserRole(username string, role Role, domainID *int64) (int64, error) {
+	u, err := s.GetUserByUsername(username)
+	if err != nil {
+		return 0, err
+	}
+	role = migrateRole(role)
+	if !role.ValidNew() {
+		return 0, errors.New("非法角色")
+	}
+	var d any
+	if role == RoleDomainAdmin && domainID != nil {
+		d = *domainID
+	}
+	res, err := s.DB.Exec(`UPDATE users SET role=?, domain_id=? WHERE id=?`, string(role), d, u.ID)
+	if err != nil {
+		return 0, err
+	}
+	// 角色降级/迁移后清空旧会话（权限变化即时生效）
+	_, _ = s.DB.Exec(`DELETE FROM sessions WHERE user_id=?`, u.ID)
+	_, _ = res.RowsAffected()
+	return u.ID, nil
+}
+
+// ClearDomainAdmins 将某域的全部域管理员 domain_id 置空并降级为 member
+// （删域后遗留的域管理员账号保留为普通成员）。
+func (s *Store) ClearDomainAdmins(domainID int64) error {
+	_, err := s.DB.Exec(`UPDATE users SET role='member', domain_id=NULL WHERE role='domain_admin' AND domain_id=?`, domainID)
+	return err
+}
+
+// ListDomainAdmins 某域的全部域管理员账号。
+func (s *Store) ListDomainAdmins(domainID int64) ([]User, error) {
+	rows, err := s.DB.Query(`SELECT id,username,role,domain_id FROM users
+		WHERE role='domain_admin' AND domain_id=? ORDER BY id`, domainID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []User
+	for rows.Next() {
+		var u User
+		var d sql.NullInt64
+		if err := rows.Scan(&u.ID, &u.Username, &u.Role, &d); err != nil {
+			return nil, err
+		}
+		if d.Valid {
+			id := d.Int64
+			u.DomainID = &id
+		}
+		out = append(out, u)
+	}
+	return out, rows.Err()
+}
+
 // SetPassword 修改当前用户密码并清除其全部会话（统一账号：两端强制重新登录）。
 func (s *Store) SetPassword(userID int64, newPassword string) error {
 	if newPassword == "" {

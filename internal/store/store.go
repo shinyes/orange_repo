@@ -415,6 +415,8 @@ type ProblemFilter struct {
 	Tags []string
 	Type string
 	IDs  []int64
+	// DomainID 域过滤（nil=不按域过滤——仅系统全局视图使用；普通调用必须带）
+	DomainID *int64
 }
 
 const problemSummaryCols = `id,uuid,type,title,tags_json,time_limit_ms,memory_limit_mib,created_at`
@@ -446,6 +448,10 @@ func (s *Store) problemWhere(f ProblemFilter) (string, []any) {
 	if f.Type != "" {
 		where = append(where, `type=?`)
 		args = append(args, f.Type)
+	}
+	if f.DomainID != nil {
+		where = append(where, `domain_id=?`)
+		args = append(args, *f.DomainID)
 	}
 	if len(f.IDs) > 0 {
 		ph := strings.TrimRight(strings.Repeat("?,", len(f.IDs)), ",")

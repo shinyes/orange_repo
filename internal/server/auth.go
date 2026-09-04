@@ -37,6 +37,16 @@ func (s *Server) requireSession(c *fiber.Ctx) error {
 	return c.Next()
 }
 
+// requireGlobalAdmin 会话校验：仅系统管理员（域管理）。
+func (s *Server) requireGlobalAdmin(c *fiber.Ctx) error {
+	u, ok := s.Accounts.GetUserByToken(c.Cookies(SessionCookie))
+	if !ok || u.Role != accounts.RoleGlobalAdmin {
+		return respondError(c, fiber.StatusForbidden, "需要系统管理员权限")
+	}
+	c.Locals(userLocals, u)
+	return c.Next()
+}
+
 func currentUser(c *fiber.Ctx) *accounts.User {
 	if v := c.Locals(userLocals); v != nil {
 		return v.(*accounts.User)

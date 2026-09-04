@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -68,9 +69,15 @@ func doJSON(t *testing.T, app *fiber.App, method, path, cookie string, body any)
 
 func sessionCookie(t *testing.T, app *fiber.App) string {
 	t.Helper()
-	resp, _ := doJSON(t, app, "POST", "/api/auth/login", "", map[string]string{"username": "admin", "password": "123456"})
+	return loginCookie(t, app, "admin", "123456")
+}
+
+// loginCookie 以指定账号登录并返回 cookie。
+func loginCookie(t *testing.T, app *fiber.App, username, password string) string {
+	t.Helper()
+	resp, _ := doJSON(t, app, "POST", "/api/auth/login", "", map[string]string{"username": username, "password": password})
 	if resp.StatusCode != fiber.StatusNoContent {
-		t.Fatalf("login status = %d", resp.StatusCode)
+		t.Fatalf("login(%s) status = %d", username, resp.StatusCode)
 	}
 	sc := resp.Header.Get("Set-Cookie")
 	if sc == "" {
@@ -1180,5 +1187,85 @@ func TestProblemUUID(t *testing.T) {
 	_, l2 := doJSON(t, app, "GET", "/api/problems", cookie, nil)
 	if len(l2["problems"].([]any)) != 1 {
 		t.Fatalf("problems after dedup import = %d, want 1（uuid 去重）", len(l2["problems"].([]any)))
+	}
+}
+
+// TestDomainSpaceAPI 域管理（global_admin）+ 空间/成员（域管理员限本域）API 流。
+func TestDomainSpaceAPI(t *testing.T) {
+	app, _ := newTestApp(t)
+	cookie := sessionCookie(t, app) // 引导的 admin = global_admin
+
+	// 1) 建域 + 域管理员
+	_, dOut := doJSON(t, app, "POST", "/api/admin/domains", cookie,
+		map[string]any{"name": "数学域", "adminUsername": "mathadmin", "adminPassword": "pw123456"})
+	domainID := int64(dOut["id"].(float64))
+	if domainID == 0 {
+		t.Fatal("domain id = 0")
+	}
+	daCookie := loginCookie(t, app, "mathadmin", "pw123456")
+
+	// 2) 空间管理（域管理员建空间于本域）
+	_, spOut := doJSON(t, app, "POST", "/api/admin/spaces?domainId="+strconv.FormatInt(domainID, 10), daCookie,
+		map[string]string{"name": "初一班"})
+	spaceID := int64(spOut["id"].(float64))
+	if spaceID == 0 {
+		t.Fatal("space id = 0")
+	}
+
+	// 3) 域管理员列表空间（domainScope 强制本域，不需 domainId）
+	_, lsOut := doJSON(t, app, "GET", "/api/admin/spaces", daCookie, nil)
+	spaces := lsOut["spaces"].([]any)
+	if len(spaces) != 1 || int64(spaces[0].(map[string]any)["id"].(float64)) != spaceID {
+		t.Fatalf("域管理员空间列表 = %v", spaces)
+	}
+
+	// 4) 建 member 账号并入空间
+	_, mOut := doJSON(t, app, "POST", "/api/admin/users", daCookie, map[string]any{"username": "s1", "password": "pw"})
+	if mOut["id"] == nil {
+		t.Fatalf("建成员失败: %v", mOut)
+	}
+	_, ul := doJSON(t, app, "GET", "/api/admin/users", daCookie, nil)
+	var s1ID int64
+	for _, s := range ul["users"].([]any) {
+		if s.(map[string]any)["username"] == "s1" {
+			s1ID = int64(s.(map[string]any)["id"].(float64))
+		}
+	}
+	if s1ID == 0 {
+		t.Fatalf("成员 s1 未列出: %v", ul)
+	}
+	// 设置空间成员
+	resp, _ := doJSON(t, app, "PUT", fmt.Sprintf("/api/admin/spaces/%d/members", spaceID), daCookie,
+		map[string]any{"userIds": []int64{s1ID}})
+	if resp.StatusCode != fiber.StatusNoContent {
+		t.Fatalf("set members = %d", resp.StatusCode)
+	}
+	_, mm := doJSON(t, app, "GET", fmt.Sprintf("/api/admin/spaces/%d/members", spaceID), daCookie, nil)
+	if len(mm["members"].([]any)) != 1 {
+		t.Fatalf("members = %v", mm)
+	}
+
+	// 5) 权限：另一域管理员不能管理本域空间
+	_, d2 := doJSON(t, app, "POST", "/api/admin/domains", cookie,
+		map[string]any{"name": "语文域", "adminUsername": "cnadmin", "adminPassword": "pw123456"})
+	_ = d2
+	login2 := loginCookie(t, app, "cnadmin", "pw123456")
+	resp2, _ := doJSON(t, app, "GET", fmt.Sprintf("/api/admin/spaces/%d/members", spaceID), login2, nil)
+	if resp2.StatusCode != fiber.StatusForbidden {
+		t.Fatalf("跨域空间访问 = %d, want 403", resp2.StatusCode)
+	}
+
+	// 6) global_admin 可访问任意空间
+	resp3, _ := doJSON(t, app, "GET", fmt.Sprintf("/api/admin/spaces/%d/members", spaceID), cookie, nil)
+	if resp3.StatusCode != fiber.StatusOK {
+		t.Fatalf("global_admin 空间成员 = %d, want 200", resp3.StatusCode)
+	}
+
+	// 7) 删空间后删域
+	if resp, _ := doJSON(t, app, "DELETE", fmt.Sprintf("/api/admin/spaces/%d", spaceID), daCookie, nil); resp.StatusCode != fiber.StatusNoContent {
+		t.Fatalf("delete space = %d", resp.StatusCode)
+	}
+	if resp, _ := doJSON(t, app, "DELETE", fmt.Sprintf("/api/admin/domains/%d", domainID), cookie, nil); resp.StatusCode != fiber.StatusNoContent {
+		t.Fatalf("delete domain = %d", resp.StatusCode)
 	}
 }
