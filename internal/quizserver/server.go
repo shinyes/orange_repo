@@ -163,13 +163,18 @@ func (s *Server) requireSession(c *fiber.Ctx) error {
 	return c.Next()
 }
 
-// requireAdmin 管理员鉴权（须置于 requireSession 之后）。
+// requireAdmin 管理员鉴权（须置于 requireSession 之后）：系统管理员或域管理员。
 func (s *Server) requireAdmin(c *fiber.Ctx) error {
 	u := currentUser(c)
-	if u == nil || u.Role != accounts.RoleAdmin {
+	if u == nil || !isAdminRole(u.Role) {
 		return respondError(c, fiber.StatusForbidden, "需要管理员权限")
 	}
 	return c.Next()
+}
+
+// isAdminRole 管理员角色（系统/域管理员）。
+func isAdminRole(r accounts.Role) bool {
+	return r == accounts.RoleGlobalAdmin || r == accounts.RoleDomainAdmin
 }
 
 func currentUser(c *fiber.Ctx) *accounts.User {

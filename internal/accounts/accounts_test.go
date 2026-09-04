@@ -20,15 +20,15 @@ func newTestAccounts(t *testing.T) *accounts.Store {
 
 func TestUsers(t *testing.T) {
 	s := newTestAccounts(t)
-	adminID, err := s.CreateUser("Admin", "pw-admin", accounts.RoleAdmin)
+	adminID, err := s.CreateUser("Admin", "pw-admin", accounts.RoleGlobalAdmin)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.CreateUser("alice", "pw-a", accounts.RoleStudent); err != nil {
+	if _, err := s.CreateUser("alice", "pw-a", accounts.RoleMember); err != nil {
 		t.Fatal(err)
 	}
 	// 大小写不敏感唯一
-	if _, err := s.CreateUser("ALICE", "pw-b", accounts.RoleStudent); err == nil {
+	if _, err := s.CreateUser("ALICE", "pw-b", accounts.RoleMember); err == nil {
 		t.Fatal("重复用户名应冲突")
 	}
 	u, err := s.GetUserByUsername("aDmIn")
@@ -37,8 +37,8 @@ func TestUsers(t *testing.T) {
 	}
 	// 登录校验
 	lu, err := s.CheckPassword("alice", "pw-a")
-	if err != nil || lu == nil || lu.Role != accounts.RoleStudent {
-		t.Fatalf("alice 登录失败: %v", err)
+	if err != nil || lu == nil || lu.Role != accounts.RoleMember {
+		t.Fatalf("alice 登录失败: %v role=%v", err, lu)
 	}
 	if _, err := s.CheckPassword("alice", "wrong"); err == nil {
 		t.Fatal("错误密码应失败")
@@ -124,11 +124,67 @@ func TestMigrateFromLegacyHash(t *testing.T) {
 		t.Fatalf("HasAdmin = %v %v", has, err)
 	}
 	u, err := s.CheckPassword("admin", "old-password")
-	if err != nil || u == nil || u.Role != accounts.RoleAdmin {
-		t.Fatalf("旧密码登录失败: %v", err)
+	if err != nil || u == nil || u.Role != accounts.RoleGlobalAdmin {
+		t.Fatalf("旧密码登录失败: %v role=%v", err, u)
 	}
 	// 重复引导容错
 	if _, err := s.CreateAdminFromHash("admin", string(legacyHash)); err == nil {
 		t.Fatal("重复创建 admin 应冲突")
+	}
+}
+
+// TestMigrateOldRoles 旧库（role='admin'/'student' 无 domain_id）迁移：重建表后
+// 角色映射为 global_admin/member，旧密码/会话可用。
+func TestMigrateOldRoles(t *testing.T) {
+	db, err := accounts.OpenDB(t.TempDir())
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+	// 模拟旧版表结构（旧 CHECK + 无 domain_id）；先关外键便于替换 users 表
+	if _, err := db.Exec(`PRAGMA foreign_keys=off`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`DROP TABLE IF EXISTS users`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`CREATE TABLE users (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		username TEXT NOT NULL UNIQUE COLLATE NOCASE,
+		password_hash TEXT NOT NULL,
+		role TEXT NOT NULL CHECK(role IN ('admin','student')),
+		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+	)`); err != nil {
+		t.Fatal(err)
+	}
+	hash, _ := bcrypt.GenerateFromPassword([]byte("oldpw"), bcrypt.DefaultCost)
+	if _, err := db.Exec(`INSERT INTO users(username,password_hash,role) VALUES('boss',?, 'admin')`, string(hash)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO users(username,password_hash,role) VALUES('kid',?, 'student')`, string(hash)); err != nil {
+		t.Fatal(err)
+	}
+	// 执行迁移
+	if err := accounts.Migrate(db); err != nil {
+		t.Fatal(err)
+	}
+	s := accounts.New(db)
+	boss, err := s.CheckPassword("boss", "oldpw")
+	if err != nil || boss.Role != accounts.RoleGlobalAdmin {
+		t.Fatalf("boss 迁移后 = %+v err=%v（应 global_admin）", boss, err)
+	}
+	kid, err := s.CheckPassword("kid", "oldpw")
+	if err != nil || kid.Role != accounts.RoleMember {
+		t.Fatalf("kid 迁移后 = %+v err=%v（应 member）", kid, err)
+	}
+	if boss.DomainID != nil {
+		t.Fatalf("boss domain_id 应为 nil，got %v", *boss.DomainID)
+	}
+	// 幂等：再次 Migrate 不破坏
+	if err := accounts.Migrate(db); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CheckPassword("kid", "oldpw"); err != nil {
+		t.Fatal("二次迁移后登录失败")
 	}
 }

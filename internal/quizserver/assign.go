@@ -8,6 +8,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
+	"orangerepo/internal/accounts"
 	"orangerepo/internal/quizstore"
 )
 
@@ -191,11 +192,11 @@ func (s *Server) handleAdminCreateAssignment(c *fiber.Ctx) error {
 	return respondData(c, fiber.StatusCreated, fiber.Map{"id": id})
 }
 
-// validateStudentIDs 校验定向学生 id 全部存在且为 student 角色。
+// validateStudentIDs 校验定向学生 id 全部存在且为 member 角色（兼容旧 student）。
 func (s *Server) validateStudentIDs(ids []int64) error {
 	for _, id := range ids {
 		u, err := s.QS.Accounts.GetUserByID(id)
-		if err != nil || u.Role != "student" {
+		if err != nil || (u.Role != accounts.RoleMember && u.Role != "student") {
 			return errors.New("定向学生不存在或非学生角色")
 		}
 	}

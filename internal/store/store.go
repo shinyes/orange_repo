@@ -131,7 +131,79 @@ func (s *Store) migrate() error {
 	if err := s.ensureColumn("problems", "uuid", `uuid TEXT`); err != nil {
 		return err
 	}
-	return s.backfillProblemUUIDs()
+	if err := s.backfillProblemUUIDs(); err != nil {
+		return err
+	}
+	// 域/空间（OJ 重构：域隔离题目，空间隔离训练/练习/作答）
+	if err := s.migrateDomains(); err != nil {
+		return err
+	}
+	// 题目归属域：存量题归入默认域
+	if err := s.ensureColumn("problems", "domain_id", `domain_id INTEGER REFERENCES domains(id) ON DELETE CASCADE`); err != nil {
+		return err
+	}
+	return s.backfillProblemDomain()
+}
+
+// defaultDomainName 存量题库自动归属的默认域名。
+const defaultDomainName = "默认域"
+
+// backfillProblemDomain 为无 domain_id 的存量题目补默认域（自动建域，幂等）。
+func (s *Store) backfillProblemDomain() error {
+	var n int
+	if err := s.DB.QueryRow(`SELECT COUNT(1) FROM problems WHERE domain_id IS NULL`).Scan(&n); err != nil {
+		return err
+	}
+	if n == 0 {
+		return nil
+	}
+	// 找/建默认域
+	var domainID int64
+	err := s.DB.QueryRow(`SELECT id FROM domains WHERE name=?`, defaultDomainName).Scan(&domainID)
+	if err != nil {
+		if err != sql.ErrNoRows {
+			return err
+		}
+		res, err := s.DB.Exec(`INSERT INTO domains(name) VALUES(?)`, defaultDomainName)
+		if err != nil {
+			return err
+		}
+		domainID, _ = res.LastInsertId()
+	}
+	if _, err := s.DB.Exec(`UPDATE problems SET domain_id=? WHERE domain_id IS NULL`, domainID); err != nil {
+		return err
+	}
+	return nil
+}
+
+// migrateDomains 建域/空间表（幂等）。
+func (s *Store) migrateDomains() error {
+	stmts := []string{
+		`CREATE TABLE IF NOT EXISTS domains (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			name TEXT NOT NULL UNIQUE,
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);`,
+		`CREATE TABLE IF NOT EXISTS spaces (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			domain_id INTEGER NOT NULL REFERENCES domains(id) ON DELETE CASCADE,
+			name TEXT NOT NULL,
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);`,
+		`CREATE TABLE IF NOT EXISTS space_members (
+			space_id INTEGER NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
+			user_id INTEGER NOT NULL,
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			PRIMARY KEY(space_id, user_id)
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_spaces_domain ON spaces(domain_id);`,
+	}
+	for _, stmt := range stmts {
+		if _, err := s.DB.Exec(stmt); err != nil {
+			return fmt.Errorf("migrate domains failed: %w; stmt: %s", err, stmt)
+		}
+	}
+	return nil
 }
 
 // backfillProblemUUIDs 为 uuid 为空的存量题目生成 UUIDv7（幂等）。

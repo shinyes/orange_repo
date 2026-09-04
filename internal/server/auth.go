@@ -22,10 +22,15 @@ const (
 
 const userLocals = "main_user"
 
-// requireSession 会话校验：令牌有效且为管理员（主站是管理工具，学生会话无权进入）。
+// isAdminRole 仓库页管理员：系统管理员或域管理员。
+func isAdminRole(r accounts.Role) bool {
+	return r == accounts.RoleGlobalAdmin || r == accounts.RoleDomainAdmin
+}
+
+// requireSession 会话校验：令牌有效且为管理员（仓库页为管理工具，成员会话无权进入）。
 func (s *Server) requireSession(c *fiber.Ctx) error {
 	u, ok := s.Accounts.GetUserByToken(c.Cookies(SessionCookie))
-	if !ok || u.Role != accounts.RoleAdmin {
+	if !ok || !isAdminRole(u.Role) {
 		return respondError(c, fiber.StatusUnauthorized, "unauthorized")
 	}
 	c.Locals(userLocals, u)
@@ -71,7 +76,7 @@ type loginRequest struct {
 	Password string `json:"password"`
 }
 
-// handleLogin 统一账号库登录：仅管理员可登录主站（主站是管理工具，学生账号不可用）。
+// handleLogin 统一账号库登录：仅管理员（系统/域管理员）可登录仓库页。
 func (s *Server) handleLogin(c *fiber.Ctx) error {
 	var req loginRequest
 	if err := c.BodyParser(&req); err != nil || strings.TrimSpace(req.Username) == "" || req.Password == "" {
@@ -81,8 +86,8 @@ func (s *Server) handleLogin(c *fiber.Ctx) error {
 	if err != nil {
 		return respondError(c, fiber.StatusUnauthorized, "用户名或密码错误")
 	}
-	if u.Role != accounts.RoleAdmin {
-		return respondError(c, fiber.StatusForbidden, "仅管理员可登录主站")
+	if !isAdminRole(u.Role) {
+		return respondError(c, fiber.StatusForbidden, "仅管理员可登录")
 	}
 	token, err := s.Accounts.CreateSession(u.ID)
 	if err != nil {

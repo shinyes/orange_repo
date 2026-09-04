@@ -119,3 +119,24 @@ type PracticeItem struct {
 	ProblemTitle string `json:"problemTitle,omitempty"`
 	ProblemType  string `json:"problemType,omitempty"`
 }
+
+// Domain 域：题库数据的逻辑隔离单位（题目/标签域级共享）。
+type Domain struct {
+	ID        int64     `json:"id"`
+	Name      string    `json:"name"`
+	CreatedAt time.Time `json:"createdAt"`
+}
+
+// Space 空间：域内的做题组织单位（训练/练习/作答按空间隔离）。
+type Space struct {
+	ID        int64     `json:"id"`
+	DomainID  int64     `json:"domainId"`
+	Name      string    `json:"name"`
+	CreatedAt time.Time `json:"createdAt"`
+}
+
+// SpaceMemberView 空间成员视图（user_id + 用户名，用户名由调用方注入或留空）。
+type SpaceMemberView struct {
+	UserID   int64  `json:"userId"`
+	Username string `json:"username"`
+}

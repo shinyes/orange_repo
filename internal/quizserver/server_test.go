@@ -141,7 +141,8 @@ func TestQuizServiceFullFlow(t *testing.T) {
 	}
 	adminCookie := cookieOf(loginResp)
 	_, out = doJSON(t, app, "GET", "/api/auth/me", adminCookie, nil)
-	if nested(out, "user.role") != "admin" {
+	role := nested(out, "user.role").(string)
+	if role != "global_admin" && role != "admin" {
 		t.Fatalf("管理员 me = %v", out)
 	}
 
