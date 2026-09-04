@@ -18,6 +18,7 @@ import { api } from '@/lib/api'
 import type { CaseDetail, CodeLang, OjProblem, Submission, SubmissionPoll } from '@/lib/types'
 import { Markdown, preserveLineBreaks } from '@/lib/markdown'
 import { CodeBlock } from '@/lib/code-highlight'
+import { CodeEditor } from '@/components/CodeEditor'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Textarea } from '@/components/ui/textarea'
@@ -369,13 +370,9 @@ function ProgrammingSolve({ problem, backTo }: { problem: OjProblem; backTo: str
           </div>
         )}
 
-        <Textarea
-          value={code}
-          onChange={(e) => setCode(e.target.value)}
-          spellCheck={false}
-          className="min-h-[260px] flex-1 resize-none rounded-none border-0 bg-transparent font-mono text-[13px] leading-relaxed focus-visible:ring-0"
-          placeholder="在此编写代码…"
-        />
+        <div className="min-h-[260px] flex-1 border-y bg-background">
+          <CodeEditor language={lang} value={code} onChange={setCode} />
+        </div>
 
         {/* 控制台 */}
         <div className="border-t p-2">
