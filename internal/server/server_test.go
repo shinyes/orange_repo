@@ -1000,3 +1000,145 @@ func TestImportIntoFolder(t *testing.T) {
 		t.Fatalf("import with bad folderId = %d, want 400", resp2.StatusCode)
 	}
 }
+
+// importBackupZip 上传备份包到 /api/import/backup。
+func importBackupZip(t *testing.T, app *fiber.App, cookie string, zipData []byte) map[string]any {
+	t.Helper()
+	body := &bytes.Buffer{}
+	mw := multipart.NewWriter(body)
+	fw, err := mw.CreateFormFile("zip", "backup.zip")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fw.Write(zipData); err != nil {
+		t.Fatal(err)
+	}
+	mw.Close()
+	req := httptest.NewRequest("POST", "/api/import/backup", body)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	req.Header.Set("Cookie", cookie)
+	resp, err := app.Test(req, -1)
+	if err != nil {
+		t.Fatalf("import backup: %v", err)
+	}
+	raw, _ := io.ReadAll(resp.Body)
+	var out map[string]any
+	_ = json.Unmarshal(raw, &out)
+	if resp.StatusCode != fiber.StatusCreated {
+		t.Fatalf("import backup = %d %s", resp.StatusCode, raw)
+	}
+	return out
+}
+
+// TestBackupRoundTrip 全库备份：导出 → 新库导入 → 题目/目录/训练/练习结构一致；
+// 再导入一次到同库 → 全部新建副本不覆盖。
+func TestBackupRoundTrip(t *testing.T) {
+	srcApp, _ := newTestApp(t)
+	cookie := sessionCookie(t, srcApp)
+
+	// 题目 3 道
+	for i, title := range []string{"备份题一", "备份题二", "备份题三"} {
+		body := map[string]any{"type": "single_choice", "title": title,
+			"bodyJson": map[string]any{"options": []string{"甲", "乙"}}, "answerJson": map[string]any{"answerIndex": 0}}
+		if i == 0 {
+			body = map[string]any{"type": "programming", "title": title}
+		}
+		doJSON(t, srcApp, "POST", "/api/problems", cookie, body)
+	}
+	ids := doListIDs(t, srcApp, cookie)
+
+	// 目录：根目录 A + A 下子目录 A1
+	_, d1 := doJSON(t, srcApp, "POST", "/api/booklet-directories", cookie, map[string]any{"name": "目录A"})
+	dirA := int64(d1["id"].(float64))
+	_, d2 := doJSON(t, srcApp, "POST", "/api/booklet-directories", cookie, map[string]any{"name": "子目录A1", "parentId": dirA})
+	dirA1 := int64(d2["id"].(float64))
+
+	// 训练：根目录下，2 章
+	_, tr := doJSON(t, srcApp, "POST", "/api/trainings", cookie, map[string]any{"title": "备份训练"})
+	trID := int64(tr["id"].(float64))
+	_, ch1 := doJSON(t, srcApp, "POST", fmt.Sprintf("/api/trainings/%d/chapters", trID), cookie, map[string]string{"title": "章一"})
+	_, ch2 := doJSON(t, srcApp, "POST", fmt.Sprintf("/api/trainings/%d/chapters", trID), cookie, map[string]string{"title": "章二"})
+	ch1ID := int64(ch1["id"].(float64))
+	ch2ID := int64(ch2["id"].(float64))
+	doJSON(t, srcApp, "POST", fmt.Sprintf("/api/chapters/%d/items", ch1ID), cookie, map[string]any{"problemIds": ids[:2]})
+	doJSON(t, srcApp, "POST", fmt.Sprintf("/api/chapters/%d/items", ch2ID), cookie, map[string]any{"problemIds": ids[2:]})
+
+	// 练习：子目录 A1 下
+	_, pr := doJSON(t, srcApp, "POST", "/api/practices", cookie, map[string]any{"title": "备份练习", "folderId": dirA1})
+	prID := int64(pr["id"].(float64))
+	doJSON(t, srcApp, "POST", fmt.Sprintf("/api/practices/%d/items", prID), cookie, map[string]any{"problemIds": ids})
+
+	// 导出全库
+	zipData := getZip(t, srcApp, cookie, "/api/export/backup")
+
+	// 导入到新库
+	dstApp, _ := newTestApp(t)
+	dstCookie := sessionCookie(t, dstApp)
+	importBackupZip(t, dstApp, dstCookie, zipData)
+
+	// 校验：3 题、2 目录、1 训练 2 章 3 条目、1 练习 3 条目
+	_, dl := doJSON(t, dstApp, "GET", "/api/problems", dstCookie, nil)
+	if len(dl["problems"].([]any)) != 3 {
+		t.Fatalf("problems = %d, want 3", len(dl["problems"].([]any)))
+	}
+	_, dd := doJSON(t, dstApp, "GET", "/api/booklet-directories", dstCookie, nil)
+	dirs := dd["directories"].([]any)
+	if len(dirs) != 2 {
+		t.Fatalf("directories = %d, want 2", len(dirs))
+	}
+	// 目录层级：一个根（parentId null）一个子（parentId=根 id）
+	rootCount, childCount := 0, 0
+	for _, d := range dirs {
+		m := d.(map[string]any)
+		if m["parentId"] == nil {
+			rootCount++
+		} else {
+			childCount++
+		}
+	}
+	if rootCount != 1 || childCount != 1 {
+		t.Fatalf("目录层级 root=%d child=%d, want 1/1", rootCount, childCount)
+	}
+	_, tl := doJSON(t, dstApp, "GET", "/api/trainings", dstCookie, nil)
+	trainings := tl["trainings"].([]any)
+	if len(trainings) != 1 {
+		t.Fatalf("trainings = %d, want 1", len(trainings))
+	}
+	newTrID := int64(trainings[0].(map[string]any)["id"].(float64))
+	_, td := doJSON(t, dstApp, "GET", fmt.Sprintf("/api/trainings/%d", newTrID), dstCookie, nil)
+	chapters := td["chapters"].([]any)
+	if len(chapters) != 2 {
+		t.Fatalf("chapters = %d, want 2", len(chapters))
+	}
+	totalItems := 0
+	for _, ch := range chapters {
+		totalItems += len(ch.(map[string]any)["items"].([]any))
+	}
+	if totalItems != 3 {
+		t.Fatalf("training items = %d, want 3", totalItems)
+	}
+	_, pl := doJSON(t, dstApp, "GET", "/api/practices", dstCookie, nil)
+	practices := pl["practices"].([]any)
+	if len(practices) != 1 {
+		t.Fatalf("practices = %d, want 1", len(practices))
+	}
+	if _, ok := practices[0].(map[string]any)["folderId"].(float64); !ok {
+		t.Fatalf("练习应在子目录下, folderId=%v", practices[0].(map[string]any)["folderId"])
+	}
+	newPrID := int64(practices[0].(map[string]any)["id"].(float64))
+	_, pd := doJSON(t, dstApp, "GET", fmt.Sprintf("/api/practices/%d", newPrID), dstCookie, nil)
+	if got := len(pd["items"].([]any)); got != 3 {
+		t.Fatalf("practice items = %d, want 3", got)
+	}
+
+	// 再次导入同库 → 全新建副本（题目 6、训练 2、练习 2）
+	importBackupZip(t, dstApp, dstCookie, zipData)
+	_, dl2 := doJSON(t, dstApp, "GET", "/api/problems", dstCookie, nil)
+	if len(dl2["problems"].([]any)) != 6 {
+		t.Fatalf("problems after second import = %d, want 6（副本语义）", len(dl2["problems"].([]any)))
+	}
+	_, tl2 := doJSON(t, dstApp, "GET", "/api/trainings", dstCookie, nil)
+	if len(tl2["trainings"].([]any)) != 2 {
+		t.Fatalf("trainings after second import = %d, want 2", len(tl2["trainings"].([]any)))
+	}
+}

@@ -124,6 +124,16 @@ func marshalNoEscape(v any) ([]byte, error) {
 //   - trainingPlan.json 仅当 meta 非空且（有章节 或 有标题 或 有标签）时写出
 //   - images/ 收集四个文本字段中引用到的图片
 func BuildZip(problems []ExportProblem, meta *PlanMeta, resolve ImageResolver) ([]byte, error) {
+	return buildZip(problems, meta, resolve, nil)
+}
+
+// BuildZipWithFiles 在 BuildZip 基础上附加任意扩展文件（如全库备份 orangerepo-backup.json）。
+// OrangeOJ 及本仓库旧逻辑不识别附加文件时会自然忽略，保持兼容。
+func BuildZipWithFiles(problems []ExportProblem, meta *PlanMeta, resolve ImageResolver, extraFiles map[string][]byte) ([]byte, error) {
+	return buildZip(problems, meta, resolve, extraFiles)
+}
+
+func buildZip(problems []ExportProblem, meta *PlanMeta, resolve ImageResolver, extraFiles map[string][]byte) ([]byte, error) {
 	if problems == nil {
 		problems = []ExportProblem{}
 	}
@@ -185,6 +195,22 @@ func BuildZip(problems []ExportProblem, meta *PlanMeta, resolve ImageResolver) (
 			}
 		}
 	}
+
+	// 扩展文件写至包根（文件名须唯一，避免与 problems.json/trainingPlan.json 冲突）
+	written := map[string]bool{ProblemsJSONName: true, PlanJSONName: true}
+	for name, data := range extraFiles {
+		if name == "" || written[name] {
+			continue
+		}
+		written[name] = true
+		ef, err := w.Create(name)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := ef.Write(data); err != nil {
+			return nil, err
+		}
+	}
 	if err := w.Close(); err != nil {
 		return nil, err
 	}
@@ -225,24 +251,33 @@ func findZipFileByNames(r *zip.Reader, name string) ([]byte, bool) {
 
 // ParseZip 解析 OrangeOJ ZIP：题目数组、可选训练计划元数据、images/ 下图片。
 func ParseZip(data []byte) (problems []ExportProblem, meta *PlanMeta, images map[string][]byte, err error) {
+	problems, meta, images, _, err = ParseZipWithExtra(data)
+	return problems, meta, images, err
+}
+
+// ParseZipWithExtra 在 ParseZip 基础上额外返回包根的扩展文件（文件名→内容），
+// 如全库备份 orangerepo-backup.json；无扩展文件时 extra 为空 map。
+func ParseZipWithExtra(data []byte) (problems []ExportProblem, meta *PlanMeta, images map[string][]byte, extra map[string][]byte, err error) {
 	r, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("invalid zip file: %w", err)
+		return nil, nil, nil, nil, fmt.Errorf("invalid zip file: %w", err)
 	}
 	raw, ok := findZipFileByNames(r, ProblemsJSONName)
 	if !ok {
-		return nil, nil, nil, fmt.Errorf("missing %s", ProblemsJSONName)
+		return nil, nil, nil, nil, fmt.Errorf("missing %s", ProblemsJSONName)
 	}
 	if err := json.Unmarshal(raw, &problems); err != nil {
-		return nil, nil, nil, fmt.Errorf("parse %s: %w", ProblemsJSONName, err)
+		return nil, nil, nil, nil, fmt.Errorf("parse %s: %w", ProblemsJSONName, err)
 	}
 	if planRaw, ok := findZipFileByNames(r, PlanJSONName); ok {
 		meta = &PlanMeta{}
 		if err := json.Unmarshal(planRaw, meta); err != nil {
-			return nil, nil, nil, fmt.Errorf("parse %s: %w", PlanJSONName, err)
+			return nil, nil, nil, nil, fmt.Errorf("parse %s: %w", PlanJSONName, err)
 		}
 	}
 	images = map[string][]byte{}
+	extra = map[string][]byte{}
+	seen := map[string]bool{ProblemsJSONName: true, PlanJSONName: true}
 	for _, f := range r.File {
 		if f.FileInfo().IsDir() {
 			continue
@@ -250,23 +285,29 @@ func ParseZip(data []byte) (problems []ExportProblem, meta *PlanMeta, images map
 		clean := strings.ReplaceAll(f.Name, "\\", "/")
 		base := path.Base(clean)
 		dir := path.Dir(clean)
-		if !strings.HasSuffix(dir, "/images") && dir != "images" {
-			continue
-		}
-		if !imageRefPattern.MatchString("/api/uploads/" + base) {
-			continue
-		}
 		rc, err := f.Open()
 		if err != nil {
 			continue
 		}
 		var buf bytes.Buffer
-		if _, err := buf.ReadFrom(rc); err == nil {
-			images[base] = buf.Bytes()
+		if _, err := buf.ReadFrom(rc); err != nil {
+			rc.Close()
+			continue
 		}
 		rc.Close()
+		if dir == "images" || strings.HasSuffix(dir, "/images") {
+			if imageRefPattern.MatchString("/api/uploads/" + base) {
+				images[base] = buf.Bytes()
+			}
+			continue
+		}
+		// 包根的其余文件视为扩展文件（problems.json/trainingPlan.json 已在前面处理）
+		if dir == "." && !seen[base] {
+			seen[base] = true
+			extra[base] = buf.Bytes()
+		}
 	}
-	return problems, meta, images, nil
+	return problems, meta, images, extra, nil
 }
 
 // ---------- 题目载荷归一化（与上游 normalizeProblemPayload 等价） ----------

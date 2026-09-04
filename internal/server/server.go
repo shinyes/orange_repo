@@ -80,6 +80,9 @@ func New(s *store.Store, acc *accounts.Store, uploadsDir, webDist string) *fiber
 	api.Get("/export/problems", srv.handleExportProblems)
 	api.Get("/export/trainings/:id", srv.handleExportTraining)
 	api.Get("/export/practices/:id", srv.handleExportPractice)
+	// 全库备份/迁移：导出单包 / 导入恢复（见 backup.go）
+	api.Get("/export/backup", srv.handleExportBackup)
+	api.Post("/import/backup", srv.handleImportBackup)
 
 	api.Get("/trainings", srv.handleListTrainings)
 	api.Post("/trainings", srv.handleCreateTraining)

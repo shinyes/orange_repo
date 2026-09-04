@@ -39,6 +39,7 @@ import { useAppState } from '@/lib/app-context'
 import { useMenuAnchorHold } from '@/lib/use-menu-anchor-hold'
 import type { ProblemSummary, ProblemType, TagCount, TagNode } from '@/lib/types'
 import { AddToGroupDialog, ConfirmDialog, ImportDialog, NewProblemDialog } from './dialogs'
+import { BackupMenu } from './BackupMenu'
 
 const TYPE_LABEL: Record<ProblemType, string> = { programming: '编程', single_choice: '单选', true_false: '判断' }
 
@@ -57,6 +58,7 @@ export function TagFilterColumn({ onLogout, onOpenSettings }: { onLogout: () => 
         <Button variant="ghost" size="icon-sm" title="修改密码" onClick={onOpenSettings}>
           <SettingsIcon />
         </Button>
+        <BackupMenu />
         <Button variant="outline" size="sm" title="退出登录" onClick={onLogout}>
           <LogOutIcon data-icon="inline-start" />
           退出

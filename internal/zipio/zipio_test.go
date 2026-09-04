@@ -154,6 +154,35 @@ func TestBareExportHasNoPlanFile(t *testing.T) {
 	}
 }
 
+func TestBuildZipWithFilesRoundTrip(t *testing.T) {
+	problems, _ := sampleProblems()
+	extra := map[string][]byte{
+		"orangerepo-backup.json": []byte(`{"version":1,"trainings":[]}`),
+	}
+	zipData, err := BuildZipWithFiles(problems, nil, nil, extra)
+	if err != nil {
+		t.Fatalf("BuildZipWithFiles: %v", err)
+	}
+	got, meta, images, gotExtra, err := ParseZipWithExtra(zipData)
+	if err != nil {
+		t.Fatalf("ParseZipWithExtra: %v", err)
+	}
+	if meta != nil || len(images) != 0 {
+		t.Fatalf("unexpected meta/images: %v", meta)
+	}
+	if len(got) != len(problems) {
+		t.Fatalf("problems = %d, want %d", len(got), len(problems))
+	}
+	if string(gotExtra["orangerepo-backup.json"]) != `{"version":1,"trainings":[]}` {
+		t.Fatalf("extra file mismatch: %q", gotExtra["orangerepo-backup.json"])
+	}
+	// 普通 ParseZip 忽略附加文件（兼容）
+	_, _, _, err = ParseZip(zipData)
+	if err != nil {
+		t.Fatalf("ParseZip should ignore extra files: %v", err)
+	}
+}
+
 func TestParseAnyDepth(t *testing.T) {
 	// 兼容旧版 ZIP：文件可位于任意目录层级。
 	var buf bytes.Buffer

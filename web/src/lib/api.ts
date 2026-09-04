@@ -110,6 +110,13 @@ export const api = {
   },
   exportTrainingUrl: (id: number) => `/api/export/trainings/${id}`,
   exportPracticeUrl: (id: number) => `/api/export/practices/${id}`,
+  // 全库备份/迁移
+  exportBackupUrl: () => `/api/export/backup`,
+  importBackup: async (file: File): Promise<{ imported: number; trainings: number; practices: number }> => {
+    const body = new FormData()
+    body.append('zip', file)
+    return req('/api/import/backup', { method: 'POST', body })
+  },
 
   // ---- 题册目录（可嵌套） ----
   bookletDirectories: () => req<{ directories: BookletDirectory[] }>('/api/booklet-directories'),
