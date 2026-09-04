@@ -930,3 +930,70 @@ func TestCleanupImages(t *testing.T) {
 		t.Fatal("存在错误路由 /api/api/uploads（组内重复前缀挂载）")
 	}
 }
+
+// TestImportIntoFolder 导入题册到指定目录：folderId 生效、非法目录 400。
+func TestImportIntoFolder(t *testing.T) {
+	srcApp, _ := newTestApp(t)
+	srcCookie := sessionCookie(t, srcApp)
+	doJSON(t, srcApp, "POST", "/api/problems", srcCookie, map[string]any{"type": "programming", "title": "导入题一"})
+	zipData := getZip(t, srcApp, srcCookie, "/api/export/problems")
+
+	dstApp, _ := newTestApp(t)
+	dstCookie := sessionCookie(t, dstApp)
+	// 建目录
+	_, dirOut := doJSON(t, dstApp, "POST", "/api/booklet-directories", dstCookie, map[string]any{"name": "竞赛目录"})
+	dirID := int64(dirOut["id"].(float64))
+
+	// 带 folderId 导入（mode=training）
+	body := &bytes.Buffer{}
+	mw := multipart.NewWriter(body)
+	fw, err := mw.CreateFormFile("zip", "pkg.zip")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fw.Write(zipData); err != nil {
+		t.Fatal(err)
+	}
+	mw.Close()
+	req := httptest.NewRequest("POST", fmt.Sprintf("/api/import?mode=training&folderId=%d", dirID), body)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	req.Header.Set("Cookie", dstCookie)
+	resp, err := dstApp.Test(req, -1)
+	if err != nil {
+		t.Fatalf("import into folder: %v", err)
+	}
+	if resp.StatusCode != fiber.StatusCreated {
+		t.Fatalf("import = %d", resp.StatusCode)
+	}
+	// 训练应在目录下
+	_, tl := doJSON(t, dstApp, "GET", "/api/trainings", dstCookie, nil)
+	trainings := tl["trainings"].([]any)
+	if len(trainings) != 1 {
+		t.Fatalf("trainings = %d, want 1", len(trainings))
+	}
+	if fid, ok := trainings[0].(map[string]any)["folderId"].(float64); !ok || int64(fid) != dirID {
+		t.Fatalf("training folderId = %v, want %d", trainings[0].(map[string]any)["folderId"], dirID)
+	}
+
+	// 非法 folderId → 400
+	body2 := &bytes.Buffer{}
+	mw2 := multipart.NewWriter(body2)
+	fw2, err := mw2.CreateFormFile("zip", "pkg2.zip")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fw2.Write(zipData); err != nil {
+		t.Fatal(err)
+	}
+	mw2.Close()
+	req2 := httptest.NewRequest("POST", "/api/import?mode=training&folderId=99999", body2)
+	req2.Header.Set("Content-Type", mw2.FormDataContentType())
+	req2.Header.Set("Cookie", dstCookie)
+	resp2, err := dstApp.Test(req2, -1)
+	if err != nil {
+		t.Fatalf("import bad folder: %v", err)
+	}
+	if resp2.StatusCode != fiber.StatusBadRequest {
+		t.Fatalf("import with bad folderId = %d, want 400", resp2.StatusCode)
+	}
+}

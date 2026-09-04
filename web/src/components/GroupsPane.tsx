@@ -29,7 +29,7 @@ type DragState =
 // 训练详情（章节化，支持拖拽排序：条目可跨章节移动，章节可整体排序；拖章节时全部折叠）。
 export function TrainingDetail({ id }: { id: number }) {
   const qc = useQueryClient()
-  const { checked, goHome } = useAppState()
+  const { checked, clearChecked, goHome } = useAppState()
   const q = useQuery({ queryKey: ['training', id], queryFn: () => api.getTraining(id) })
   const [newChapter, setNewChapter] = useState('')
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -201,6 +201,8 @@ export function TrainingDetail({ id }: { id: number }) {
     try {
       await api.addChapterItems(chapterId, checked)
       toast.success(`已加入 ${checked.length} 道题目`)
+      // 加入完成后清空题目栏勾选，避免残留勾选被再次加入其他章节
+      clearChecked()
       await invalidate()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : '加入失败')

@@ -305,6 +305,19 @@ func (s *Store) SetBookletDirectoryLayout(placements []model.BookletDirectory) e
 }
 
 // ensureFolder 校验目录存在（folderID 为 nil 时跳过）。
+// BookletDirectoryExists 目录是否存在。
+func (s *Store) BookletDirectoryExists(id int64) (bool, error) {
+	var n int
+	err := s.DB.QueryRow(`SELECT 1 FROM booklet_directories WHERE id=?`, id).Scan(&n)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 func (s *Store) ensureFolder(folderID *int64) error {
 	if folderID == nil {
 		return nil

@@ -98,10 +98,11 @@ export const api = {
   cleanupOrphanImages: () => req<{ removed: number }>('/api/uploads/cleanup', { method: 'POST' }),
 
   // ---- 导入导出 ----
-  import: async (file: File, mode: 'problems' | 'training' | 'practice' | 'auto'): Promise<Record<string, unknown>> => {
+  import: async (file: File, mode: 'problems' | 'training' | 'practice' | 'auto', folderId?: number | null): Promise<Record<string, unknown>> => {
     const body = new FormData()
     body.append('zip', file)
-    return req(`/api/import?mode=${mode}`, { method: 'POST', body })
+    const folder = folderId ? `&folderId=${folderId}` : ''
+    return req(`/api/import?mode=${mode}${folder}`, { method: 'POST', body })
   },
   exportProblemsUrl: (f: ProblemFilterState, ids?: number[]) => {
     if (ids && ids.length) return `/api/export/problems${filterQuery({ ...f, q: '', tags: [], type: '' }, { ids: ids.join(',') })}`

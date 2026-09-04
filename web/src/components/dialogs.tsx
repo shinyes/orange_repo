@@ -144,11 +144,14 @@ export function ImportDialog({
   onOpenChange,
   fixedMode,
   allow,
+  folderId,
 }: {
   open: boolean
   onOpenChange: (v: boolean) => void
   fixedMode?: ImportMode
   allow?: ImportMode[]
+  /** 导入题册（训练/练习）的目标目录；null/缺省 = 根目录 */
+  folderId?: number | null
 }) {
   const fileRef = useRef<HTMLInputElement>(null)
   const [mode, setMode] = useState<ImportMode>(fixedMode ?? allow?.[0] ?? 'auto')
@@ -169,7 +172,7 @@ export function ImportDialog({
       for (let i = 0; i < files.length; i++) {
         const file = files[i]
         try {
-          const result = await api.import(file, mode)
+          const result = await api.import(file, mode, folderId ?? null)
           total += (result.imported as unknown[])?.length ?? 0
           success++
           if (result.title) names.push(String(result.title))

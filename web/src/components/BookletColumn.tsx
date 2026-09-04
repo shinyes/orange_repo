@@ -438,11 +438,12 @@ export function BookletColumn() {
         onSubmit={(name) => creating && void createItem(creating, name)}
       />
 
-      {/* 导入题册：自动识别（上传即确定，无需选择模式） */}
+      {/* 导入题册：自动识别（上传即确定，无需选择模式）；导入到当前选中目录（无选中=根） */}
       <ImportDialog
         open={importOpen}
         onOpenChange={setImportOpen}
         fixedMode="auto"
+        folderId={activeFolderId}
       />
 
       {/* 删除目录：选择题册处理方式 */}

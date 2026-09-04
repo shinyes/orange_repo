@@ -50,7 +50,7 @@ func main() {
 			sample := filepath.Join("samples", "orangeoj-sample.zip")
 			if data, err := os.ReadFile(sample); err == nil {
 				log.Printf("[SEED] 检测到空库，导入示例包 %s", sample)
-				if _, err := srv.ImportZipData(data, "training", "示例训练计划"); err != nil {
+				if _, err := srv.ImportZipData(data, "training", "示例训练计划", nil); err != nil {
 					log.Printf("[WARN] 导入示例数据失败: %v", err)
 				}
 			}

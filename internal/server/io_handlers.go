@@ -44,6 +44,7 @@ func (s *Server) uploadResolver(name string) ([]byte, error) {
 
 // handleImport 导入 OrangeOJ ZIP 包。mode=problems|training|practice|auto（默认 problems）。
 // auto：按包内容自动识别——trainingPlan.json 含章节 → 训练，否则 → 练习。
+// folderId（query，可选）：导入的题册（训练/练习）放入该目录；缺省放根目录。
 func (s *Server) handleImport(c *fiber.Ctx) error {
 	file, err := c.FormFile("zip")
 	if err != nil {
@@ -67,9 +68,24 @@ func (s *Server) handleImport(c *fiber.Ctx) error {
 	default:
 		return respondError(c, fiber.StatusBadRequest, "invalid mode: 仅支持 problems|training|practice|auto")
 	}
+	var folderID *int64
+	if raw := strings.TrimSpace(c.Query("folderId")); raw != "" && raw != "null" {
+		id, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil || id <= 0 {
+			return respondError(c, fiber.StatusBadRequest, "invalid folderId")
+		}
+		ok, err := s.Store.BookletDirectoryExists(id)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return respondError(c, fiber.StatusBadRequest, "目录不存在")
+		}
+		folderID = &id
+	}
 	// 文件名作为题册名称兜底（去掉扩展名）
 	nameHint := strings.TrimSuffix(filepath.Base(file.Filename), filepath.Ext(file.Filename))
-	resp, err := s.ImportZipData(data, mode, nameHint)
+	resp, err := s.ImportZipData(data, mode, nameHint, folderID)
 	if err != nil {
 		if ferr, ok := err.(*fiber.Error); ok {
 			return respondError(c, ferr.Code, ferr.Message)
@@ -81,8 +97,8 @@ func (s *Server) handleImport(c *fiber.Ctx) error {
 
 // ImportZipData 导入核心：图片落盘 → 归一化插入题目 → 按模式建组。
 // mode = problems | training | practice | auto；nameHint 为文件名（去扩展名），
-// 作为题册名称兜底（元数据无标题时使用）。
-func (s *Server) ImportZipData(data []byte, mode, nameHint string) (fiber.Map, error) {
+// 作为题册名称兜底（元数据无标题时使用）；folderID 为导入题册的目标目录（nil=根）。
+func (s *Server) ImportZipData(data []byte, mode, nameHint string, folderID *int64) (fiber.Map, error) {
 	problems, meta, images, err := zipio.ParseZip(data)
 	if err != nil {
 		return nil, fiber.NewError(fiber.StatusBadRequest, err.Error())
@@ -150,7 +166,7 @@ func (s *Server) ImportZipData(data []byte, mode, nameHint string) (fiber.Map, e
 			description = meta.Description
 			tags = meta.Tags
 		}
-		trainingID, err := s.Store.CreateTraining(title, description, tags, nil)
+		trainingID, err := s.Store.CreateTraining(title, description, tags, folderID)
 		if err != nil {
 			return nil, err
 		}
@@ -205,7 +221,7 @@ func (s *Server) ImportZipData(data []byte, mode, nameHint string) (fiber.Map, e
 			description = meta.Description
 			tags = meta.Tags
 		}
-		practiceID, err := s.Store.CreatePractice(title, description, tags, nil)
+		practiceID, err := s.Store.CreatePractice(title, description, tags, folderID)
 		if err != nil {
 			return nil, err
 		}
