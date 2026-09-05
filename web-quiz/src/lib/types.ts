@@ -1,42 +1,99 @@
-// 与刷题服务 API 契约一一对应（见 docs/aegis/specs/2026-08-29-quiz-service-design.md §5）。
+// 与刷题门户 API（OrangeOJ quizserver :8081）契约一一对应。
+// 角色模型：global_admin（系统管理员）/ domain_admin（域管理员，带 domainId）/ member（空间成员=学生）。
 
-export type Role = 'admin' | 'student'
+export type Role = 'global_admin' | 'domain_admin' | 'member'
 
 export interface User {
   id: number
   username: string
   role: Role
+  /** 仅 domain_admin 有意义（其归属域 id） */
+  domainId?: number
 }
 
-export interface CategoryBrief {
+export type PortalProblemType = 'programming' | 'single_choice' | 'true_false'
+
+export type ObjectiveType = 'single_choice' | 'true_false'
+
+// ---------- 空间 ----------
+
+export interface PortalSpace {
   id: number
+  domainId: number
   name: string
-  orderNo: number
-  questionCount: number
 }
 
-export interface SubjectBrief {
-  id: number
-  name: string
-  orderNo: number
-  categories: CategoryBrief[]
+export interface SpaceHome {
+  trainings: TrainingBrief[]
+  practices: PracticeBrief[]
+  quizzes: QuizBrief[]
 }
 
-export type ProblemType = 'single_choice' | 'true_false'
+// 首页三区卡片与空间内列表共用同一简报结构（home.trainings / space/:id/quizzes 等）。
 
-export interface QuizProblem {
+export interface TrainingBrief {
   id: number
-  type: ProblemType
+  spaceId: number
   title: string
-  statementMd: string
-  bodyJson: Record<string, unknown>
-  hasExplanation: boolean
+  description: string
+  tags: string[]
+  maxAttempts: number
+  problemCount: number
 }
 
-export interface Round {
-  categoryId: number
-  total: number
-  problems: QuizProblem[]
+export interface PracticeBrief {
+  id: number
+  spaceId: number
+  title: string
+  description: string
+  tags: string[]
+  problemCount: number
+}
+
+export interface QuizBrief {
+  id: number
+  spaceId: number
+  title: string
+  tags: string[]
+  sourceType: 'tags' | 'repo'
+  repoKind?: string
+  repoId?: number
+  problemCount: number
+}
+
+// ---------- 空间训练（章节化，客观题限次作答） ----------
+
+export interface TrainingItemView {
+  /** 条目 id（作答请求按题目 id，此 id 仅列表锚点） */
+  id: number
+  problemId: number
+  orderNo: number
+  problemType?: PortalProblemType
+  problemUuid?: string
+  problemTitle?: string
+  solved: boolean
+  attempts: number
+  /** 达上限未对=红锁；已答对=绿锁 */
+  locked: boolean
+}
+
+export interface ChapterView {
+  id: number
+  title: string
+  items: TrainingItemView[]
+}
+
+export interface TrainingDetail {
+  training: TrainingBrief & { spaceId: number }
+  chapters: ChapterView[]
+}
+
+export interface TrainingAnswerResult {
+  correct: boolean
+  attempts: number
+  solved: boolean
+  locked: boolean
+  correctAnswer: CorrectAnswer
 }
 
 export interface CorrectAnswer {
@@ -44,136 +101,93 @@ export interface CorrectAnswer {
   answer?: boolean
 }
 
-export interface SubmitResult {
-  correct: boolean
-  correctAnswer: CorrectAnswer
-  hasExplanation: boolean
-  explanation: string
-}
+// ---------- 空间练习（整卷交卷） ----------
 
-export interface WrongGroup {
-  categoryId: number
-  categoryName: string
-  subjectName: string
-  count: number
-}
-
-export interface WrongSummary {
-  total: number
-  groups: WrongGroup[]
-}
-
-export interface WrongRoundProblem extends QuizProblem {
-  categoryId: number
-}
-
-export interface WrongRound {
-  scope: 'all' | 'category'
-  categoryId?: number | null
-  problems: WrongRoundProblem[]
-}
-
-// ---- 管理员 ----
-
-export interface AdminCategory {
+export interface PracticeItemView {
   id: number
-  subjectId: number
-  name: string
-  orderNo: number
-  tags: string[]
-  types: ProblemType[]
-  questionCount: number
-}
-
-export interface AdminSubject {
-  id: number
-  name: string
-  orderNo: number
-  categories: AdminCategory[]
-}
-
-export interface AdminStudent {
-  id: number
-  username: string
-  createdAt: string
-  wrongCount: number
-}
-
-export interface Settings {
-  roundSize: number
-}
-
-// ---- OrangeOJ：布置与做题 ----
-
-export interface OjAssigned {
-  trainings: OjTrainingBrief[]
-  practices: OjPracticeBrief[]
-}
-
-export interface OjTrainingBrief {
-  id: number
-  title: string
-  description: string
-  tags: string[]
-  problemCount: number
-  accepted: number
-  chapterCount: number
-}
-
-export interface OjPracticeBrief {
-  id: number
-  title: string
-  description: string
-  tags: string[]
-  problemCount: number
-  accepted: number
-}
-
-export interface OjItem {
+  practiceId?: number
   problemId: number
   orderNo: number
-  title: string
-  type: 'programming' | 'single_choice' | 'true_false'
-  completed: boolean
+  problemTitle?: string
+  problemType?: PortalProblemType
+  problemUuid?: string
 }
 
-export interface OjChapter {
-  id: number
-  title: string
-  orderNo: number
-  items: OjItem[]
+export interface PracticeDetail {
+  practice: PracticeBrief & { spaceId: number }
+  items: PracticeItemView[]
 }
 
-export interface OjTrainingDetail {
-  id: number
-  title: string
-  description: string
-  tags: string[]
-  chapters: OjChapter[]
-  accepted: number
-  total: number
-  stale?: boolean
+export interface PracticeResultItem {
+  problemId: number
+  correct: boolean
+  type: string
+  /** 答错时给出正确项。训练/刷题返回 {answerIndex|answer} 对象；
+   *  练习交卷返回原始值（单选=索引 number，判断=boolean） */
+  correctAnswer?: CorrectAnswer | number | boolean
 }
 
-export interface OjPracticeDetail {
-  id: number
-  title: string
-  description: string
-  tags: string[]
-  items: OjItem[]
-  accepted: number
-  total: number
-  stale?: boolean
+export interface PracticeSubmitResult {
+  submissionId: number
+  results: PracticeResultItem[]
+  objectiveCorrect: number
+  objectiveTotal: number
 }
+
+export interface PracticeSubmission {
+  id: number
+  practiceId: number
+  userId: number
+  objectiveCorrect: number
+  createdAt: string
+}
+
+// ---------- 空间刷题（单题随机流） ----------
+
+export interface QuizProblem {
+  id: number
+  type: ObjectiveType
+  title: string
+  statementMd: string
+  bodyJson: { options?: string[] } & Record<string, unknown>
+}
+
+export interface QuizProblemResponse {
+  problem: QuizProblem | null
+  /** true = 本组题已全部通过，无题可刷 */
+  done: boolean
+}
+
+export interface QuizAnswerResult {
+  correct: boolean
+  correctAnswer: CorrectAnswer
+  /** 答对且此前未通过（首次通过 +1） */
+  firstTime: boolean
+}
+
+// ---------- 排行榜 ----------
+
+export interface RankRow {
+  userId: number
+  username: string
+  solved: number
+}
+
+export interface RankView {
+  rank: RankRow[]
+  domainId: number
+}
+
+// ---------- 题目做题（/api/oj/problem/:id 保留） ----------
 
 export type CodeLang = 'cpp' | 'python'
 
 export interface OjProblem {
   id: number
-  type: 'programming' | 'single_choice' | 'true_false'
+  type: PortalProblemType
   title: string
   statementMd: string
-  bodyJson: Record<string, unknown>
+  bodyJson: { options?: string[]; samples?: { input?: string; output?: string }[] } & Record<string, unknown>
   timeLimitMs: number
   memoryLimitMiB: number
 }
@@ -225,56 +239,5 @@ export interface SubmissionPoll {
   pollAfterMs: number
 }
 
-// ---- 管理端：布置 ----
-
-export interface RepoTraining {
-  id: number
-  title: string
-  description: string
-  tags: string[]
-  problemCount: number
-  chapterCount: number
-}
-
-export interface RepoPractice {
-  id: number
-  title: string
-  description: string
-  tags: string[]
-  items: number[]
-  problemCount: number
-}
-
-export interface AdminAssignment {
-  id: number
-  kind: 'training' | 'practice'
-  repoId: number
-  title: string
-  description: string
-  tags: string[]
-  published: boolean
-  assignedAll: boolean
-  problemCount: number
-  studentCount: number
-  createdAt: string
-}
-
-export interface AssignmentStudents {
-  assignedAll: boolean
-  students: { userId: number; username: string }[]
-}
-
-export interface AssignmentStatsProblem {
-  problemId: number
-  title: string
-  type: string
-  accepted: number
-  submissions: number
-}
-
-export interface AssignmentStats {
-  title: string
-  kind: 'training' | 'practice'
-  totalStudents: number
-  problems: AssignmentStatsProblem[]
-}
+// 客观题提交载荷统一形式（单选=number 索引，判断=boolean）。
+export type ObjectiveAnswer = number | boolean

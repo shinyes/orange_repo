@@ -1,21 +1,33 @@
 import { useState } from 'react'
 import { useNavigate, useOutletContext } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
-import { KeyRoundIcon, LogOutIcon, SettingsIcon } from 'lucide-react'
+import { KeyRoundIcon, LayoutGridIcon, LogOutIcon } from 'lucide-react'
 import { toast } from 'sonner'
 
-import { api } from '@/lib/api'
 import type { ShellContext } from '@/App'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { PasswordDialog } from '@/components/PasswordDialog'
+import { savedSpaceId } from '@/lib/space'
 
-// 我的页：个人信息 + 修改密码 + 退出；管理员含「系统管理」入口（/admin 路由）。
+export function roleLabel(role: string): string {
+  switch (role) {
+    case 'global_admin':
+      return '系统管理员'
+    case 'domain_admin':
+      return '域管理员'
+    case 'member':
+      return '成员'
+    default:
+      return role
+  }
+}
+
+// 我的页：账号信息 + 空间入口（返回空间/空间选择）+ 修改密码 + 退出。
 export function MyPage() {
   const { user, onLogout } = useOutletContext<ShellContext>()
   const navigate = useNavigate()
   const [pwOpen, setPwOpen] = useState(false)
-  const wrong = useQuery({ queryKey: ['wrong-summary'], queryFn: api.wrongSummary })
+  const currentSpace = savedSpaceId()
 
   return (
     <div className="mx-auto w-full max-w-2xl px-4 py-6 lg:max-w-4xl lg:px-8 lg:py-8">
@@ -29,23 +41,29 @@ export function MyPage() {
           <div className="min-w-0">
             <div className="flex items-center gap-2 font-medium">
               <span className="truncate">{user.username}</span>
-              <Badge variant={user.role === 'admin' ? 'default' : 'secondary'}>
-                {user.role === 'admin' ? '管理员' : '学生'}
-              </Badge>
+              <Badge variant={user.role === 'member' ? 'secondary' : 'default'}>{roleLabel(user.role)}</Badge>
             </div>
             <div className="mt-1 text-xs text-muted-foreground">
-              错题 {wrong.data?.total ?? '…'} 题
+              {user.role === 'domain_admin' && user.domainId !== undefined
+                ? `归属域 #${user.domainId}`
+                : user.role === 'global_admin'
+                  ? '可进入全部域空间'
+                  : '空间成员（做题账号）'}
             </div>
           </div>
         </div>
 
         <div className="mt-6 space-y-2.5">
-          {user.role === 'admin' && (
-            <Button className="w-full min-h-10 justify-start" onClick={() => navigate('/admin')}>
-              <SettingsIcon className="size-4" />
-              系统管理
+          {currentSpace && (
+            <Button className="w-full min-h-10 justify-start" onClick={() => navigate(`/s/${currentSpace}/training`)}>
+              <LayoutGridIcon className="size-4" />
+              回到我的空间
             </Button>
           )}
+          <Button variant="outline" className="w-full min-h-10 justify-start" onClick={() => navigate('/')}>
+            <LayoutGridIcon className="size-4" />
+            空间列表 / 切换空间
+          </Button>
           <Button variant="outline" className="w-full min-h-10 justify-start" onClick={() => setPwOpen(true)}>
             <KeyRoundIcon className="size-4" />
             修改密码
