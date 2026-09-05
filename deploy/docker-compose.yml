@@ -9,21 +9,21 @@
 # judge 相关文件变更的版本会构建 ghcr.io/shinyes/orange_repo-judge:<版本> 并刷新 :latest，
 # 其余版本沿用 latest（compose 默认引用 latest，可用 ORANGEOJ_JUDGE_IMAGE 覆盖）。
 services:
-  orangerepo:
+  orangeoj-main:
     image: ghcr.io/shinyes/orange_repo:1.12.8
-    container_name: orangerepo
+    container_name: orangeoj-main
     ports:
       - "8080:8080"
     volumes:
       - ./data:/app/data
     restart: unless-stopped
 
-  # 刷题服务：与主站共用同一镜像与数据卷（只读主库 orangerepo.db，
+  # 刷题服务：与主站共用同一镜像与数据卷（只读主库 orangeoj.db，
   # 自有数据写入同一卷内的 quiz.db）；主库表结构变化时请与主站同版本部署。
   # 判题：连接 orangejudge（-judge-endpoint / -judge-token 必填否则判题 503）。
-  orangequiz:
+  orangeoj-quiz:
     image: ghcr.io/shinyes/orange_repo:1.12.8
-    container_name: orangequiz
+    container_name: orangeoj-quiz
     entrypoint: ["/app/quiz"]
     command: [
       "-addr", ":8081",
@@ -76,9 +76,9 @@ services:
 volumes:
   judge-work:
 
-# 更想用命名卷？同样免配置，替换上面 orangerepo/orangequiz 的 volumes 行即可：
+# 更想用命名卷？同样免配置，替换上面 orangeoj-main/orangeoj-quiz 的 volumes 行即可：
 #   volumes:
-#     - orangerepo-data:/app/data
+#     - orangeoj-data:/app/data
 # 并保留顶层声明：
 # volumes:
-#   orangerepo-data:
+#   orangeoj-data:
