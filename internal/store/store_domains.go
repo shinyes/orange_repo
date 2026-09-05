@@ -271,7 +271,8 @@ func (s *Store) SpaceDomain(spaceID int64) (int64, error) {
 
 // ---------- 空间内容表（训练/练习/刷题/排行榜，阶段 4） ----------
 
-// migrateSpaceContent 建空间训练/练习/刷题/通过记录表（幂等）。
+// migrateSpaceContent 建空间训练/练习/刷题结构表（幂等）。
+// 学生作答表（尝试/交卷/通过记录）已在 quiz.db（quizstore.migrate），此处不再建。
 func (s *Store) migrateSpaceContent() error {
 	stmts := []string{
 		`CREATE TABLE IF NOT EXISTS space_trainings (
@@ -309,34 +310,6 @@ func (s *Store) migrateSpaceContent() error {
 			problem_id INTEGER NOT NULL,
 			order_no INTEGER NOT NULL DEFAULT 0
 		);`,
-		// 训练客观题作答次数（每用户每训练每客观题；到达 max_attempts 禁选）
-		`CREATE TABLE IF NOT EXISTS space_training_attempts (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			training_id INTEGER NOT NULL REFERENCES space_trainings(id) ON DELETE CASCADE,
-			user_id INTEGER NOT NULL,
-			problem_id INTEGER NOT NULL,
-			attempts INTEGER NOT NULL DEFAULT 1,
-			solved INTEGER NOT NULL DEFAULT 0, -- 1=答对过（标绿锁定）
-			updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-			UNIQUE(training_id, user_id, problem_id)
-		);`,
-		// 练习交卷记录（每次作答都记录；内容快照存 answers_json：problem_id→{objective:idx/verdict}）
-		`CREATE TABLE IF NOT EXISTS space_practice_submissions (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			practice_id INTEGER NOT NULL REFERENCES space_practices(id) ON DELETE CASCADE,
-			user_id INTEGER NOT NULL,
-			answers_json TEXT NOT NULL DEFAULT '[]',
-			score INTEGER NOT NULL DEFAULT 0,      -- 客观答对题数（编程题 AC 数并入或单独）
-			objective_correct INTEGER NOT NULL DEFAULT 0,
-			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-		);`,
-		// 排行榜：学生按题 uuid 去重通过记录（跨训练/练习/刷题）
-		`CREATE TABLE IF NOT EXISTS student_solved (
-			user_id INTEGER NOT NULL,
-			problem_uuid TEXT NOT NULL,
-			solved_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-			PRIMARY KEY(user_id, problem_uuid)
-		);`,
 		// 空间刷题项目
 		`CREATE TABLE IF NOT EXISTS space_quizzes (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -351,8 +324,6 @@ func (s *Store) migrateSpaceContent() error {
 		`CREATE INDEX IF NOT EXISTS idx_space_trainings_space ON space_trainings(space_id);`,
 		`CREATE INDEX IF NOT EXISTS idx_space_practices_space ON space_practices(space_id);`,
 		`CREATE INDEX IF NOT EXISTS idx_space_quizzes_space ON space_quizzes(space_id);`,
-		`CREATE INDEX IF NOT EXISTS idx_space_attempts_training ON space_training_attempts(training_id);`,
-		`CREATE INDEX IF NOT EXISTS idx_space_quiz_submissions ON space_practice_submissions(practice_id);`,
 	}
 	for _, stmt := range stmts {
 		if _, err := s.DB.Exec(stmt); err != nil {

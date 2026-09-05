@@ -205,6 +205,33 @@ func (s *Store) migrate() error {
 			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			PRIMARY KEY(assignment_id, user_id)
 		);`,
+		// ---------- 空间训练/练习学生作答（主库仅存空间内容结构；作答与 users 同库） ----------
+		// training_id/practice_id 指主库空间训练/练习 id，无跨库外键；
+		// user_id 与 users 同库可级联删除。
+		`CREATE TABLE IF NOT EXISTS space_training_attempts (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			training_id INTEGER NOT NULL,
+			user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			problem_id INTEGER NOT NULL,
+			attempts INTEGER NOT NULL DEFAULT 1,
+			solved INTEGER NOT NULL DEFAULT 0,
+			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			UNIQUE(training_id, user_id, problem_id)
+		);`,
+		`CREATE TABLE IF NOT EXISTS space_practice_submissions (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			practice_id INTEGER NOT NULL,
+			user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			answers_json TEXT NOT NULL DEFAULT '[]',
+			objective_correct INTEGER NOT NULL DEFAULT 0,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		);`,
+		`CREATE TABLE IF NOT EXISTS student_solved (
+			user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			problem_uuid TEXT NOT NULL,
+			solved_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			PRIMARY KEY(user_id, problem_uuid)
+		);`,
 	}
 	for _, stmt := range stmts {
 		if _, err := s.DB.Exec(stmt); err != nil {

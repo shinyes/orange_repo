@@ -138,7 +138,7 @@ func (s *Store) migrate() error {
 	if err := s.migrateDomains(); err != nil {
 		return err
 	}
-	// 空间内容（空间训练/练习/刷题/排行榜通过记录）
+	// 空间内容（空间训练/练习/刷题结构；学生作答见 quizstore）
 	if err := s.migrateSpaceContent(); err != nil {
 		return err
 	}

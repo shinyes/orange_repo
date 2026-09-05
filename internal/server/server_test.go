@@ -1269,3 +1269,77 @@ func TestDomainSpaceAPI(t *testing.T) {
 		t.Fatalf("delete domain = %d", resp.StatusCode)
 	}
 }
+
+// TestSpaceContentAPI 空间内容管理：训练（自建/从仓库拷贝章节）、练习、刷题项目 CRUD。
+func TestSpaceContentAPI(t *testing.T) {
+	app, _ := newTestApp(t)
+	gc := sessionCookie(t, app) // global_admin
+
+	// 域+空间（域内题目 domain_id 需指向该域——建题 API 未带域时归默认域，须手工对齐：
+	// 直接经 store 接口造题并指定 domain）
+	_, dOut := doJSON(t, app, "POST", "/api/admin/domains", gc, map[string]any{"name": "域X"})
+	domainID := int64(dOut["id"].(float64))
+	_, spOut := doJSON(t, app, "POST", "/api/admin/spaces?domainId="+strconv.FormatInt(domainID, 10), gc,
+		map[string]string{"name": "空间X"})
+	spaceID := int64(spOut["id"].(float64))
+
+	// 造仓库模板：题目(默认域) + 训练 2 章
+	_, p1 := doJSON(t, app, "POST", "/api/problems", gc, map[string]any{"type": "single_choice", "title": "T1", "bodyJson": map[string]any{"options": []string{"a", "b"}}, "answerJson": map[string]any{"answerIndex": 0}})
+	_, p2 := doJSON(t, app, "POST", "/api/problems", gc, map[string]any{"type": "true_false", "title": "T2", "bodyJson": map[string]any{}, "answerJson": map[string]any{"answer": true}})
+	p1ID := int64(p1["problem"].(map[string]any)["id"].(float64))
+	p2ID := int64(p2["problem"].(map[string]any)["id"].(float64))
+	// 模板训练
+	_, trOut := doJSON(t, app, "POST", "/api/trainings", gc, map[string]any{"title": "仓库训练"})
+	trID := int64(trOut["id"].(float64))
+	_, chOut := doJSON(t, app, "POST", fmt.Sprintf("/api/trainings/%d/chapters", trID), gc, map[string]string{"title": "模板章"})
+	chID := int64(chOut["id"].(float64))
+	doJSON(t, app, "POST", fmt.Sprintf("/api/chapters/%d/items", chID), gc, map[string]any{"problemIds": []int64{p1ID, p2ID}})
+
+	// 空间训练：从仓库模板拷贝
+	_, ctr := doJSON(t, app, "POST", fmt.Sprintf("/api/space/%d/trainings", spaceID), gc,
+		map[string]any{"title": "空间训练", "maxAttempts": 5, "fromRepo": map[string]any{"kind": "training", "id": trID}})
+	stID := int64(ctr["id"].(float64))
+	if stID == 0 {
+		t.Fatalf("create space training = %v", ctr)
+	}
+	// 详情：1 章 2 题
+	_, gd := doJSON(t, app, "GET", fmt.Sprintf("/api/space/%d/trainings/%d", spaceID, stID), gc, nil)
+	chapters := gd["chapters"].([]any)
+	if len(chapters) != 1 || len(chapters[0].(map[string]any)["items"].([]any)) != 2 {
+		t.Fatalf("space training chapters = %v", gd)
+	}
+
+	// 空间练习：自建 + 加题
+	_, cpr := doJSON(t, app, "POST", fmt.Sprintf("/api/space/%d/practices", spaceID), gc, map[string]any{"title": "空间练习"})
+	spID := int64(cpr["id"].(float64))
+	if resp, _ := doJSON(t, app, "POST", fmt.Sprintf("/api/space/%d/practices/%d/items", spaceID, spID), gc,
+		map[string]any{"problemIds": []int64{p1ID}}); resp.StatusCode != fiber.StatusNoContent {
+		t.Fatalf("add practice items = %d", resp.StatusCode)
+	}
+	_, pv := doJSON(t, app, "GET", fmt.Sprintf("/api/space/%d/practices/%d", spaceID, spID), gc, nil)
+	if len(pv["items"].([]any)) != 1 {
+		t.Fatalf("practice items = %v", pv)
+	}
+
+	// 刷题项目：标签源
+	_, cq := doJSON(t, app, "POST", fmt.Sprintf("/api/space/%d/quizzes", spaceID), gc,
+		map[string]any{"title": "每日刷题", "tags": []string{"数学"}, "sourceType": "tags"})
+	qID := int64(cq["id"].(float64))
+	if qID == 0 {
+		t.Fatalf("create quiz = %v", cq)
+	}
+	_, ql := doJSON(t, app, "GET", fmt.Sprintf("/api/space/%d/quizzes", spaceID), gc, nil)
+	if len(ql["quizzes"].([]any)) != 1 {
+		t.Fatalf("quizzes = %v", ql)
+	}
+	// 删刷题项目/练习/训练
+	if resp, _ := doJSON(t, app, "DELETE", fmt.Sprintf("/api/space/%d/quizzes/%d", spaceID, qID), gc, nil); resp.StatusCode != fiber.StatusNoContent {
+		t.Fatalf("delete quiz = %d", resp.StatusCode)
+	}
+	if resp, _ := doJSON(t, app, "DELETE", fmt.Sprintf("/api/space/%d/practices/%d", spaceID, spID), gc, nil); resp.StatusCode != fiber.StatusNoContent {
+		t.Fatalf("delete practice = %d", resp.StatusCode)
+	}
+	if resp, _ := doJSON(t, app, "DELETE", fmt.Sprintf("/api/space/%d/trainings/%d", spaceID, stID), gc, nil); resp.StatusCode != fiber.StatusNoContent {
+		t.Fatalf("delete training = %d", resp.StatusCode)
+	}
+}
