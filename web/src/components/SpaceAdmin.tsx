@@ -13,6 +13,7 @@ import {
   LoaderCircleIcon,
   PencilIcon,
   PlusIcon,
+  SearchIcon,
   Trash2Icon,
   UsersIcon,
   XIcon,
@@ -417,8 +418,10 @@ function TrainingDetailBody({ spaceId, trainingId, onChanged }: { spaceId: numbe
     queryFn: () => api.getSpaceTraining(spaceId, trainingId),
   })
   const [chapterTitle, setChapterTitle] = useState('')
-  const [addingTo, setAddingTo] = useState<number | null>(null) // chapterId
-  const [problemIds, setProblemIds] = useState('')
+  // 从仓库题库选题加入章节
+  const [addingTo, setAddingTo] = useState<number | null>(null) // chapterId；非 null 时打开选题弹窗
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const [pickerChapter, setPickerChapter] = useState<number | null>(null)
 
   if (q.isLoading) {
     return <div className="flex items-center gap-2 px-4 py-3 text-xs text-muted-foreground"><LoaderCircleIcon className="size-3.5 animate-spin" /> 加载中…</div>
@@ -440,24 +443,10 @@ function TrainingDetailBody({ spaceId, trainingId, onChanged }: { spaceId: numbe
     }
   }
 
-  async function addProblems(chapterId: number) {
-    const ids = problemIds
-      .split(/[,\s，]+/)
-      .map((s) => Number(s.trim()))
-      .filter((n) => Number.isFinite(n) && n > 0)
-    if (ids.length === 0) {
-      toast.error('请输入有效的题目 ID（逗号或空格分隔）')
-      return
-    }
-    try {
-      await api.addSpaceChapterItems(spaceId, chapterId, ids)
-      toast.success(`已加入 ${ids.length} 道题目`)
-      setAddingTo(null)
-      setProblemIds('')
-      invalidate()
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : '加入失败')
-    }
+  function openPicker(chapterId: number) {
+    setAddingTo(chapterId)
+    setPickerChapter(chapterId)
+    setPickerOpen(true)
   }
 
   return (
@@ -485,22 +474,10 @@ function TrainingDetailBody({ spaceId, trainingId, onChanged }: { spaceId: numbe
             <div className="mb-1 flex items-center gap-2">
               <span className="min-w-0 flex-1 truncate text-sm font-medium">{ch.title}</span>
               <Badge variant="outline" className="text-[10px]">{ch.items.length} 题</Badge>
-              <Button size="xs" variant="outline" onClick={() => { setAddingTo(addingTo === ch.id ? null : ch.id); setProblemIds('') }}>
-                <PlusIcon data-icon="inline-start" /> 加题
+              <Button size="xs" variant="outline" onClick={() => openPicker(ch.id)}>
+                <PlusIcon data-icon="inline-start" /> 从题库加题
               </Button>
             </div>
-            {addingTo === ch.id && (
-              <div className="mb-1.5 flex gap-1.5">
-                <Input
-                  value={problemIds}
-                  onChange={(e) => setProblemIds(e.target.value)}
-                  placeholder="题目 ID，多个用逗号分隔"
-                  className="h-7 flex-1 text-xs"
-                  onKeyDown={(e) => e.key === 'Enter' && void addProblems(ch.id)}
-                />
-                <Button size="xs" onClick={() => void addProblems(ch.id)}>加入</Button>
-              </div>
-            )}
             <ul className="divide-y">
               {ch.items.map((it) => (
                 <li key={it.id} className="flex items-center gap-2 py-1 text-sm">
@@ -526,6 +503,34 @@ function TrainingDetailBody({ spaceId, trainingId, onChanged }: { spaceId: numbe
             </ul>
           </div>
         ))
+      )}
+
+      {/* 从仓库题库选题加入章节 */}
+      {pickerChapter != null && (
+        <ProblemPickerDialog
+          open={pickerOpen}
+          onOpenChange={(v) => {
+            setPickerOpen(v)
+            if (!v) {
+              setAddingTo(null)
+              setPickerChapter(null)
+            }
+          }}
+          title={`向章节加题${addingTo != null ? `（${chapters.find((c) => c.id === addingTo)?.title ?? ''}）` : ''}`}
+          existingIds={chapters.find((c) => c.id === pickerChapter)?.items.map((i) => i.problemId) ?? []}
+          onSubmit={async (problemIds) => {
+            try {
+              await api.addSpaceChapterItems(spaceId, pickerChapter, problemIds)
+              toast.success(`已加入 ${problemIds.length} 道题目`)
+              invalidate()
+              setPickerOpen(false)
+              setAddingTo(null)
+              setPickerChapter(null)
+            } catch (e) {
+              toast.error(e instanceof Error ? e.message : '加入失败')
+            }
+          }}
+        />
       )}
     </div>
   )
@@ -610,7 +615,7 @@ function PracticeDetailBody({ spaceId, practiceId, onChanged }: { spaceId: numbe
     queryKey: ['space', spaceId, 'practices', practiceId],
     queryFn: () => api.getSpacePractice(spaceId, practiceId),
   })
-  const [problemIds, setProblemIds] = useState('')
+  const [pickerOpen, setPickerOpen] = useState(false)
   const invalidate = () => {
     void qc.invalidateQueries({ queryKey: ['space', spaceId, 'practices', practiceId] })
     onChanged()
@@ -620,33 +625,12 @@ function PracticeDetailBody({ spaceId, practiceId, onChanged }: { spaceId: numbe
   }
   const items = q.data?.items ?? []
 
-  async function addProblems() {
-    const ids = problemIds.split(/[,\s，]+/).map((s) => Number(s.trim())).filter((n) => Number.isFinite(n) && n > 0)
-    if (ids.length === 0) {
-      toast.error('请输入有效的题目 ID')
-      return
-    }
-    try {
-      await api.addSpacePracticeItems(spaceId, practiceId, ids)
-      toast.success(`已加入 ${ids.length} 道题目`)
-      setProblemIds('')
-      invalidate()
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : '加入失败')
-    }
-  }
-
   return (
     <div className="space-y-2 border-t bg-muted/30 px-4 py-3">
       <div className="flex gap-1.5">
-        <Input
-          value={problemIds}
-          onChange={(e) => setProblemIds(e.target.value)}
-          placeholder="按题目 ID 追加题目（逗号分隔）"
-          className="h-7 flex-1 text-xs"
-          onKeyDown={(e) => e.key === 'Enter' && void addProblems()}
-        />
-        <Button size="xs" variant="outline" onClick={() => void addProblems()}>加题</Button>
+        <Button size="xs" variant="outline" onClick={() => setPickerOpen(true)}>
+          <PlusIcon data-icon="inline-start" /> 从题库加题
+        </Button>
       </div>
       {items.length === 0 ? (
         <p className="text-xs text-muted-foreground">还没有题目。</p>
@@ -674,6 +658,23 @@ function PracticeDetailBody({ spaceId, practiceId, onChanged }: { spaceId: numbe
           ))}
         </ul>
       )}
+
+      <ProblemPickerDialog
+        open={pickerOpen}
+        onOpenChange={setPickerOpen}
+        title="向练习加题"
+        existingIds={items.map((i) => i.problemId)}
+        onSubmit={async (problemIds) => {
+          try {
+            await api.addSpacePracticeItems(spaceId, practiceId, problemIds)
+            toast.success(`已加入 ${problemIds.length} 道题目`)
+            setPickerOpen(false)
+            invalidate()
+          } catch (e) {
+            toast.error(e instanceof Error ? e.message : '加入失败')
+          }
+        }}
+      />
     </div>
   )
 }
@@ -1108,4 +1109,113 @@ function typeLabel(t: string): string {
   if (t === 'single_choice') return '单选'
   if (t === 'true_false') return '判断'
   return t || '?'
+}
+
+// ---------- 从仓库题库选题（空间训练/练习加题） ----------
+// 题目来自当前域仓库（api.problems 走 dq 自动带 domainId），已在本空间目标中的题目置灰。
+
+function ProblemPickerDialog(props: {
+  open: boolean
+  onOpenChange: (v: boolean) => void
+  title: string
+  /** 已在此空间目标（章节/练习）里的题目 ID，置灰不可重复加入。 */
+  existingIds?: number[]
+  /** 提交所选题目 ID。调用方负责调 API 并关闭。 */
+  onSubmit: (problemIds: number[]) => void
+}) {
+  const [query, setQuery] = useState('')
+  const [selected, setSelected] = useState<Set<number>>(new Set())
+  const [submitting, setSubmitting] = useState(false)
+  const problemsQ = useQuery({
+    queryKey: ['space-problem-picker'],
+    queryFn: () => api.problems({ q: '', tags: [], type: '' }),
+    enabled: props.open,
+  })
+  const all = problemsQ.data?.problems ?? []
+  const existing = new Set(props.existingIds ?? [])
+  const q = query.trim().toLowerCase()
+  const visible = q ? all.filter((p) => p.title.toLowerCase().includes(q) || String(p.id).includes(q)) : all
+
+  return (
+    <Dialog open={props.open} onOpenChange={props.onOpenChange}>
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>{props.title}</DialogTitle>
+          <DialogDescription>从当前域仓库题库中选择题目加入。已加入的题目置灰。</DialogDescription>
+        </DialogHeader>
+
+        <div className="relative">
+          <SearchIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="搜索标题 / ID…"
+            className="pl-8"
+          />
+        </div>
+
+        <div className="max-h-72 space-y-1 overflow-y-auto">
+          {problemsQ.isLoading ? (
+            <div className="flex items-center justify-center gap-2 py-6 text-xs text-muted-foreground">
+              <LoaderCircleIcon className="size-4 animate-spin" /> 加载题目…
+            </div>
+          ) : visible.length === 0 ? (
+            <p className="py-6 text-center text-xs text-muted-foreground">没有匹配的题目</p>
+          ) : (
+            visible.map((p) => {
+              const isExisting = existing.has(p.id)
+              const isSelected = selected.has(p.id)
+              return (
+                <label
+                  key={p.id}
+                  className={`flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted ${
+                    isExisting ? 'cursor-not-allowed opacity-50' : isSelected ? 'bg-primary/5' : ''
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    className="size-3.5 accent-[var(--primary)]"
+                    disabled={isExisting}
+                    checked={isSelected || isExisting}
+                    onChange={() =>
+                      setSelected((prev) => {
+                        const next = new Set(prev)
+                        if (next.has(p.id)) next.delete(p.id)
+                        else next.add(p.id)
+                        return next
+                      })
+                    }
+                  />
+                  <Badge variant="outline" className="shrink-0 px-1.5 text-[10px] text-muted-foreground">
+                    {typeLabel(p.type)}
+                  </Badge>
+                  <span className="min-w-0 flex-1 truncate">{p.title}</span>
+                  <span className="shrink-0 text-[10px] text-muted-foreground">#{p.id}</span>
+                  {isExisting && <span className="shrink-0 text-[10px] text-muted-foreground">已加入</span>}
+                </label>
+              )
+            })
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => props.onOpenChange(false)}>取消</Button>
+          <Button
+            disabled={selected.size === 0 || submitting}
+            onClick={async () => {
+              setSubmitting(true)
+              try {
+                await props.onSubmit([...selected])
+              } finally {
+                setSubmitting(false)
+                setSelected(new Set())
+              }
+            }}
+          >
+            {submitting ? '加入中…' : `加入所选（${selected.size}）`}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
 }
