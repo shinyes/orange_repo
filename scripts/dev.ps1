@@ -1,4 +1,4 @@
-# OrangeRepo dev script: start Go backend (:8080) + Vite frontend (:5173) together.
+# OrangeOJ dev script: start Go backend (:8080) + Vite frontend (:5173) together.
 # Usage: .\scripts\dev.ps1
 # NOTE: kept ASCII-only on purpose - PowerShell 5.1 misparses BOM-less UTF-8 scripts.
 # npm.cmd is used explicitly because Start-Process "npm" resolves to the

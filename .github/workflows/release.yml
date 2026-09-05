@@ -57,7 +57,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # ---------- 主镜像（orangerepo + quiz 双二进制，distroless） ----------
+      # ---------- 主镜像（orangeoj 主站 + quiz 门户双二进制，distroless） ----------
       - name: Extract main image metadata
         id: meta
         uses: docker/metadata-action@v5
@@ -163,8 +163,8 @@ jobs:
             下载附件中的镜像包，在无外网（或无法访问 GHCR）的机器上导入：
 
             ```bash
-            docker load -i orangerepo-*-linux-amd64-image.tar.gz          # 主站 + 刷题服务
-            docker load -i orangerepo-*-judge-linux-amd64-image.tar.gz    # 判题沙箱（有则存在）
+            docker load -i orangeoj-*-linux-amd64-image.tar.gz          # 主站 + 刷题服务
+            docker load -i orangeoj-*-judge-linux-amd64-image.tar.gz    # 判题沙箱（有则存在）
             ```
 
             首次启动默认密码 `123456`，请登录后修改。数据持久化目录：容器内 `/app/data`。

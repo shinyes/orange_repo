@@ -1,4 +1,4 @@
-# OrangeRepo dev script (quiz edition): start main stack (:8080/:5173) + quiz service (:8081/:5174) + judge-runtime (:9090) together.
+# OrangeOJ dev script (quiz edition): start main stack (:8080/:5173) + quiz service (:8081/:5174) + judge-runtime (:9090) together.
 # Usage: .\scripts\dev-quiz.ps1
 # NOTE: kept ASCII-only on purpose - PowerShell 5.1 misparses BOM-less UTF-8 scripts.
 # npm.cmd is used explicitly because Start-Process "npm" resolves to the
@@ -6,7 +6,7 @@
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 
-Write-Host "[dev] starting OrangeRepo backend on :8080 (data dir: $root\data) ..." -ForegroundColor Yellow
+Write-Host "[dev] starting OrangeOJ backend on :8080 (data dir: $root\data) ..." -ForegroundColor Yellow
 $main = Start-Process -FilePath "go" -ArgumentList "run", "." -WorkingDirectory $root -PassThru -NoNewWindow
 
 # Judge runtime: sandbox executor (Linux containers use nsjail; local runs are process-limited, dev only).
@@ -17,7 +17,7 @@ $judge = Start-Process -FilePath "go" -ArgumentList "run", "./cmd/judge-runtime"
 Write-Host "[dev] starting Orange quiz backend on :8081 (same data dir, judge connected) ..." -ForegroundColor Yellow
 $quiz = Start-Process -FilePath "go" -ArgumentList "run", "./cmd/quiz", "-judge-endpoint", "http://127.0.0.1:9090", "-judge-token", "dev-token", "-judge-workers", "2" -WorkingDirectory $root -PassThru -NoNewWindow
 
-Write-Host "[dev] starting OrangeRepo frontend on :5173 (/api proxied to 8080) ..." -ForegroundColor Yellow
+Write-Host "[dev] starting OrangeOJ frontend on :5173 (/api proxied to 8080) ..." -ForegroundColor Yellow
 $webDir = Join-Path $root "web"
 if (-not (Test-Path (Join-Path $webDir "node_modules"))) {
   Write-Host "[dev] web/node_modules missing, running npm install first ..." -ForegroundColor Yellow
@@ -49,7 +49,7 @@ function Wait-Health($url, $name, $n = 60) {
 }
 
 # Wait for both Go backends (compilation takes time; avoids ECONNREFUSED noise in Vite).
-Wait-Health 'http://127.0.0.1:8080/api/health' 'OrangeRepo backend'
+Wait-Health 'http://127.0.0.1:8080/api/health' 'OrangeOJ backend'
 Wait-Health 'http://127.0.0.1:9090/healthz' 'judge runtime'
 Wait-Health 'http://127.0.0.1:8081/api/health' 'Orange quiz backend'
 
