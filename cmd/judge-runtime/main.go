@@ -15,7 +15,7 @@ import (
 	"syscall"
 	"time"
 
-	"orangerepo/internal/judgeserver"
+	"orangeoj/internal/judgeserver"
 )
 
 func main() {

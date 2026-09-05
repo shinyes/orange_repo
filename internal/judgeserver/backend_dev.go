@@ -18,7 +18,7 @@ import (
 	"strings"
 	"time"
 
-	"orangerepo/internal/judge"
+	"orangeoj/internal/judge"
 )
 
 // devBackend 开发受限运行后端。

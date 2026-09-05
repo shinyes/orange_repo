@@ -10,10 +10,10 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
-	"orangerepo/internal/judgeserver"
-	"orangerepo/internal/model"
-	"orangerepo/internal/quizstore"
-	"orangerepo/internal/store"
+	"orangeoj/internal/judgeserver"
+	"orangeoj/internal/model"
+	"orangeoj/internal/quizstore"
+	"orangeoj/internal/store"
 )
 
 func jsonRaw(v string) json.RawMessage { return json.RawMessage(v) }
@@ -86,7 +86,7 @@ func newPortalEnv(t *testing.T) (*fiber.App, map[string]int64, int64, string) {
 	}
 
 	// ---- 阶段 2：quiz 建学生（users 在 quiz.db） ----
-	qs, err := quizstore.Open(dir, filepath.Join(dir, "orangerepo.db"))
+	qs, err := quizstore.Open(dir, filepath.Join(dir, "orangeoj.db"))
 	if err != nil {
 		t.Fatalf("open quiz store: %v", err)
 	}

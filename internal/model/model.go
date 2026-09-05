@@ -1,4 +1,4 @@
-// Package model 定义 OrangeRepo 的全部数据类型与 JSON 形状。
+// Package model 定义 OrangeOJ 的全部数据类型与 JSON 形状。
 // JSON 字段一律 camelCase，与上游 OrangeOJ 保持一致。
 package model
 

@@ -5,10 +5,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"orangerepo/internal/accounts"
-	"orangerepo/internal/model"
-	"orangerepo/internal/quizstore"
-	"orangerepo/internal/store"
+	"orangeoj/internal/accounts"
+	"orangeoj/internal/model"
+	"orangeoj/internal/quizstore"
+	"orangeoj/internal/store"
 )
 
 // newTestEnvironment 建立临时目录：先用主站 store.Open 造题库（含样例题目），
@@ -56,7 +56,7 @@ func newTestEnvironment(t *testing.T) *quizstore.Store {
 	if err := main.Close(); err != nil {
 		t.Fatalf("close main store: %v", err)
 	}
-	qs, err := quizstore.Open(dir, filepath.Join(dir, "orangerepo.db"))
+	qs, err := quizstore.Open(dir, filepath.Join(dir, "orangeoj.db"))
 	if err != nil {
 		t.Fatalf("open quiz store: %v", err)
 	}

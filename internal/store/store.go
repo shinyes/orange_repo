@@ -15,7 +15,7 @@ import (
 	"github.com/google/uuid"
 	_ "modernc.org/sqlite"
 
-	"orangerepo/internal/model"
+	"orangeoj/internal/model"
 )
 
 // ErrNotFound 统一的未找到错误。
@@ -32,7 +32,7 @@ func Open(dataDir string) (*Store, error) {
 	if err := os.MkdirAll(filepath.Join(dataDir, "uploads"), 0o755); err != nil {
 		return nil, fmt.Errorf("create data dir: %w", err)
 	}
-	dsn := "file:" + filepath.ToSlash(filepath.Join(dataDir, "orangerepo.db")) +
+	dsn := "file:" + filepath.ToSlash(filepath.Join(dataDir, "orangeoj.db")) +
 		"?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)"
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {

@@ -6,7 +6,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
-	"orangerepo/internal/accounts"
+	"orangeoj/internal/accounts"
 )
 
 const (

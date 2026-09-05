@@ -5,7 +5,7 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
-	"orangerepo/internal/accounts"
+	"orangeoj/internal/accounts"
 )
 
 func newTestAccounts(t *testing.T) *accounts.Store {

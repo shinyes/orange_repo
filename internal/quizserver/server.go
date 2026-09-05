@@ -12,9 +12,9 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 
-	"orangerepo/internal/accounts"
-	"orangerepo/internal/judge"
-	"orangerepo/internal/quizstore"
+	"orangeoj/internal/accounts"
+	"orangeoj/internal/judge"
+	"orangeoj/internal/quizstore"
 )
 
 // SessionCookie 会话 Cookie 名（与主站 orange_session 隔离）。

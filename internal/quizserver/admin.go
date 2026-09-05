@@ -6,8 +6,8 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
-	"orangerepo/internal/accounts"
-	"orangerepo/internal/quizstore"
+	"orangeoj/internal/accounts"
+	"orangeoj/internal/quizstore"
 )
 
 // ---------- 科目 ----------

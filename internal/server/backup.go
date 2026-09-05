@@ -1,4 +1,4 @@
-// OrangeRepo 全库备份/迁移（backup）：
+// OrangeOJ 全库备份/迁移（backup）：
 //   - 导出：全部题目 + 目录树 + 训练（含章节）/练习 打包为单 ZIP。
 //     包内 problems.json 为全部题目（OrangeOJ 兼容），根另附 orangerepo-backup.json
 //     记录目录/训练/练习结构与题目下标引用（OrangeOJ/旧版导入自然忽略该文件）。
@@ -15,9 +15,9 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
-	"orangerepo/internal/model"
-	"orangerepo/internal/store"
-	"orangerepo/internal/zipio"
+	"orangeoj/internal/model"
+	"orangeoj/internal/store"
+	"orangeoj/internal/zipio"
 )
 
 // BackupJSONName 全库备份清单文件名（位于包根，problems.json 之外）。
@@ -183,7 +183,7 @@ func (s *Server) handleExportBackup(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	return sendZip(c, data, exportFilename("orangerepo_full_backup", ""))
+	return sendZip(c, data, exportFilename("OrangeOJ_full_backup", ""))
 }
 
 // ---------- 导入 ----------
@@ -382,7 +382,7 @@ func (s *Server) handleImportBackup(c *fiber.Ctx) error {
 	}
 	raw, ok := extra[BackupJSONName]
 	if !ok {
-		return respondError(c, fiber.StatusBadRequest, "不是 OrangeRepo 全库备份包（缺少 "+BackupJSONName+"）")
+		return respondError(c, fiber.StatusBadRequest, "不是 OrangeOJ 全库备份包（缺少 "+BackupJSONName+"）")
 	}
 	manifest := &backupManifest{}
 	if err := json.Unmarshal(raw, manifest); err != nil {

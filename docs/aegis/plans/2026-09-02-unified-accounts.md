@@ -4,7 +4,7 @@
 
 ## 1. 目标
 
-主站（OrangeRepo）与刷题服务共享同一账号库（users/sessions 位于 quiz.db）：一套账号、一个密码、一个管理入口；旧主站部署无感迁移。
+主站（OrangeOJ）与刷题服务共享同一账号库（users/sessions 位于 quiz.db）：一套账号、一个密码、一个管理入口；旧主站部署无感迁移。
 
 ## 2. 文件映射
 

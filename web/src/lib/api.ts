@@ -58,7 +58,7 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
   })
   if (!resp.ok) {
     if (resp.status === 401 && !path.startsWith('/api/auth/')) {
-      window.dispatchEvent(new Event('orangerepo:unauthorized'))
+      window.dispatchEvent(new Event('OrangeOJ:unauthorized'))
     }
     let msg = `HTTP ${resp.status}`
     try {

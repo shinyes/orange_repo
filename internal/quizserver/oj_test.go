@@ -13,11 +13,11 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
-	"orangerepo/internal/judge"
-	"orangerepo/internal/judgeserver"
-	"orangerepo/internal/model"
-	"orangerepo/internal/quizstore"
-	"orangerepo/internal/store"
+	"orangeoj/internal/judge"
+	"orangeoj/internal/judgeserver"
+	"orangeoj/internal/model"
+	"orangeoj/internal/quizstore"
+	"orangeoj/internal/store"
 )
 
 // ---------- 复用 server_test.go 的 doJSON/cookieOf/nested ----------
@@ -143,7 +143,7 @@ func newTestOJApp(t *testing.T) (*fiber.App, *Server, map[string]int64, bool) {
 	ids["training"] = trID
 	ids["practice"] = prID
 
-	qs, err := quizstore.Open(dir, filepath.Join(dir, "orangerepo.db"))
+	qs, err := quizstore.Open(dir, filepath.Join(dir, "orangeoj.db"))
 	if err != nil {
 		t.Fatalf("open quiz store: %v", err)
 	}

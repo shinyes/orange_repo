@@ -8,7 +8,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
-	"orangerepo/internal/quizstore"
+	"orangeoj/internal/quizstore"
 )
 
 // spaceLocals key。

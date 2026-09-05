@@ -5,7 +5,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
-	"orangerepo/internal/store"
+	"orangeoj/internal/store"
 )
 
 // handleRenameTag 重命名标签（子树整体搬家）：PATCH /api/tags {from,to} → {updated}。

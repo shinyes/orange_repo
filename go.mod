@@ -1,4 +1,4 @@
-module orangerepo
+module orangeoj
 
 go 1.25.5
 

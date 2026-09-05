@@ -3,7 +3,7 @@ package store
 import (
 	"testing"
 
-	"orangerepo/internal/model"
+	"orangeoj/internal/model"
 )
 
 // 构造：题目集合 + 训练/练习引用关系，删除题册时应级联删除"仅被该题册引用"的题目。

@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"orangerepo/internal/model"
+	"orangeoj/internal/model"
 )
 
 // ---------- 题册目录（可嵌套，训练/练习归属其中） ----------

@@ -10,7 +10,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
-	"orangerepo/internal/accounts"
+	"orangeoj/internal/accounts"
 )
 
 // resolveSpaceCtx 供无 :id 路径参数端点使用：校验 user 是 spaceID 成员或管理员并注入。

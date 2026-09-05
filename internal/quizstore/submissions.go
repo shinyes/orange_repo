@@ -9,7 +9,7 @@ import (
 	"errors"
 	"time"
 
-	"orangerepo/internal/judge"
+	"orangeoj/internal/judge"
 )
 
 // Submission 提交记录（JSON 视图，判题结果完成态）。

@@ -10,8 +10,8 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
-	"orangerepo/internal/judge"
-	"orangerepo/internal/quizstore"
+	"orangeoj/internal/judge"
+	"orangeoj/internal/quizstore"
 )
 
 // ---------- 可见性辅助 ----------

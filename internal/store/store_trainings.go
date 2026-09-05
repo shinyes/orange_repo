@@ -4,7 +4,7 @@ import (
 	"database/sql"
 	"errors"
 
-	"orangerepo/internal/model"
+	"orangeoj/internal/model"
 )
 
 // ---------- 训练计划（章节化题目编组） ----------

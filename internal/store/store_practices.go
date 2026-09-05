@@ -4,7 +4,7 @@ import (
 	"database/sql"
 	"errors"
 
-	"orangerepo/internal/model"
+	"orangeoj/internal/model"
 )
 
 // ---------- 练习（平铺题目编组，含分值） ----------

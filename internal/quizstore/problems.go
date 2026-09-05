@@ -1,4 +1,4 @@
-// RepoReader：以只读模式（mode=ro）访问主站题库数据库 orangerepo.db。
+// RepoReader：以只读模式（mode=ro）访问主站题库数据库 orangeoj.db。
 // 本文件只有 SELECT，绝不迁移、绝不写入主库；标签匹配复用 store.TagMatchesSelected。
 package quizstore
 
@@ -12,7 +12,7 @@ import (
 
 	_ "modernc.org/sqlite"
 
-	"orangerepo/internal/store"
+	"orangeoj/internal/store"
 )
 
 // RepoReader 主库只读句柄。

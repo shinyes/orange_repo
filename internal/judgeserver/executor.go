@@ -23,7 +23,7 @@ import (
 	"strings"
 	"time"
 
-	"orangerepo/internal/judge"
+	"orangeoj/internal/judge"
 )
 
 // sandboxResult 单次进程运行结果。

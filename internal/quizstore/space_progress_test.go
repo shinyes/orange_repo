@@ -6,8 +6,8 @@ package quizstore_test
 import (
 	"testing"
 
-	"orangerepo/internal/accounts"
-	"orangerepo/internal/quizstore"
+	"orangeoj/internal/accounts"
+	"orangeoj/internal/quizstore"
 )
 
 // newProgressStudent 建一名学生，返回其 user_id。

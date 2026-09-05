@@ -3,7 +3,7 @@ package store
 import (
 	"testing"
 
-	"orangerepo/internal/model"
+	"orangeoj/internal/model"
 )
 
 // setupSpaceContentEnv 建域/空间并造 3 道题（含 uuid），返回 spaceID 与题目。

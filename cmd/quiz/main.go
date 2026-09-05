@@ -1,6 +1,6 @@
-// Orange 刷题 — 独立端口刷题服务（与主站 OrangeRepo 共享题库）。
+// OrangeOJ 刷题 — 独立端口刷题服务（与主站 OrangeOJ 共享题库）。
 //
-// 数据边界：只读打开 <data>/orangerepo.db（主站权威题库，绝不写入/迁移）；
+// 数据边界：只读打开 <data>/orangeoj.db（主站权威题库，绝不写入/迁移）；
 // 自有数据（用户/科目/分类/错题/设置）写入 <data>/quiz.db。
 package main
 
@@ -11,17 +11,17 @@ import (
 	"strings"
 	"time"
 
-	"orangerepo/internal/bootstrap"
-	"orangerepo/internal/judge"
-	"orangerepo/internal/quizserver"
-	"orangerepo/internal/quizstore"
+	"orangeoj/internal/bootstrap"
+	"orangeoj/internal/judge"
+	"orangeoj/internal/quizserver"
+	"orangeoj/internal/quizstore"
 )
 
 func main() {
 	addr := flag.String("addr", ":8081", "监听地址")
 	dataDir := flag.String("data", "./data", "数据目录（quiz.db 与上传图片）")
 	webDist := flag.String("web", "./web-quiz/dist", "刷题前端构建产物目录")
-	repoDB := flag.String("repo-db", "", "主站题库数据库路径（默认 <data>/orangerepo.db）")
+	repoDB := flag.String("repo-db", "", "主站题库数据库路径（默认 <data>/orangeoj.db）")
 	judgeEndpoint := flag.String("judge-endpoint", "", "judge-runtime 地址（默认 http://judge-runtime:9090；留空则禁用判题入队）")
 	judgeToken := flag.String("judge-token", "", "与 judge-runtime 共享的评测 token（留空则禁用判题入队）")
 	judgeWorkers := flag.Int("judge-workers", 2, "判题队列 worker 数")
@@ -34,7 +34,7 @@ func main() {
 
 	repoPath := *repoDB
 	if repoPath == "" {
-		repoPath = filepath.Join(*dataDir, "orangerepo.db")
+		repoPath = filepath.Join(*dataDir, "orangeoj.db")
 	}
 
 	qs, err := quizstore.Open(*dataDir, repoPath)

@@ -8,8 +8,8 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
-	"orangerepo/internal/accounts"
-	"orangerepo/internal/quizstore"
+	"orangeoj/internal/accounts"
+	"orangeoj/internal/quizstore"
 )
 
 // ---------- 主库目录浏览（只读） ----------

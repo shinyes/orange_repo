@@ -1,6 +1,6 @@
-# OrangeRepo 实施计划
+# OrangeOJ 实施计划
 
-日期：2026-08-22 · 规格：`docs/aegis/specs/2026-08-22-orangerepo-design.md`（本计划引用其全部契约，不重复正文）
+日期：2026-08-22 · 规格：`docs/aegis/specs/2026-08-22-OrangeOJ-design.md`（本计划引用其全部契约，不重复正文）
 
 ```text
 TDD Route:

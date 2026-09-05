@@ -14,10 +14,10 @@
 
 ## Baseline ReadSet Hint
 - 上游 OrangeOJ main 源码快照（已下载 $TEMP\OrangeOJ-src，已读：queue.go/runner.go/executor.go/judgeserver/server.go/judge-runtime main/db.go 判题表/training_handlers/practice_handlers/submission_handlers/CodingPage.jsx/api.js/routes.go/Dockerfile.judge/compose）
-- 本仓库：quiz-service spec+plan+代码（已读）、orangerepo spec（已读）、store/server/accounts/quizstore/quizserver/web-quiz（已读）
+- 本仓库：quiz-service spec+plan+代码（已读）、OrangeOJ spec（已读）、store/server/accounts/quizstore/quizserver/web-quiz（已读）
 
 ## Impact Statement
-- 影响层：新增 3 个 Go 包 + 1 个 cmd + web-quiz 大改 + 部署文件 + 文档；主站（orangerepo 主库/主进程）零改动
+- 影响层：新增 3 个 Go 包 + 1 个 cmd + web-quiz 大改 + 部署文件 + 文档；主站（OrangeOJ 主库/主进程）零改动
 - 不变式：不写主库（mode=ro 维持）；一期路由零改动；判题安全隔离只在 judge-runtime（生产 Linux nsjail）；Windows 后端仅供开发
 - 风险：Windows 无 nsjail → 执行器双后端（Windows 受限运行仅开发）；本机无 g++ → 需先装 mingw（choco）；快照 vs 动态读取边界需测试锁定；web-quiz 前端较大（做题页复刻上游 CodingPage 子集）
 

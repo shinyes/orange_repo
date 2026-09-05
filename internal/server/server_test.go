@@ -18,9 +18,9 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"golang.org/x/crypto/bcrypt"
 
-	"orangerepo/internal/accounts"
-	"orangerepo/internal/store"
-	"orangerepo/internal/zipio"
+	"orangeoj/internal/accounts"
+	"orangeoj/internal/store"
+	"orangeoj/internal/zipio"
 )
 
 func newTestApp(t *testing.T) (*fiber.App, *store.Store) {

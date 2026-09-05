@@ -5,7 +5,7 @@ package store
 import (
 	"database/sql"
 
-	"orangerepo/internal/model"
+	"orangeoj/internal/model"
 )
 
 // ListTrainingsInDomain 返回含至少一道该域题目的训练模板（仓库页按域选模板用）。

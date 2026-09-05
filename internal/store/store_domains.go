@@ -1,5 +1,5 @@
 // 域 / 空间 / 空间成员数据层（OJ 重构）。
-// 数据物理位于主库 orangerepo.db；users 账号在 quiz.db（accounts 包），
+// 数据物理位于主库 orangeoj.db；users 账号在 quiz.db（accounts 包），
 // space_members.user_id 为逻辑引用（无跨库 FK）。
 package store
 
@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"strings"
 
-	"orangerepo/internal/model"
+	"orangeoj/internal/model"
 )
 
 // ---------- 域 ----------

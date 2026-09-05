@@ -1,5 +1,5 @@
 // 域上下文：登录会话 + 当前域。
-// - global_admin：无固定域；从 localStorage('orangerepo:domain') 恢复上次选择，未选则为 null
+// - global_admin：无固定域；从 localStorage('OrangeOJ:domain') 恢复上次选择，未选则为 null
 //   （仓库三栏在未选域时提示选域）。选择后持久化，并同步给 api 模块（所有带域请求附加 domainId=）。
 // - domain_admin：锁定 user.domainId，无需选择，登录即生效。
 // - member：后端登录已拒，不会到达此处。
@@ -8,7 +8,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { api, setDomain } from './api'
 import type { MeUser } from './types'
 
-const DOMAIN_STORAGE_KEY = 'orangerepo:domain'
+const DOMAIN_STORAGE_KEY = 'OrangeOJ:domain'
 
 type SessionStatus = 'loading' | 'anon' | 'authed'
 
@@ -104,8 +104,8 @@ export function DomainProvider({ children }: { children: ReactNode }) {
       setDomain(null)
       setStatus('anon')
     }
-    window.addEventListener('orangerepo:unauthorized', on401)
-    return () => window.removeEventListener('orangerepo:unauthorized', on401)
+    window.addEventListener('OrangeOJ:unauthorized', on401)
+    return () => window.removeEventListener('OrangeOJ:unauthorized', on401)
   }, [load])
 
   const refresh = useCallback(async () => {

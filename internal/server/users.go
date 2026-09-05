@@ -7,7 +7,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
-	"orangerepo/internal/accounts"
+	"orangeoj/internal/accounts"
 )
 
 // handleCreateUser POST /api/admin/users {username, password} → 新建空间成员（member）。

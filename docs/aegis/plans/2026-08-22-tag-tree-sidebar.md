@@ -1,6 +1,6 @@
 # 实施计划：斜杠嵌套标签树侧边栏（v1.1.0）
 
-日期：2026-08-22 · 上游规格：`docs/aegis/specs/2026-08-22-orangerepo-design.md`（已更新至修订 b）
+日期：2026-08-22 · 上游规格：`docs/aegis/specs/2026-08-22-OrangeOJ-design.md`（已更新至修订 b）
 执行路由：inline · TDD Route：Mode off / Decision skipped（无严格 TDD 授权；采用实现后回归验证姿态）
 
 ## Goal

@@ -1,4 +1,4 @@
-﻿package quizserver
+package quizserver
 
 import (
 	"log"
@@ -6,7 +6,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
-	"orangerepo/internal/accounts"
+	"orangeoj/internal/accounts"
 )
 
 // BootstrapAdmin / BootstrapPassword 首次启动的默认管理员账号。

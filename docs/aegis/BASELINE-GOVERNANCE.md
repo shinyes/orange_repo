@@ -1,10 +1,10 @@
-# Baseline Governance — OrangeRepo
+# Baseline Governance — OrangeOJ
 
 ## Baseline Roles
-- Product/Requirement Baseline：`docs/aegis/specs/2026-08-22-orangerepo-design.md` §1/§6/§7（范围、信息架构、验收）
+- Product/Requirement Baseline：`docs/aegis/specs/2026-08-22-OrangeOJ-design.md` §1/§6/§7（范围、信息架构、验收）
 - Architecture/Runtime Boundary Baseline：spec §2–§5（OrangeOJ 兼容格式、数据模型、API 契约）
 - **OJ 判题边界 Baseline（2026-09-03 修订）**：`docs/aegis/specs/2026-09-03-orangeroj-design.md` ——
-  用户决策将 OrangeRepo 扩展为支持判题的 OrangeOJ：独立 judge-runtime（仅 Python+C++）、
+  用户决策将 OrangeOJ 扩展为支持判题的 OrangeOJ：独立 judge-runtime（仅 Python+C++）、
   布置体系（训练/练习布置给学生）、提交/进度/统计。**原不变式 3「非 OJ 功能（判题/提交/成员/进度）永不进入范围」已被本次用户决策推翻并退役**，
   判题类功能的准入边界改由本基线条目 + orangeroj spec §1 非目标约束。
 

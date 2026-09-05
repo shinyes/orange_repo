@@ -7,7 +7,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
-	"orangerepo/internal/store"
+	"orangeoj/internal/store"
 )
 
 // requireSpaceAdminSession 当前用户可管理目标空间（从 URL spaceId 或 body 校验）——

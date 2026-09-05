@@ -1,4 +1,4 @@
-# OrangeRepo API 参考（面向 AI / 程序化调用）
+# OrangeOJ API 参考（面向 AI / 程序化调用）
 
 单机题库管理应用：Go + Fiber + SQLite。除登录接口外，全部请求需要会话 Cookie。
 基础地址以 `https://host` 表示（本地默认 `http://localhost:8080`）。

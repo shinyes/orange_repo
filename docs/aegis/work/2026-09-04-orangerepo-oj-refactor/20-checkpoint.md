@@ -1,6 +1,6 @@
 # OrangeOJ 重构 —— 检查点（全部阶段完成 2026-09-05）
 
-规格：docs/aegis/specs/2026-09-04-orangerepo-oj-refactor-design.md（含排行榜/刷题，系统命名 OrangeOJ；
+规格：docs/aegis/specs/2026-09-04-OrangeOJ-oj-refactor-design.md（含排行榜/刷题，系统命名 OrangeOJ；
 重构总原则：除全仓导入导出外不向后兼容、可维护性优先）
 
 ## ✅ 全部完成（本地 main 领先 origin 16 commits，全测试绿 + 三进程 E2E 通过）

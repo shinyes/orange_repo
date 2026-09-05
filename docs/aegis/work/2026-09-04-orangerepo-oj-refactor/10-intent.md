@@ -1,8 +1,8 @@
-# OrangeRepo OJ 重构 —— 任务意图与检查点
+# OrangeOJ OJ 重构 —— 任务意图与检查点
 
 任务：重构 OrangeOJ 系统为 域(domain)→仓库(仓库页=原主站)→空间(space) 三级模型，
 空间训练（客观题限次标色）/练习（整卷交卷），系统管理员管域、域管理员管域内空间，
-题目 UUIDv7。规格：docs/aegis/specs/2026-09-04-orangerepo-oj-refactor-design.md（已确认）。
+题目 UUIDv7。规格：docs/aegis/specs/2026-09-04-OrangeOJ-oj-refactor-design.md（已确认）。
 
 ## 基线（Backend/frontend 调研已完成，见 agent 报告）
 - 双库双进程：orangerepo.db（题目/训练/练习/目录）+ quiz.db（账号/学生数据/判题）

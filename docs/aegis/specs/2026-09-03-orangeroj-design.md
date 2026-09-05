@@ -1,7 +1,7 @@
 # OrangeOJ（判题扩展）设计规格
 
 日期：2026-09-03 · 状态：已确认（用户逐项拍板：独立 judge-runtime 进程、无题库浏览仅布置驱动、run/test/submit 全做、接受 Docker 三服务改造、布置模仿 OrangeOJ 空间语义 = 刷题服务内布置给全体学生/指定学生、整份训练/练习布置且做题页内联全部题型、可见性 = 学生历史 + 管理端汇总）
-前置规格：`docs/aegis/specs/2026-08-29-quiz-service-design.md`（刷题服务一期）、`docs/aegis/specs/2026-08-22-orangerepo-design.md`（主站题库格式）
+前置规格：`docs/aegis/specs/2026-08-29-quiz-service-design.md`（刷题服务一期）、`docs/aegis/specs/2026-08-22-OrangeOJ-design.md`（主站题库格式）
 上游实现基线：https://github.com/shinyes/OrangeOJ main 分支（2026-09-03 抓取源码快照）`backend/internal/judge/queue.go`、`backend/internal/judge/runner.go`、`backend/internal/judgeserver/executor.go`、`backend/internal/judgeserver/server.go`、`backend/internal/api/submission_handlers.go`、`backend/internal/api/training_handlers.go`、`backend/internal/api/practice_handlers.go`、`backend/internal/db/db.go`、`backend/cmd/judge-runtime/main.go`、`Dockerfile.judge`、`frontend/src/pages/CodingPage.jsx`
 
 ## 0. 本规格如何“模仿 OrangeOJ”
@@ -253,7 +253,7 @@ ORANGEOJ_JUDGE_READ_TIMEOUT_SEC（默认 15） / WRITE_TIMEOUT_SEC（默认 300�
 
 ### 7.3 Docker/CI
 - 新增 `Dockerfile.judge`：build stage golang:1.25-alpine 交叉编译 cmd/judge-runtime；runtime ubuntu:24.04 + build-essential(g++) + python3 + nsjail（编译自源码，复刻上游 Dockerfile.judge）＋ judge-runtime；EXPOSE 9090
-- 主 Dockerfile 维持 distroless 单镜像（orangerepo + quiz）；release.yml 不变（judge 镜像为独立 Dockerfile，由新 workflow 或 compose 构建指引）——**本期 compose 引用本地构建镜像 orangeoj-judge:local（同上游 docker-compose.build.yml），不自动推送 GHCR**（保持 release 流程不扩面，文档写明）
+- 主 Dockerfile 维持 distroless 单镜像（OrangeOJ + quiz）；release.yml 不变（judge 镜像为独立 Dockerfile，由新 workflow 或 compose 构建指引）——**本期 compose 引用本地构建镜像 orangeoj-judge:local（同上游 docker-compose.build.yml），不自动推送 GHCR**（保持 release 流程不扩面，文档写明）
 - deploy/docker-compose.yml：加 orangejudge 服务（build: Dockerfile.judge、privileged、cgroup host、cap_add SYS_ADMIN/SYS_RESOURCE/SYS_PTRACE、security_opt unconfined、volumes /sys/fs/cgroup、tmpfs /tmp、healthcheck /healthz）；orangequiz 增 `ORANGEOJ_JUDGE_ENDPOINT`/token/workers 环境
 - scripts/dev-quiz.ps1：增加 judge-runtime 进程（token=dev 固定；无 nsjail 时日志提示降级）；Dev 模式 Windows 后端不需要 docker
 

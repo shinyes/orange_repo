@@ -1,4 +1,4 @@
-// OrangeRepo — OrangeOJ 兼容的题库管理应用。
+// OrangeOJ — OrangeOJ 兼容的题库管理应用。
 //
 // 单进程：提供 /api REST 接口与 web/dist 静态资源。
 package main
@@ -9,10 +9,10 @@ import (
 	"os"
 	"path/filepath"
 
-	"orangerepo/internal/accounts"
-	"orangerepo/internal/bootstrap"
-	"orangerepo/internal/server"
-	"orangerepo/internal/store"
+	"orangeoj/internal/accounts"
+	"orangeoj/internal/bootstrap"
+	"orangeoj/internal/server"
+	"orangeoj/internal/store"
 )
 
 func main() {
@@ -58,7 +58,7 @@ func main() {
 	}
 
 	app := server.New(st, srv.Accounts, srv.UploadsDir, srv.WebDist)
-	log.Printf("[START] OrangeRepo 监听 http://localhost%s （默认密码 123456，请登录后修改）", *addr)
+	log.Printf("[START] OrangeOJ 监听 http://localhost%s （默认密码 123456，请登录后修改）", *addr)
 	if err := app.Listen(*addr); err != nil {
 		log.Fatalf("[FATAL] 服务退出: %v", err)
 	}

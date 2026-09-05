@@ -4,7 +4,7 @@ import (
 	"math/rand"
 	"testing"
 
-	"orangerepo/internal/model"
+	"orangeoj/internal/model"
 )
 
 // 标签计数的暴力一致性校验：每个候选的 count 应等于「基底过滤 + 仅该标签」的题目列表长度；

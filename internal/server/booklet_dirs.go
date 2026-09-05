@@ -5,8 +5,8 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
-	"orangerepo/internal/model"
-	"orangerepo/internal/store"
+	"orangeoj/internal/model"
+	"orangeoj/internal/store"
 )
 
 // ---------- 题册目录（可嵌套） ----------

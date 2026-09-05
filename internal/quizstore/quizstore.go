@@ -2,7 +2,7 @@
 //
 //   - quiz.db：刷题服务自有数据（科目、分类、错题、全局设置）+ 共享账号表（users/sessions，
 //     表结构与账号/会话操作的唯一 owner 是 internal/accounts，本包经 Accounts 字段访问）；
-//   - orangerepo.db：只读访问主站题库（见 problems.go 的 RepoReader）。
+//   - orangeoj.db：只读访问主站题库（见 problems.go 的 RepoReader）。
 //
 // 标签匹配语义复用 internal/store.TagMatchesSelected（唯一权威实现，不重复发明）。
 package quizstore
@@ -19,8 +19,8 @@ import (
 
 	_ "modernc.org/sqlite"
 
-	"orangerepo/internal/accounts"
-	"orangerepo/internal/store"
+	"orangeoj/internal/accounts"
+	"orangeoj/internal/store"
 )
 
 // ErrNotFound 统一的未找到错误。

@@ -13,9 +13,9 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
-	"orangerepo/internal/model"
-	"orangerepo/internal/quizstore"
-	"orangerepo/internal/store"
+	"orangeoj/internal/model"
+	"orangeoj/internal/quizstore"
+	"orangeoj/internal/store"
 )
 
 // newTestQuizApp 建立临时环境：主库（含样例题目）→ 刷题服务（bootstrap 管理员）。
@@ -44,7 +44,7 @@ func newTestQuizApp(t *testing.T) *fiber.App {
 	if err := main.Close(); err != nil {
 		t.Fatalf("close main store: %v", err)
 	}
-	qs, err := quizstore.Open(dir, filepath.Join(dir, "orangerepo.db"))
+	qs, err := quizstore.Open(dir, filepath.Join(dir, "orangeoj.db"))
 	if err != nil {
 		t.Fatalf("open quiz store: %v", err)
 	}

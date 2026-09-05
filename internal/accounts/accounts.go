@@ -1,4 +1,4 @@
-// Package accounts 是主站（OrangeRepo）与刷题服务（Orange quiz）共享的账号权威库：
+// Package accounts 是主站（OrangeOJ）与刷题服务（Orange quiz）共享的账号权威库：
 //
 //   - users/sessions 表物理位于 quiz.db（两个服务共享同一数据目录）；
 //   - 本包是这些表迁移与全部用户/会话操作的唯一 owner；

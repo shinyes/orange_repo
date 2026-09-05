@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"orangerepo/internal/judge"
+	"orangeoj/internal/judge"
 )
 
 // Config judge-runtime 配置。

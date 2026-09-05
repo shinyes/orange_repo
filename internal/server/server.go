@@ -11,8 +11,8 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 
-	"orangerepo/internal/accounts"
-	"orangerepo/internal/store"
+	"orangeoj/internal/accounts"
+	"orangeoj/internal/store"
 )
 
 // SessionCookie 会话 Cookie 名。

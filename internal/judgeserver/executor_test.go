@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"orangerepo/internal/judge"
+	"orangeoj/internal/judge"
 )
 
 func newTestExecutor(t *testing.T) *Executor {

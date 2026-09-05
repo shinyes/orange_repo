@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"orangerepo/internal/model"
+	"orangeoj/internal/model"
 )
 
 func newTestStore(t *testing.T) *Store {
@@ -353,7 +353,7 @@ func mustFind(t *testing.T, s *Store, title string) int64 {
 // 数据完好、目录结构移除。
 func TestMigrateLegacyDirectories(t *testing.T) {
 	dir := t.TempDir()
-	dbPath := "file:" + filepath.ToSlash(filepath.Join(dir, "orangerepo.db"))
+	dbPath := "file:" + filepath.ToSlash(filepath.Join(dir, "orangeoj.db"))
 	legacy, err := sql.Open("sqlite", dbPath)
 	if err != nil {
 		t.Fatal(err)

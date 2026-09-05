@@ -10,9 +10,9 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
-	"orangerepo/internal/accounts"
-	"orangerepo/internal/model"
-	"orangerepo/internal/store"
+	"orangeoj/internal/accounts"
+	"orangeoj/internal/model"
+	"orangeoj/internal/store"
 )
 
 // domainScope 解析请求的域作用域：

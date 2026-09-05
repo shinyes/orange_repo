@@ -5,7 +5,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
-	"orangerepo/internal/quizstore"
+	"orangeoj/internal/quizstore"
 )
 
 // ---------- 选题列表 ----------

@@ -61,9 +61,9 @@ export function TagFilterColumn({ onLogout, onOpenSettings }: { onLogout: () => 
     <div className="flex h-full flex-col bg-sidebar">
       {/* 头部：品牌 + 角色/域 + 管理入口 */}
       <div className="flex items-center gap-1.5 px-3 pt-3">
-        <img src="/favicon.png" alt="OrangeRepo" className="size-8 rounded-lg" />
+        <img src="/favicon.png" alt="OrangeOJ" className="size-8 rounded-lg" />
         <div className="min-w-0 flex-1 leading-tight">
-          <div className="truncate text-sm font-semibold">OrangeRepo</div>
+          <div className="truncate text-sm font-semibold">OrangeOJ</div>
           <div className="truncate text-[11px] text-muted-foreground">
             {isGlobal ? '系统管理员' : '域管理员'}{!noDomain && domainId != null && ` · 域 #${domainId}`}
           </div>
@@ -318,7 +318,7 @@ const TAG_SEARCH_THRESHOLD = 20
 
 type TagSortMode = 'count' | 'name' | 'manual'
 type TagDropMode = 'child' | 'before' | 'after'
-const TAG_SORT_KEY = 'orangerepo:tag-sort'
+const TAG_SORT_KEY = 'OrangeOJ:tag-sort'
 
 function labelOf(path: string): string {
   return path.slice(path.lastIndexOf('/') + 1)

@@ -3,7 +3,7 @@ package store
 import (
 	"testing"
 
-	"orangerepo/internal/model"
+	"orangeoj/internal/model"
 )
 
 func TestBookletDirectories(t *testing.T) {
