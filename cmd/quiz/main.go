@@ -1,7 +1,7 @@
 // OrangeOJ 刷题 — 独立端口刷题服务（与主站 OrangeOJ 共享题库）。
 //
 // 数据边界：只读打开 <data>/orangeoj.db（主站权威题库，绝不写入/迁移）；
-// 自有数据（用户/科目/分类/错题/设置）写入 <data>/quiz.db。
+// 自有数据（判题 submissions/judge_jobs/progress、空间作答、settings）写入 <data>/quiz.db。
 package main
 
 import (

@@ -3,10 +3,10 @@
 兼容 [OrangeOJ](https://github.com/shinyes/OrangeOJ) 的题库管理与**判题** Web 应用，由「OrangeOJ 题库 + Orange 刷题」扩展而来：
 
 - **主站**（:8080）：题库管理 —— 斜杠嵌套标签树、题面+答案同屏编辑、训练/练习编制、ZIP 双向导入导出；
-- **刷题服务 / OJ**（:8081）：随机刷题 + 错题集（一期），以及**训练/练习布置**与**编程题判题**（本期新增）；
+- **刷题服务 / OJ**（:8081）：空间化做题门户（训练/练习/刷题/排行榜）+ 编程题判题；
 - **判题沙箱 judge-runtime**（:9090）：真正执行学生代码的独立服务，**仅支持 Python 与 C++**（nsjail 隔离）。
 
-实现方式模仿上游 OrangeOJ（判题队列/评测运行器/布置语义均以其源码为基线，差异仅保留 Python+C++、去掉空间/多用户维度）。
+实现方式模仿上游 OrangeOJ（判题队列/评测运行器以其源码为基线，差异仅保留 Python+C++）。
 
 ## 技术栈
 
@@ -101,29 +101,29 @@ POST /api/import?mode=…       GET  /api/export/problems | trainings/:id | prac
 CRUD /api/trainings · chapters · items · /folder ； CRUD /api/practices · practice-items · /folder
 ```
 
-刷题服务（一期，`docs/aegis/specs/2026-08-29-quiz-service-design.md` §5）：
+刷题服务（门户 + 判题，契约见 `docs/aegis/specs/2026-09-04-orangerepo-oj-refactor-design.md`）：
 
 ```
 POST /api/auth/login|logout   GET /api/auth/me      PUT /api/auth/password
-GET /api/quiz/subjects        POST /api/quiz/round | submit | wrong-round      GET /api/quiz/wrong-summary
-GET/POST /api/admin/subjects · categories · students · settings …
-```
-
-**OJ 判题与布置（本期新增，契约见 `docs/aegis/specs/2026-09-03-orangeroj-design.md` §5）**：
-
-```
-学生端：GET  /api/oj/assigned           训练/练习任务列表（可见性 = 发布 + 全体/定向）
-        GET  /api/oj/training|practice/:id      任务详情（章节/题单 + 完成态）
-        GET  /api/oj/problem/:id                题目正文（测试点/答案/题解永不下发）
-        POST /api/oj/problem/:id/run|test|submit      {language, sourceCode[, inputData]} → submissionId
-        POST /api/oj/problem/:id/objective-submit     {answer} → 同步判定（客观题）
-        GET  /api/oj/submission/:id/poll             轮询结果     GET /api/oj/problem/:id/submissions 历史
-管理端：GET  /api/admin/repo-trainings|practices[/:id]  主库目录浏览
-        CRUD /api/admin/assignments[/:id]               布置（发布/撤回/删除）
-        PUT  /api/admin/assignments/:id/students        定向学生     GET …/students
-        GET  /api/admin/assignments/:id/stats           每题通过人数/提交数
+GET  /api/portal/spaces                                    我的空间（多空间切换）
+GET  /api/portal/space/:id/home                            空间首页三区概览
+GET  /api/portal/space/:id/training/:tid                   训练详情（客观题限次/锁定态）
+POST /api/portal/space/:id/training/:tid/answer            训练客观题作答（限次）
+GET  /api/portal/space/:id/practice/:pid                   练习详情
+POST /api/portal/space/:id/practice/:pid/submit            练习整卷交卷
+GET  /api/portal/space/:id/practice/:pid/submissions       交卷历史
+GET  /api/portal/space/:id/quizzes                         空间刷题项目列表
+GET  /api/portal/quiz/:qid/problem    POST /api/portal/quiz/:qid/answer   刷题抽题/作答
+GET  /api/portal/rank?domainId=                           域排行榜（uuid 去重通过数）
+GET  /api/oj/problem/:id                题目正文（测试点/答案/题解永不下发；可见性=空间域）
+POST /api/oj/problem/:id/run|test|submit      {language, sourceCode[, inputData]} → submissionId
+POST /api/oj/problem/:id/objective-submit     {answer} → 同步判定（客观题）
+GET  /api/oj/submission/:id/poll             轮询结果     GET /api/oj/problem/:id/submissions 历史
 judge-runtime：POST /internal/judge/execute（X-Judge-Token）  GET /healthz
 ```
+
+题目可见性统一为**空间模型**：用户加入的空间所在域包含该题即可见（空间训练/练习/刷题引用域内题目）。
+管理端（域管理员/空间管理、成员维护、训练/练习/刷题项目编制）位于主站 `internal/server`（`/api/admin/domains|spaces|users` 等）。
 
 ## 项目结构
 
@@ -134,8 +134,8 @@ cmd/judge-runtime/       judge-runtime 入口（环境变量配置，:9090）
 internal/model           数据模型与 JSON 形状
 internal/store           SQLite 迁移与查询（主库 orangeoj.db）
 internal/accounts        共享账号库（users/sessions，主站与刷题服务统一账号唯一 owner）
-internal/quizstore       刷题数据层：quiz.db（科目/错题/提交/队列/进度/布置）+ 主库只读 reader
-internal/quizserver      刷题 Fiber 路由与 OJ API（/api/quiz /api/oj /api/admin/assignments）
+internal/quizstore       刷题数据层：quiz.db（判题 submissions/judge_jobs/progress + 空间作答三表）+ 主库只读 reader
+internal/quizserver      刷题 Fiber 路由（/api/auth /api/portal /api/oj）
 internal/judge           判题编排（队列/HTTPRunner/类型），迁移自上游 queue.go/runner.go
 internal/judgeserver     评测执行器（Python/C++）+ 沙箱后端（Linux nsjail / 开发受限运行）+ HTTP 服务
 internal/zipio           OrangeOJ ZIP 兼容层
