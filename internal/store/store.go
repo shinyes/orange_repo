@@ -138,6 +138,10 @@ func (s *Store) migrate() error {
 	if err := s.migrateDomains(); err != nil {
 		return err
 	}
+	// 空间内容（空间训练/练习/刷题/排行榜通过记录）
+	if err := s.migrateSpaceContent(); err != nil {
+		return err
+	}
 	// 题目归属域：存量题归入默认域
 	if err := s.ensureColumn("problems", "domain_id", `domain_id INTEGER REFERENCES domains(id) ON DELETE CASCADE`); err != nil {
 		return err

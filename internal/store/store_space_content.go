@@ -1,0 +1,670 @@
+// 空间内容数据层：空间训练（章节+条目，客观题限次）、空间练习（整卷交卷）、
+// 空间刷题项目、学生通过记录（uuid 去重，排行榜）。
+package store
+
+import (
+	"database/sql"
+	"encoding/json"
+	"errors"
+)
+
+// ---------- 空间训练 ----------
+
+// SpaceTraining 空间训练视图（含题量）。
+type SpaceTraining struct {
+	ID           int64  `json:"id"`
+	SpaceID      int64  `json:"spaceId"`
+	Title        string `json:"title"`
+	Description  string `json:"description"`
+	Tags         []string `json:"tags"`
+	MaxAttempts  int    `json:"maxAttempts"`
+	ProblemCount int    `json:"problemCount"`
+}
+
+// SpaceChapter 空间训练章节（含条目）。
+type SpaceChapter struct {
+	ID        int64             `json:"id"`
+	TrainingID int64            `json:"trainingId"`
+	Title     string            `json:"title"`
+	OrderNo   int               `json:"orderNo"`
+	Items     []SpaceChapterItem `json:"items"`
+}
+
+// SpaceChapterItem 章节条目。
+type SpaceChapterItem struct {
+	ID           int64  `json:"id"`
+	ChapterID    int64  `json:"chapterId"`
+	ProblemID    int64  `json:"problemId"`
+	OrderNo      int    `json:"orderNo"`
+	ProblemTitle string `json:"problemTitle,omitempty"`
+	ProblemType  string `json:"problemType,omitempty"`
+	ProblemUUID  string `json:"problemUuid,omitempty"`
+}
+
+// CreateSpaceTraining 建空间训练（默认 max_attempts=3；0=不限）。
+func (s *Store) CreateSpaceTraining(spaceID int64, title, description string, tags []string, maxAttempts int) (int64, error) {
+	if maxAttempts <= 0 {
+		maxAttempts = 3
+	}
+	res, err := s.DB.Exec(`INSERT INTO space_trainings(space_id,title,description,tags_json,max_attempts)
+		VALUES(?,?,?,?,?)`, spaceID, title, description, encodeTags(tags), maxAttempts)
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+
+// ListSpaceTrainings 空间内训练列表。
+func (s *Store) ListSpaceTrainings(spaceID int64) ([]SpaceTraining, error) {
+	rows, err := s.DB.Query(`SELECT t.id,t.space_id,t.title,t.description,t.tags_json,t.max_attempts,
+		(SELECT COUNT(*) FROM space_training_items i JOIN space_training_chapters c ON i.chapter_id=c.id WHERE c.training_id=t.id)
+		FROM space_trainings t WHERE t.space_id=? ORDER BY t.id`, spaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []SpaceTraining
+	for rows.Next() {
+		var t SpaceTraining
+		var tags string
+		if err := rows.Scan(&t.ID, &t.SpaceID, &t.Title, &t.Description, &tags, &t.MaxAttempts, &t.ProblemCount); err != nil {
+			return nil, err
+		}
+		t.Tags = decodeTags(tags)
+		out = append(out, t)
+	}
+	return out, rows.Err()
+}
+
+// GetSpaceTraining 取训练（含章节/条目题目信息）。
+func (s *Store) GetSpaceTraining(id int64) (*SpaceTraining, []SpaceChapter, error) {
+	var t SpaceTraining
+	var tags string
+	err := s.DB.QueryRow(`SELECT t.id,t.space_id,t.title,t.description,t.tags_json,t.max_attempts,
+		(SELECT COUNT(*) FROM space_training_items i JOIN space_training_chapters c ON i.chapter_id=c.id WHERE c.training_id=t.id)
+		FROM space_trainings t WHERE t.id=?`, id).
+		Scan(&t.ID, &t.SpaceID, &t.Title, &t.Description, &tags, &t.MaxAttempts, &t.ProblemCount)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, nil, err
+	}
+	t.Tags = decodeTags(tags)
+	chapters, err := s.ListSpaceChapters(id)
+	if err != nil {
+		return nil, nil, err
+	}
+	return &t, chapters, nil
+}
+
+// UpdateSpaceTrainingMeta 更新训练名称/描述/标签/上限。
+func (s *Store) UpdateSpaceTrainingMeta(id int64, title, description string, tags []string, maxAttempts int) error {
+	if maxAttempts <= 0 {
+		maxAttempts = 3
+	}
+	res, err := s.DB.Exec(`UPDATE space_trainings SET title=?,description=?,tags_json=?,max_attempts=? WHERE id=?`,
+		title, description, encodeTags(tags), maxAttempts, id)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// DeleteSpaceTraining 删训练（级联章节/条目/尝试记录）。
+func (s *Store) DeleteSpaceTraining(id int64) error {
+	res, err := s.DB.Exec(`DELETE FROM space_trainings WHERE id=?`, id)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// CreateSpaceChapter 训练加章节（自动排末尾）。
+func (s *Store) CreateSpaceChapter(trainingID int64, title string) (int64, error) {
+	res, err := s.DB.Exec(`INSERT INTO space_training_chapters(training_id,title,order_no)
+		SELECT ?,?,COALESCE(MAX(order_no),0)+1 FROM space_training_chapters WHERE training_id=?`,
+		trainingID, title, trainingID)
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+
+// RenameSpaceChapter 章节改名。
+func (s *Store) RenameSpaceChapter(id int64, title string) error {
+	res, err := s.DB.Exec(`UPDATE space_training_chapters SET title=? WHERE id=?`, title, id)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// DeleteSpaceChapter 删章节（级联条目）。
+func (s *Store) DeleteSpaceChapter(id int64) error {
+	res, err := s.DB.Exec(`DELETE FROM space_training_chapters WHERE id=?`, id)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// AddSpaceChapterItems 章节追加题目（跳过不存在的题；返回加入的 item id）。
+func (s *Store) AddSpaceChapterItems(chapterID int64, problemIDs []int64) ([]int64, error) {
+	var out []int64
+	for _, pid := range problemIDs {
+		res, err := s.DB.Exec(`INSERT INTO space_training_items(chapter_id,problem_id,order_no)
+			SELECT ?,?,COALESCE(MAX(order_no),0)+1 FROM space_training_items WHERE chapter_id=?`,
+			chapterID, pid, chapterID)
+		if err != nil {
+			return nil, err
+		}
+		id, _ := res.LastInsertId()
+		out = append(out, id)
+	}
+	return out, nil
+}
+
+// RemoveSpaceChapterItem 从章节移除条目。
+func (s *Store) RemoveSpaceChapterItem(itemID int64) error {
+	res, err := s.DB.Exec(`DELETE FROM space_training_items WHERE id=?`, itemID)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// ListSpaceChapters 训练全部章节（含条目题目信息，LEFT JOIN problems 读 title/type/uuid）。
+func (s *Store) ListSpaceChapters(trainingID int64) ([]SpaceChapter, error) {
+	rows, err := s.DB.Query(`SELECT id,title,order_no FROM space_training_chapters
+		WHERE training_id=? ORDER BY order_no,id`, trainingID)
+	if err != nil {
+		return nil, err
+	}
+	var chapters []SpaceChapter
+	for rows.Next() {
+		var ch SpaceChapter
+		if err := rows.Scan(&ch.ID, &ch.Title, &ch.OrderNo); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		chapters = append(chapters, ch)
+	}
+	rows.Close()
+	for i := range chapters {
+		items, err := s.spaceChapterItems(chapters[i].ID)
+		if err != nil {
+			return nil, err
+		}
+		chapters[i].Items = items
+	}
+	return chapters, nil
+}
+
+func (s *Store) spaceChapterItems(chapterID int64) ([]SpaceChapterItem, error) {
+	rows, err := s.DB.Query(`SELECT i.id,i.chapter_id,i.problem_id,i.order_no,p.title,p.type,p.uuid
+		FROM space_training_items i LEFT JOIN problems p ON p.id=i.problem_id
+		WHERE i.chapter_id=? ORDER BY i.order_no,i.id`, chapterID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []SpaceChapterItem
+	for rows.Next() {
+		var it SpaceChapterItem
+		var title, typ, u string
+		var titleN, typN, uN sql.NullString
+		if err := rows.Scan(&it.ID, &it.ChapterID, &it.ProblemID, &it.OrderNo, &titleN, &typN, &uN); err != nil {
+			return nil, err
+		}
+		if titleN.Valid {
+			title = titleN.String
+		}
+		if typN.Valid {
+			typ = typN.String
+		}
+		if uN.Valid {
+			u = uN.String
+		}
+		it.ProblemTitle = title
+		it.ProblemType = typ
+		it.ProblemUUID = u
+		out = append(out, it)
+	}
+	return out, rows.Err()
+}
+
+// ---------- 空间练习 ----------
+
+// SpacePractice 空间练习视图。
+type SpacePractice struct {
+	ID           int64    `json:"id"`
+	SpaceID      int64    `json:"spaceId"`
+	Title        string   `json:"title"`
+	Description  string   `json:"description"`
+	Tags         []string `json:"tags"`
+	ProblemCount int      `json:"problemCount"`
+}
+
+// SpacePracticeItem 练习条目（含题目信息）。
+type SpacePracticeItem struct {
+	ID           int64  `json:"id"`
+	PracticeID   int64  `json:"practiceId"`
+	ProblemID    int64  `json:"problemId"`
+	OrderNo      int    `json:"orderNo"`
+	ProblemTitle string `json:"problemTitle,omitempty"`
+	ProblemType  string `json:"problemType,omitempty"`
+	ProblemUUID  string `json:"problemUuid,omitempty"`
+}
+
+// CreateSpacePractice 建空间练习。
+func (s *Store) CreateSpacePractice(spaceID int64, title, description string, tags []string) (int64, error) {
+	res, err := s.DB.Exec(`INSERT INTO space_practices(space_id,title,description,tags_json) VALUES(?,?,?,?)`,
+		spaceID, title, description, encodeTags(tags))
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+
+// ListSpacePractices 空间练习列表。
+func (s *Store) ListSpacePractices(spaceID int64) ([]SpacePractice, error) {
+	rows, err := s.DB.Query(`SELECT p.id,p.space_id,p.title,p.description,p.tags_json,
+		(SELECT COUNT(*) FROM space_practice_items i WHERE i.practice_id=p.id)
+		FROM space_practices p WHERE p.space_id=? ORDER BY p.id`, spaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []SpacePractice
+	for rows.Next() {
+		var p SpacePractice
+		var tags string
+		if err := rows.Scan(&p.ID, &p.SpaceID, &p.Title, &p.Description, &tags, &p.ProblemCount); err != nil {
+			return nil, err
+		}
+		p.Tags = decodeTags(tags)
+		out = append(out, p)
+	}
+	return out, rows.Err()
+}
+
+// GetSpacePractice 取练习及条目。
+func (s *Store) GetSpacePractice(id int64) (*SpacePractice, []SpacePracticeItem, error) {
+	var p SpacePractice
+	var tags string
+	err := s.DB.QueryRow(`SELECT p.id,p.space_id,p.title,p.description,p.tags_json,
+		(SELECT COUNT(*) FROM space_practice_items i WHERE i.practice_id=p.id)
+		FROM space_practices p WHERE p.id=?`, id).
+		Scan(&p.ID, &p.SpaceID, &p.Title, &p.Description, &tags, &p.ProblemCount)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, nil, err
+	}
+	p.Tags = decodeTags(tags)
+	items, err := s.ListSpacePracticeItems(id)
+	if err != nil {
+		return nil, nil, err
+	}
+	return &p, items, nil
+}
+
+// UpdateSpacePracticeMeta 更新练习名称/描述/标签。
+func (s *Store) UpdateSpacePracticeMeta(id int64, title, description string, tags []string) error {
+	res, err := s.DB.Exec(`UPDATE space_practices SET title=?,description=?,tags_json=? WHERE id=?`,
+		title, description, encodeTags(tags), id)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// DeleteSpacePractice 删练习（级联条目与提交记录）。
+func (s *Store) DeleteSpacePractice(id int64) error {
+	res, err := s.DB.Exec(`DELETE FROM space_practices WHERE id=?`, id)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// AddSpacePracticeItems 练习追加题目（排末尾）。
+func (s *Store) AddSpacePracticeItems(practiceID int64, problemIDs []int64) error {
+	for _, pid := range problemIDs {
+		if _, err := s.DB.Exec(`INSERT INTO space_practice_items(practice_id,problem_id,order_no)
+			SELECT ?,?,COALESCE(MAX(order_no),0)+1 FROM space_practice_items WHERE practice_id=?`,
+			practiceID, pid, practiceID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// RemoveSpacePracticeItem 移除练习条目。
+func (s *Store) RemoveSpacePracticeItem(itemID int64) error {
+	res, err := s.DB.Exec(`DELETE FROM space_practice_items WHERE id=?`, itemID)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// ListSpacePracticeItems 练习条目（含题目信息）。
+func (s *Store) ListSpacePracticeItems(practiceID int64) ([]SpacePracticeItem, error) {
+	rows, err := s.DB.Query(`SELECT i.id,i.practice_id,i.problem_id,i.order_no,p.title,p.type,p.uuid
+		FROM space_practice_items i LEFT JOIN problems p ON p.id=i.problem_id
+		WHERE i.practice_id=? ORDER BY i.order_no,i.id`, practiceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []SpacePracticeItem
+	for rows.Next() {
+		var it SpacePracticeItem
+		var titleN, typN, uN sql.NullString
+		if err := rows.Scan(&it.ID, &it.PracticeID, &it.ProblemID, &it.OrderNo, &titleN, &typN, &uN); err != nil {
+			return nil, err
+		}
+		if titleN.Valid {
+			it.ProblemTitle = titleN.String
+		}
+		if typN.Valid {
+			it.ProblemType = typN.String
+		}
+		if uN.Valid {
+			it.ProblemUUID = uN.String
+		}
+		out = append(out, it)
+	}
+	return out, rows.Err()
+}
+
+// ---------- 训练客观题尝试记录（限次/标色） ----------
+
+// SpaceAttemptState 单用户在某训练内对某题的作答状态。
+type SpaceAttemptState struct {
+	Attempts int  `json:"attempts"`
+	Solved   bool `json:"solved"`
+	Max      int  `json:"max"` // 0=不限
+}
+
+// GetSpaceTrainingAttempt 取尝试状态（无记录=0 次）。
+func (s *Store) GetSpaceTrainingAttempt(trainingID, userID, problemID int64) (*SpaceAttemptState, error) {
+	st := &SpaceAttemptState{}
+	err := s.DB.QueryRow(`SELECT attempts,solved FROM space_training_attempts
+		WHERE training_id=? AND user_id=? AND problem_id=?`, trainingID, userID, problemID).
+		Scan(&st.Attempts, &st.Solved)
+	if errors.Is(err, sql.ErrNoRows) {
+		return &SpaceAttemptState{}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return st, nil
+}
+
+// RecordSpaceTrainingAttempt 记录一次客观题作答：attempts+1；solved=true 标绿锁定。
+// 返回 (attempts, solved, maxAttempts, err)；attempts 超过上限或已 solved 时由上层禁选。
+func (s *Store) RecordSpaceTrainingAttempt(trainingID, userID, problemID int64, correct bool) (int, bool, int, error) {
+	maxAttempts := 3
+	if err := s.DB.QueryRow(`SELECT max_attempts FROM space_trainings WHERE id=?`, trainingID).Scan(&maxAttempts); err != nil {
+		return 0, false, 0, err
+	}
+	var curAttempts int
+	var curSolved bool
+	err := s.DB.QueryRow(`SELECT attempts,solved FROM space_training_attempts
+		WHERE training_id=? AND user_id=? AND problem_id=?`, trainingID, userID, problemID).
+		Scan(&curAttempts, &curSolved)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return 0, false, 0, err
+	}
+	// 已达上限或已答对：不允许再答（上层已拦，此处幂等返回现状）
+	if curSolved || (maxAttempts > 0 && curAttempts >= maxAttempts) {
+		return curAttempts, curSolved, maxAttempts, nil
+	}
+	newAttempts := curAttempts + 1
+	newSolved := curSolved || correct
+	_, err = s.DB.Exec(`INSERT INTO space_training_attempts(training_id,user_id,problem_id,attempts,solved)
+		VALUES(?,?,?,?,?)
+		ON CONFLICT(training_id,user_id,problem_id) DO UPDATE SET
+		attempts=excluded.attempts, solved=excluded.solved, updated_at=CURRENT_TIMESTAMP`,
+		trainingID, userID, problemID, newAttempts, b2i(newSolved))
+	if err != nil {
+		return 0, false, 0, err
+	}
+	// 答对 → 写排行榜通过记录（uuid 去重）
+	if newSolved {
+		if err := s.recordSolvedByProblem(userID, problemID); err != nil {
+			return 0, false, 0, err
+		}
+	}
+	return newAttempts, newSolved, maxAttempts, nil
+}
+
+// b2i bool → 0/1。
+func b2i(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
+}
+
+// ---------- 排行榜通过记录（uuid 去重） ----------
+
+// recordSolvedByProblem 记录用户通过（按题 uuid 去重；题不存在则忽略）。
+func (s *Store) recordSolvedByProblem(userID, problemID int64) error {
+	var u string
+	err := s.DB.QueryRow(`SELECT uuid FROM problems WHERE id=?`, problemID).Scan(&u)
+	if errors.Is(err, sql.ErrNoRows) || u == "" {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	_, err = s.DB.Exec(`INSERT OR IGNORE INTO student_solved(user_id,problem_uuid) VALUES(?,?)`, userID, u)
+	return err
+}
+
+// RecordSolvedByUUID 直接按 uuid 记录通过（刷题等场景；uuid 校验在调用方）。
+func (s *Store) RecordSolvedByUUID(userID int64, problemUUID string) error {
+	if problemUUID == "" {
+		return nil
+	}
+	_, err := s.DB.Exec(`INSERT OR IGNORE INTO student_solved(user_id,problem_uuid) VALUES(?,?)`, userID, problemUUID)
+	return err
+}
+
+// SolvedUUIDs 用户已通过的题目 uuid 集合（去重查询用）。
+func (s *Store) SolvedUUIDs(userID int64) (map[string]bool, error) {
+	rows, err := s.DB.Query(`SELECT problem_uuid FROM student_solved WHERE user_id=?`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]bool{}
+	for rows.Next() {
+		var u string
+		if err := rows.Scan(&u); err != nil {
+			return nil, err
+		}
+		out[u] = true
+	}
+	return out, rows.Err()
+}
+
+// ---------- 练习交卷记录 ----------
+
+// SpacePracticeSubmission 练习交卷记录视图。
+type SpacePracticeSubmission struct {
+	ID               int64  `json:"id"`
+	PracticeID       int64  `json:"practiceId"`
+	UserID           int64  `json:"userId"`
+	ObjectiveCorrect int    `json:"objectiveCorrect"`
+	ObjectiveTotal   int    `json:"objectiveTotal"`
+	CreatedAt        string `json:"createdAt"`
+}
+
+// SaveSpacePracticeSubmission 保存一次交卷（answers 为快照 JSON），
+// 逐题客观答对写通过记录（事务内）；返回提交 id。
+func (s *Store) SaveSpacePracticeSubmission(practiceID, userID int64, answersJSON string, objectiveCorrect int) (int64, error) {
+	tx, err := s.DB.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+	// 解析快照，答对的客观题写通过记录（uuid 由快照内带，缺则查）
+	type answerItem struct {
+		ProblemID int64  `json:"problemId"`
+		Correct   bool   `json:"correct"`
+		UUID      string `json:"uuid,omitempty"`
+	}
+	var items []answerItem
+	_ = json.Unmarshal([]byte(answersJSON), &items)
+	for _, it := range items {
+		if !it.Correct {
+			continue
+		}
+		u := it.UUID
+		if u == "" {
+			if err := tx.QueryRow(`SELECT uuid FROM problems WHERE id=?`, it.ProblemID).Scan(&u); err != nil {
+				continue
+			}
+		}
+		if u != "" {
+			if _, err := tx.Exec(`INSERT OR IGNORE INTO student_solved(user_id,problem_uuid) VALUES(?,?)`, userID, u); err != nil {
+				return 0, err
+			}
+		}
+	}
+	res, err := tx.Exec(`INSERT INTO space_practice_submissions(practice_id,user_id,answers_json,objective_correct)
+		VALUES(?,?,?,?)`, practiceID, userID, answersJSON, objectiveCorrect)
+	if err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+
+// ListSpacePracticeSubmissions 练习的提交记录（按时间倒序；供结果回顾）。
+func (s *Store) ListSpacePracticeSubmissions(practiceID, userID int64) ([]SpacePracticeSubmission, error) {
+	rows, err := s.DB.Query(`SELECT id,practice_id,user_id,objective_correct,created_at
+		FROM space_practice_submissions WHERE practice_id=? AND user_id=? ORDER BY id DESC`, practiceID, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []SpacePracticeSubmission
+	for rows.Next() {
+		var sub SpacePracticeSubmission
+		var created string
+		if err := rows.Scan(&sub.ID, &sub.PracticeID, &sub.UserID, &sub.ObjectiveCorrect, &created); err != nil {
+			return nil, err
+		}
+		sub.CreatedAt = created
+		out = append(out, sub)
+	}
+	return out, rows.Err()
+}
+
+// GetSpacePracticeSubmission 取交卷快照。
+func (s *Store) GetSpacePracticeSubmission(submissionID int64) (answersJSON string, err error) {
+	err = s.DB.QueryRow(`SELECT answers_json FROM space_practice_submissions WHERE id=?`, submissionID).Scan(&answersJSON)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", ErrNotFound
+	}
+	return answersJSON, err
+}
+
+// ---------- 空间刷题项目 ----------
+
+// SpaceQuiz 刷题项目视图。
+type SpaceQuiz struct {
+	ID         int64    `json:"id"`
+	SpaceID    int64    `json:"spaceId"`
+	Title      string   `json:"title"`
+	Tags       []string `json:"tags"`
+	SourceType string   `json:"sourceType"` // tags | repo
+	RepoKind   string   `json:"repoKind,omitempty"`
+	RepoID     int64    `json:"repoId,omitempty"`
+	ProblemCount int    `json:"problemCount"`
+}
+
+// CreateSpaceQuiz 建刷题项目。
+func (s *Store) CreateSpaceQuiz(spaceID int64, title string, tags []string, sourceType, repoKind string, repoID int64) (int64, error) {
+	res, err := s.DB.Exec(`INSERT INTO space_quizzes(space_id,title,tags_json,source_type,repo_kind,repo_id)
+		VALUES(?,?,?,?,?,?)`, spaceID, title, encodeTags(tags), sourceType, repoKind, repoID)
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+
+// ListSpaceQuizzes 空间刷题项目列表。
+func (s *Store) ListSpaceQuizzes(spaceID int64) ([]SpaceQuiz, error) {
+	rows, err := s.DB.Query(`SELECT id,space_id,title,tags_json,source_type,repo_kind,repo_id
+		FROM space_quizzes WHERE space_id=? ORDER BY id`, spaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []SpaceQuiz
+	for rows.Next() {
+		var q SpaceQuiz
+		var tags string
+		if err := rows.Scan(&q.ID, &q.SpaceID, &q.Title, &tags, &q.SourceType, &q.RepoKind, &q.RepoID); err != nil {
+			return nil, err
+		}
+		q.Tags = decodeTags(tags)
+		out = append(out, q)
+	}
+	return out, rows.Err()
+}
+
+// DeleteSpaceQuiz 删刷题项目。
+func (s *Store) DeleteSpaceQuiz(id int64) error {
+	res, err := s.DB.Exec(`DELETE FROM space_quizzes WHERE id=?`, id)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}

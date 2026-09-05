@@ -109,11 +109,68 @@ space_practice_items(problem_id)
 6. 判题/提交数据空间化 + 清理旧模块（科目随机刷题等按决策）
 7. 端到端验证 + 文档
 
-## 10. 待用户确认清单（写代码前必须锁定）
+## 10. 待用户确认清单（已全部定案，见第 0 节决策表）
 
-A. 现主库 trainings/practices（含样例训练）与 booklet_directories 目录：删除？还是保留为域级「仓库模板」供空间从仓库选？（用户说训练页可"从仓库中选择训练或练习创建训练"——仓库里的训练/练习模板从哪来？若模板=仓库页可建的训练/练习，则仓库页仍需保留训练/练习的简单管理（无作答））
-B. 现 web-quiz 的「刷题（科目随机抽题）/错题集」功能去留（空间化后保留 or 移除）
-C. 训练中每道客观题的选择次数上限如何配置（全局统一默认？每题单独可配？默认值多少）
-D. 练习交卷后能否重做（一次机会 or 可重复交卷取最好）
-E. domain_admin 是否可管理其域内任意空间（不需要单独 space admin）
-F. 空间成员角色是否分 教师/学生（影响界面权限：谁能建训练）或一律成员、由 domain_admin 统一在空间内管理内容
+A. 仓库保留训练/练习模板（结构管理，空间拷贝）✅
+B. 移除随机刷题/错题集，刷题改为「空间刷题项目」新模型 ✅
+C. 训练尝试次数 = 训练级统一上限（如默认 3），计数只存在于训练内（用户在该训练内对该题作答次数，重进不清零）✅
+D. 练习可重做，每次作答结果都记录 ✅
+E. 域管理员管域内全部空间，无独立空间管理员 ✅
+F. 空间成员一律学生，训练/练习内容由域管理员管理 ✅
+
+## 11. 追加需求（用户 2026-09-05 补充，已确认）
+
+### 11.1 排行榜（按域、单一总榜、uuid 去重）
+- 记录：学生每次答对客观题 / 编程题 AC，按 **problem.uuid 去重**记录一次通过
+  （student_solved：user_id, problem_uuid, solved_at；每用户每 uuid 仅一行，UNIQUE(user_id, problem_uuid)）
+- 通过计数来自全部来源：空间训练、空间练习、空间刷题 三处作答（客观答对 / 编程 AC）都计
+- 排名：**按域排名**（学生通过总数降序；同分按先达成者靠前），**单一总榜**；
+  管理员（global_admin/domain_admin）不参与排名
+- 展示：学生端门户可见排行榜页；仅统计 role=member 且（在该域任一空间）的学生
+- 依据 uuid 而非 problem_id：跨库迁移/导入去重后 id 变化不影响统计连续性
+
+### 11.2 刷题（空间内第三类项目，替代原随机刷题）
+- 定位：与训练/练习并列的独立页面（空间刷题列表）
+- 生成来源（管理员布置，两种）：
+  a) **标签筛选**：从域题库筛 单选/判断题（type IN single_choice,true_false）+ 标签条件
+     → 动态题集（与现科目分类刷题同玩法：随机轮次即时反馈，答对移出/记录）
+  b) **绑定仓库题单**：选择仓库中训练/练习模板 → 取其全部客观题生成刷题项目
+- 规则：仅含客观题（选择/判断）；答对记通过（uuid 去重一次）；**答错不限次数**；
+  通过数计入排行榜；项目可见性=布置给空间（空间成员在其空间刷题页可见）
+- 表：space_quizzes(id, space_id, title, tags_json(来源 a 标签), source_type(‘tags’|‘repo’),
+  repo_kind(‘training’|‘practice’)+repo_id(来源 b), created_at)；
+  题集动态解析：tags 型=按标签查域题库客观题；repo 型=读仓库模板条目取客观题
+
+## 12. 数据模型补充（第 4 节后追加表）
+
+```sql
+-- 排行榜（uuid 去重通过记录；域级——按 problem 所属域 + user 关联域查询）
+student_solved(
+  user_id INTEGER NOT NULL, problem_uuid TEXT NOT NULL,
+  solved_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY(user_id, problem_uuid)
+);
+-- 空间刷题项目
+space_quizzes(
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  space_id INTEGER NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  tags_json TEXT NOT NULL DEFAULT '[]',      -- 来源 a：标签筛选
+  source_type TEXT NOT NULL DEFAULT 'tags',  -- tags | repo
+  repo_kind TEXT NOT NULL DEFAULT '',        -- 来源 b：training | practice
+  repo_id INTEGER NOT NULL DEFAULT 0,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+## 13. 分阶段修订（含新增）
+
+1. ✅ UUIDv7（commit ddf33fd）
+2. ✅ 域/空间数据层 + 账号角色（commit 23498d4）
+3. ✅ 域/空间/用户管理 API + respondError 修复（commit 4618fe9）
+4. 空间训练/练习后端：表迁移 + CRUD + 从仓库模板拷贝 + 训练限次 + 练习整卷交卷
+5. 刷题项目后端（space_quizzes + 两种来源解析）+ 排行榜后端（student_solved + 通过记录注入三处作答）
+6. 判题提交空间化 + quizstore 按域/空间过滤 RepoReader
+7. 仓库页前端（web）：域切换 + 空间管理 UI
+8. 门户前端（web-quiz）：空间切换 + 训练页（限次标色）/练习卷面/刷题页/排行榜
+9. 端到端验证 + 文档 + 旧模块退役

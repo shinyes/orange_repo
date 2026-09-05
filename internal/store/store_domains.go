@@ -6,6 +6,7 @@ package store
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"strings"
 
 	"orangerepo/internal/model"
@@ -253,6 +254,112 @@ func (s *Store) SpaceOfDomain(spaceID, domainID int64) (bool, error) {
 	var n int
 	err := s.DB.QueryRow(`SELECT COUNT(1) FROM spaces WHERE id=? AND domain_id=?`, spaceID, domainID).Scan(&n)
 	return n > 0, err
+}
+
+// SpaceDomain 空间所属域 id。
+func (s *Store) SpaceDomain(spaceID int64) (int64, error) {
+	var domainID int64
+	err := s.DB.QueryRow(`SELECT domain_id FROM spaces WHERE id=?`, spaceID).Scan(&domainID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, ErrNotFound
+	}
+	if err != nil {
+		return 0, err
+	}
+	return domainID, nil
+}
+
+// ---------- 空间内容表（训练/练习/刷题/排行榜，阶段 4） ----------
+
+// migrateSpaceContent 建空间训练/练习/刷题/通过记录表（幂等）。
+func (s *Store) migrateSpaceContent() error {
+	stmts := []string{
+		`CREATE TABLE IF NOT EXISTS space_trainings (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			space_id INTEGER NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
+			title TEXT NOT NULL,
+			description TEXT NOT NULL DEFAULT '',
+			tags_json TEXT NOT NULL DEFAULT '[]',
+			max_attempts INTEGER NOT NULL DEFAULT 3, -- 训练级客观题统一选择上限
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);`,
+		`CREATE TABLE IF NOT EXISTS space_training_chapters (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			training_id INTEGER NOT NULL REFERENCES space_trainings(id) ON DELETE CASCADE,
+			title TEXT NOT NULL,
+			order_no INTEGER NOT NULL DEFAULT 0
+		);`,
+		`CREATE TABLE IF NOT EXISTS space_training_items (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			chapter_id INTEGER NOT NULL REFERENCES space_training_chapters(id) ON DELETE CASCADE,
+			problem_id INTEGER NOT NULL,
+			order_no INTEGER NOT NULL DEFAULT 0
+		);`,
+		`CREATE TABLE IF NOT EXISTS space_practices (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			space_id INTEGER NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
+			title TEXT NOT NULL,
+			description TEXT NOT NULL DEFAULT '',
+			tags_json TEXT NOT NULL DEFAULT '[]',
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);`,
+		`CREATE TABLE IF NOT EXISTS space_practice_items (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			practice_id INTEGER NOT NULL REFERENCES space_practices(id) ON DELETE CASCADE,
+			problem_id INTEGER NOT NULL,
+			order_no INTEGER NOT NULL DEFAULT 0
+		);`,
+		// 训练客观题作答次数（每用户每训练每客观题；到达 max_attempts 禁选）
+		`CREATE TABLE IF NOT EXISTS space_training_attempts (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			training_id INTEGER NOT NULL REFERENCES space_trainings(id) ON DELETE CASCADE,
+			user_id INTEGER NOT NULL,
+			problem_id INTEGER NOT NULL,
+			attempts INTEGER NOT NULL DEFAULT 1,
+			solved INTEGER NOT NULL DEFAULT 0, -- 1=答对过（标绿锁定）
+			updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			UNIQUE(training_id, user_id, problem_id)
+		);`,
+		// 练习交卷记录（每次作答都记录；内容快照存 answers_json：problem_id→{objective:idx/verdict}）
+		`CREATE TABLE IF NOT EXISTS space_practice_submissions (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			practice_id INTEGER NOT NULL REFERENCES space_practices(id) ON DELETE CASCADE,
+			user_id INTEGER NOT NULL,
+			answers_json TEXT NOT NULL DEFAULT '[]',
+			score INTEGER NOT NULL DEFAULT 0,      -- 客观答对题数（编程题 AC 数并入或单独）
+			objective_correct INTEGER NOT NULL DEFAULT 0,
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);`,
+		// 排行榜：学生按题 uuid 去重通过记录（跨训练/练习/刷题）
+		`CREATE TABLE IF NOT EXISTS student_solved (
+			user_id INTEGER NOT NULL,
+			problem_uuid TEXT NOT NULL,
+			solved_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			PRIMARY KEY(user_id, problem_uuid)
+		);`,
+		// 空间刷题项目
+		`CREATE TABLE IF NOT EXISTS space_quizzes (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			space_id INTEGER NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
+			title TEXT NOT NULL,
+			tags_json TEXT NOT NULL DEFAULT '[]',
+			source_type TEXT NOT NULL DEFAULT 'tags',
+			repo_kind TEXT NOT NULL DEFAULT '',
+			repo_id INTEGER NOT NULL DEFAULT 0,
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_space_trainings_space ON space_trainings(space_id);`,
+		`CREATE INDEX IF NOT EXISTS idx_space_practices_space ON space_practices(space_id);`,
+		`CREATE INDEX IF NOT EXISTS idx_space_quizzes_space ON space_quizzes(space_id);`,
+		`CREATE INDEX IF NOT EXISTS idx_space_attempts_training ON space_training_attempts(training_id);`,
+		`CREATE INDEX IF NOT EXISTS idx_space_quiz_submissions ON space_practice_submissions(practice_id);`,
+	}
+	for _, stmt := range stmts {
+		if _, err := s.DB.Exec(stmt); err != nil {
+			return fmt.Errorf("migrate space content failed: %w; stmt: %s", err, stmt)
+		}
+	}
+	return nil
 }
 
 // DeleteDomainProblems 删除域内全部题目（含训练/练习条目引用清理），
