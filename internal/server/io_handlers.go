@@ -327,7 +327,7 @@ func (s *Server) handleExportProblems(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	return sendZip(c, data, exportFilename("problems", c.Query("name")))
+	return sendZip(c, data, exportFilename("orangeoj_problems", c.Query("name")))
 }
 
 // handleExportTraining 导出训练：problems.json + trainingPlan.json（章节按下标引用）。
@@ -371,7 +371,7 @@ func (s *Server) handleExportTraining(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	return sendZip(c, data, exportFilename("training_"+strconv.FormatInt(id, 10), t.Title))
+	return sendZip(c, data, exportFilename("orangeoj_training_"+strconv.FormatInt(id, 10), t.Title))
 }
 
 // handleExportPractice 导出练习：problems.json（平铺顺序）+ trainingPlan.json 单章结构。
@@ -412,7 +412,7 @@ func (s *Server) handleExportPractice(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	return sendZip(c, data, exportFilename("practice_"+strconv.FormatInt(id, 10), p.Title))
+	return sendZip(c, data, exportFilename("orangeoj_practice_"+strconv.FormatInt(id, 10), p.Title))
 }
 
 // rewriteUploadRefs 将文本中 /api/uploads/<old> 引用替换为 nano 新名（仅替换映射内存在的旧名）。
