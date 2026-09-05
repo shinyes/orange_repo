@@ -227,8 +227,17 @@ func (s *Server) folderIDByPath(dirs []model.BookletDirectory, path string) (*in
 	return parentID, nil
 }
 
+// backupScope 备份恢复的目标域：query domainId → 默认域自动（域管理员强制其域）。
+func (s *Server) backupScope(c *fiber.Ctx) *int64 {
+	scope, err := s.domainOrDefault(c, currentUser(c))
+	if err != nil {
+		return nil
+	}
+	return scope
+}
+
 // importBackup 全库恢复：题目按 uuid 去重（已存在则引用，否则新建）→ 目录树 → 训练/练习。
-func (s *Server) importBackup(manifest *backupManifest, problems []zipio.ExportProblem) error {
+func (s *Server) importBackup(manifest *backupManifest, problems []zipio.ExportProblem, domainID *int64) error {
 	if manifest.Version != 1 {
 		return errors.New("不支持的备份版本")
 	}
@@ -248,6 +257,7 @@ func (s *Server) importBackup(manifest *backupManifest, problems []zipio.ExportP
 		}
 		prob := model.Problem{
 			UUID:           payload.UUID,
+			DomainID:       domainID,
 			Type:           model.ProblemType(payload.Type),
 			Title:          payload.Title,
 			Tags:           payload.Tags,
@@ -402,7 +412,7 @@ func (s *Server) handleImportBackup(c *fiber.Ctx) error {
 		}
 	}
 
-	if err := s.importBackup(manifest, problems); err != nil {
+	if err := s.importBackup(manifest, problems, s.backupScope(c)); err != nil {
 		return respondError(c, fiber.StatusBadRequest, err.Error())
 	}
 	return respondData(c, fiber.StatusCreated, fiber.Map{

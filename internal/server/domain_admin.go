@@ -40,6 +40,39 @@ func (s *Server) domainScope(c *fiber.Ctx, user *accounts.User) (*int64, error) 
 	return nil, errors.New("无权访问")
 }
 
+// domainOrDefault 解析请求的域作用域（同 domainScope），global_admin 未显式带 domainId 时
+// 回退到「默认域」（承接存量单域部署/旧调用；前端多域总会显式带）。
+func (s *Server) domainOrDefault(c *fiber.Ctx, user *accounts.User) (*int64, error) {
+	if user.Role == accounts.RoleDomainAdmin {
+		if user.DomainID == nil {
+			return nil, errors.New("域管理员未关联域")
+		}
+		return user.DomainID, nil
+	}
+	if user.Role == accounts.RoleGlobalAdmin {
+		raw := strings.TrimSpace(c.Query("domainId"))
+		if raw != "" {
+			id, err := strconv.ParseInt(raw, 10, 64)
+			if err != nil || id <= 0 {
+				return nil, errors.New("invalid domainId")
+			}
+			return &id, nil
+		}
+		// 回退默认域（不存在则自动创建——空库首题场景）
+		var id int64
+		err := s.Store.DB.QueryRow(`SELECT id FROM domains WHERE name=? ORDER BY id LIMIT 1`, store.DefaultDomainName).Scan(&id)
+		if err != nil {
+			nid, cerr := s.Store.CreateDomain(store.DefaultDomainName)
+			if cerr != nil {
+				return nil, errors.New("尚未创建任何域")
+			}
+			id = nid
+		}
+		return &id, nil
+	}
+	return nil, errors.New("无权访问")
+}
+
 // ---------- 域管理（global_admin） ----------
 
 // handleListDomains GET /api/admin/domains → 全部域。

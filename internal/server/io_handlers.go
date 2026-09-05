@@ -87,7 +87,12 @@ func (s *Server) handleImport(c *fiber.Ctx) error {
 	}
 	// 文件名作为题册名称兜底（去掉扩展名）
 	nameHint := strings.TrimSuffix(filepath.Base(file.Filename), filepath.Ext(file.Filename))
-	resp, err := s.ImportZipData(data, mode, nameHint, folderID)
+	// 导入题归当前域（缺省默认域）
+	scope, err := s.domainOrDefault(c, currentUser(c))
+	if err != nil {
+		return respondError(c, fiber.StatusBadRequest, err.Error())
+	}
+	resp, err := s.ImportZipData(data, mode, nameHint, folderID, scope)
 	if err != nil {
 		if ferr, ok := err.(*fiber.Error); ok {
 			return respondError(c, ferr.Code, ferr.Message)
@@ -99,8 +104,9 @@ func (s *Server) handleImport(c *fiber.Ctx) error {
 
 // ImportZipData 导入核心：图片落盘 → 归一化插入题目 → 按模式建组。
 // mode = problems | training | practice | auto；nameHint 为文件名（去扩展名），
-// 作为题册名称兜底（元数据无标题时使用）；folderID 为导入题册的目标目录（nil=根）。
-func (s *Server) ImportZipData(data []byte, mode, nameHint string, folderID *int64) (fiber.Map, error) {
+// 作为题册名称兜底（元数据无标题时使用）；folderID 为导入题册的目标目录（nil=根）；
+// domainID 为题目归属域（nil=不归域——调用方应尽量传入）。
+func (s *Server) ImportZipData(data []byte, mode, nameHint string, folderID, domainID *int64) (fiber.Map, error) {
 	problems, meta, images, err := zipio.ParseZip(data)
 	if err != nil {
 		return nil, fiber.NewError(fiber.StatusBadRequest, err.Error())
@@ -153,6 +159,7 @@ func (s *Server) ImportZipData(data []byte, mode, nameHint string, folderID *int
 		}
 		prob := model.Problem{
 			UUID:           payload.UUID,
+			DomainID:       domainID,
 			Type:           model.ProblemType(payload.Type),
 			Title:          payload.Title,
 			Tags:           payload.Tags,

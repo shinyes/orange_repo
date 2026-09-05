@@ -54,6 +54,13 @@ func (s *Server) handleListProblems(c *fiber.Ctx) error {
 	if err != nil {
 		return respondError(c, fiber.StatusBadRequest, err.Error())
 	}
+	// 域隔离：仓库页题目列表按当前域（domain_admin 本域/global query 或默认域）
+	user := currentUser(c)
+	scope, err := s.domainOrDefault(c, user)
+	if err != nil {
+		return respondError(c, fiber.StatusBadRequest, err.Error())
+	}
+	filter.DomainID = scope
 	list, err := s.Store.ListProblems(filter)
 	if err != nil {
 		return err
@@ -72,7 +79,15 @@ func (s *Server) handleCreateProblem(c *fiber.Ctx) error {
 	if err := zipio.NormalizeProblemPayload(&req); err != nil {
 		return respondError(c, fiber.StatusBadRequest, err.Error())
 	}
+	// 域约束：domain_admin 强制本域；global_admin 优先带 domainId query，
+	// 缺省归默认域（兼容既有调用/单域部署；多域时前端总会带）
+	user := currentUser(c)
+	scope, err := s.domainOrDefault(c, user)
+	if err != nil {
+		return respondError(c, fiber.StatusBadRequest, "缺少 domainId（请先选择域）")
+	}
 	p := model.Problem{
+		DomainID:       scope,
 		Type:           model.ProblemType(req.Type),
 		Title:          req.Title,
 		Tags:           req.Tags,
@@ -106,7 +121,22 @@ func (s *Server) handleGetProblem(c *fiber.Ctx) error {
 		}
 		return err
 	}
+	if !s.problemInDomain(c, p) {
+		return respondError(c, fiber.StatusNotFound, "problem not found")
+	}
 	return respondData(c, fiber.StatusOK, fiber.Map{"problem": p})
+}
+
+// problemInDomain 题目是否属于当前请求域（越权视为不存在）。
+func (s *Server) problemInDomain(c *fiber.Ctx, p *model.Problem) bool {
+	scope, err := s.domainOrDefault(c, currentUser(c))
+	if err != nil || scope == nil {
+		return false
+	}
+	if p.DomainID == nil {
+		return false
+	}
+	return *p.DomainID == *scope
 }
 
 func (s *Server) handleUpdateProblem(c *fiber.Ctx) error {
@@ -114,11 +144,15 @@ func (s *Server) handleUpdateProblem(c *fiber.Ctx) error {
 	if err != nil {
 		return respondError(c, fiber.StatusBadRequest, err.Error())
 	}
-	if _, err := s.Store.GetProblem(id); err != nil {
+	existing, err := s.Store.GetProblem(id)
+	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			return respondError(c, fiber.StatusNotFound, "problem not found")
 		}
 		return err
+	}
+	if !s.problemInDomain(c, existing) {
+		return respondError(c, fiber.StatusNotFound, "problem not found")
 	}
 	var req zipio.ProblemPayload
 	if err := c.BodyParser(&req); err != nil {
@@ -129,6 +163,7 @@ func (s *Server) handleUpdateProblem(c *fiber.Ctx) error {
 	}
 	p := model.Problem{
 		ID:             id,
+		DomainID:       existing.DomainID, // 域不可变（防跨域改写）
 		Type:           model.ProblemType(req.Type),
 		Title:          req.Title,
 		Tags:           req.Tags,
@@ -153,6 +188,16 @@ func (s *Server) handleDeleteProblem(c *fiber.Ctx) error {
 	id, err := paramID(c, "id")
 	if err != nil {
 		return respondError(c, fiber.StatusBadRequest, err.Error())
+	}
+	existing, err := s.Store.GetProblem(id)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			return respondError(c, fiber.StatusNotFound, "problem not found")
+		}
+		return err
+	}
+	if !s.problemInDomain(c, existing) {
+		return respondError(c, fiber.StatusNotFound, "problem not found")
 	}
 	if err := s.Store.DeleteProblem(id); err != nil {
 		return err

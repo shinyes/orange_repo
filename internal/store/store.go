@@ -149,8 +149,8 @@ func (s *Store) migrate() error {
 	return s.backfillProblemDomain()
 }
 
-// defaultDomainName 存量题库自动归属的默认域名。
-const defaultDomainName = "默认域"
+// DefaultDomainName 存量题库自动归属的默认域名。
+const DefaultDomainName = "默认域"
 
 // backfillProblemDomain 为无 domain_id 的存量题目补默认域（自动建域，幂等）。
 func (s *Store) backfillProblemDomain() error {
@@ -163,12 +163,12 @@ func (s *Store) backfillProblemDomain() error {
 	}
 	// 找/建默认域
 	var domainID int64
-	err := s.DB.QueryRow(`SELECT id FROM domains WHERE name=?`, defaultDomainName).Scan(&domainID)
+	err := s.DB.QueryRow(`SELECT id FROM domains WHERE name=?`, DefaultDomainName).Scan(&domainID)
 	if err != nil {
 		if err != sql.ErrNoRows {
 			return err
 		}
-		res, err := s.DB.Exec(`INSERT INTO domains(name) VALUES(?)`, defaultDomainName)
+		res, err := s.DB.Exec(`INSERT INTO domains(name) VALUES(?)`, DefaultDomainName)
 		if err != nil {
 			return err
 		}
@@ -423,7 +423,7 @@ type ProblemFilter struct {
 	DomainID *int64
 }
 
-const problemSummaryCols = `id,uuid,type,title,tags_json,time_limit_ms,memory_limit_mib,created_at`
+const problemSummaryCols = `id,uuid,domain_id,type,title,tags_json,time_limit_ms,memory_limit_mib,created_at`
 
 func scanProblemSummaries(rows *sql.Rows) ([]model.ProblemSummary, error) {
 	defer rows.Close()
@@ -431,10 +431,15 @@ func scanProblemSummaries(rows *sql.Rows) ([]model.ProblemSummary, error) {
 	for rows.Next() {
 		var p model.ProblemSummary
 		var tagsJSON string
-		if err := rows.Scan(&p.ID, &p.UUID, &p.Type, &p.Title, &tagsJSON, &p.TimeLimitMS, &p.MemoryLimitMiB, &p.CreatedAt); err != nil {
+		var domain sql.NullInt64
+		if err := rows.Scan(&p.ID, &p.UUID, &domain, &p.Type, &p.Title, &tagsJSON, &p.TimeLimitMS, &p.MemoryLimitMiB, &p.CreatedAt); err != nil {
 			return nil, err
 		}
 		p.Tags = decodeTags(tagsJSON)
+		if domain.Valid {
+			id := domain.Int64
+			p.DomainID = &id
+		}
 		out = append(out, p)
 	}
 	return out, rows.Err()
@@ -520,15 +525,15 @@ func (s *Store) ListProblems(f ProblemFilter) ([]model.ProblemSummary, error) {
 	return out, nil
 }
 
-// CreateProblem 写入题目，返回新 id。p.UUID 为空时自动生成 UUIDv7。
+// CreateProblem 写入题目，返回新 id。p.UUID 为空时自动生成 UUIDv7；p.DomainID 必填（新建须归域）。
 func (s *Store) CreateProblem(p model.Problem) (int64, error) {
 	if err := s.EnsureProblemUUID(&p); err != nil {
 		return 0, err
 	}
 	res, err := s.DB.Exec(`INSERT INTO problems
-		(uuid,type,title,tags_json,statement_md,body_json,answer_json,solutions_json,time_limit_ms,memory_limit_mib)
-		VALUES(?,?,?,?,?,?,?,?,?,?)`,
-		p.UUID, string(p.Type), p.Title, encodeTags(p.Tags), p.StatementMD,
+		(uuid,domain_id,type,title,tags_json,statement_md,body_json,answer_json,solutions_json,time_limit_ms,memory_limit_mib)
+		VALUES(?,?,?,?,?,?,?,?,?,?,?)`,
+		p.UUID, nullInt64(p.DomainID), string(p.Type), p.Title, encodeTags(p.Tags), p.StatementMD,
 		string(p.BodyJSON), string(p.AnswerJSON), string(p.Solutions),
 		p.TimeLimitMS, p.MemoryLimitMiB)
 	if err != nil {
@@ -541,9 +546,10 @@ func (s *Store) CreateProblem(p model.Problem) (int64, error) {
 func (s *Store) GetProblem(id int64) (*model.Problem, error) {
 	p := &model.Problem{}
 	var tagsJSON, body, answer, solutions string
-	err := s.DB.QueryRow(`SELECT id,uuid,type,title,tags_json,statement_md,body_json,answer_json,solutions_json,
+	var domain sql.NullInt64
+	err := s.DB.QueryRow(`SELECT id,uuid,domain_id,type,title,tags_json,statement_md,body_json,answer_json,solutions_json,
 		time_limit_ms,memory_limit_mib,created_at FROM problems WHERE id=?`, id).
-		Scan(&p.ID, &p.UUID, &p.Type, &p.Title, &tagsJSON, &p.StatementMD, &body, &answer, &solutions,
+		Scan(&p.ID, &p.UUID, &domain, &p.Type, &p.Title, &tagsJSON, &p.StatementMD, &body, &answer, &solutions,
 			&p.TimeLimitMS, &p.MemoryLimitMiB, &p.CreatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
@@ -555,6 +561,10 @@ func (s *Store) GetProblem(id int64) (*model.Problem, error) {
 	p.BodyJSON = json.RawMessage(body)
 	p.AnswerJSON = json.RawMessage(answer)
 	p.Solutions = json.RawMessage(solutions)
+	if domain.Valid {
+		id := domain.Int64
+		p.DomainID = &id
+	}
 	return p, nil
 }
 
