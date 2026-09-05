@@ -468,6 +468,20 @@ func (s *Store) ClearDomainAdmins(domainID int64) error {
 	return err
 }
 
+// RemoveDomainAdmin 将某用户从域管理员降为普通成员（domain_id 清空；非域管理员返回 ErrNotFound）。
+func (s *Store) RemoveDomainAdmin(userID int64) error {
+	res, err := s.DB.Exec(`UPDATE users SET role='member', domain_id=NULL WHERE id=? AND role='domain_admin'`, userID)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return ErrNotFound
+	}
+	_, _ = s.DB.Exec(`DELETE FROM sessions WHERE user_id=?`, userID)
+	return nil
+}
+
 // ListDomainAdmins 某域的全部域管理员账号。
 func (s *Store) ListDomainAdmins(domainID int64) ([]User, error) {
 	rows, err := s.DB.Query(`SELECT id,username,role,domain_id FROM users

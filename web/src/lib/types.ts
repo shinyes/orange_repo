@@ -134,3 +134,113 @@ export interface ProblemFilterState {
   tags: string[]
   type: ProblemType | ''
 }
+
+// ---------- 域 / 空间（OJ 重构：仓库页 = 域仓库管理） ----------
+
+export type UserRole = 'global_admin' | 'domain_admin' | 'member'
+
+/** /api/auth/me 返回的当前登录用户。 */
+export interface MeUser {
+  id: number
+  username: string
+  role: UserRole
+  /** domain_admin 的归属域；member/global_admin 无（或 null）。 */
+  domainId?: number | null
+}
+
+export interface MeResult {
+  authenticated: boolean
+  user?: MeUser
+}
+
+/** 域管理员账号视图（GET /api/admin/domains/:id/admins）。 */
+export interface DomainAdminUser {
+  id: number
+  username: string
+  role?: UserRole
+  domainId?: number | null
+}
+
+/** 普通成员账号视图（GET /api/admin/users）。 */
+export interface MemberUser {
+  id: number
+  username: string
+}
+
+export interface Domain {
+  id: number
+  name: string
+  createdAt: string
+}
+
+export interface Space {
+  id: number
+  domainId: number
+  name: string
+  createdAt: string
+}
+
+export interface SpaceMember {
+  userId: number
+  username: string
+}
+
+// ---------- 空间内容（结构管理） ----------
+
+export interface SpaceTraining {
+  id: number
+  spaceId: number
+  title: string
+  description: string
+  tags: string[]
+  maxAttempts: number
+  problemCount: number
+}
+
+export interface SpaceChapterItem {
+  id: number
+  chapterId: number
+  problemId: number
+  orderNo: number
+  problemTitle?: string
+  problemType?: string
+  problemUuid?: string
+}
+
+export interface SpaceChapter {
+  id: number
+  trainingId: number
+  title: string
+  orderNo: number
+  items: SpaceChapterItem[]
+}
+
+export interface SpacePractice {
+  id: number
+  spaceId: number
+  title: string
+  description: string
+  tags: string[]
+  problemCount: number
+}
+
+export interface SpacePracticeItem {
+  id: number
+  practiceId: number
+  problemId: number
+  orderNo: number
+  problemTitle?: string
+  problemType?: string
+  problemUuid?: string
+}
+
+export interface SpaceQuiz {
+  id: number
+  spaceId: number
+  title: string
+  tags: string[]
+  sourceType: string
+  repoKind?: string
+  repoId?: number
+  problemCount: number
+}

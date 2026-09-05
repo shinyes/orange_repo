@@ -7,6 +7,9 @@ export type View =
   | { kind: 'problem'; id: number }
   | { kind: 'training'; id: number }
   | { kind: 'practice'; id: number }
+  // OJ 重构：全宽管理页（域管理 = global_admin；空间管理 = domain_admin/global_admin 选中域后）
+  | { kind: 'domainadmin' }
+  | { kind: 'spaceadmin' }
 
 interface AppState {
   view: View
@@ -14,6 +17,8 @@ interface AppState {
   openTraining: (id: number) => void
   openPractice: (id: number) => void
   goHome: () => void
+  openDomainAdmin: () => void
+  openSpaceAdmin: () => void
   filter: ProblemFilterState
   patchFilter: (patch: Partial<ProblemFilterState>) => void
   checked: number[]
@@ -38,6 +43,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const openTraining = useCallback((id: number) => setView({ kind: 'training', id }), [])
   const openPractice = useCallback((id: number) => setView({ kind: 'practice', id }), [])
   const goHome = useCallback(() => setView({ kind: 'empty' }), [])
+  const openDomainAdmin = useCallback(() => setView({ kind: 'domainadmin' }), [])
+  const openSpaceAdmin = useCallback(() => setView({ kind: 'spaceadmin' }), [])
   const toggleChecked = useCallback((id: number) => {
     setChecked((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
   }, [])
@@ -45,8 +52,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const clearChecked = useCallback(() => setChecked([]), [])
 
   const value = useMemo(
-    () => ({ view, openProblem, openTraining, openPractice, goHome, filter, patchFilter, checked, toggleChecked, setChecked: setCheckedIds, clearChecked }),
-    [view, openProblem, openTraining, openPractice, goHome, filter, patchFilter, checked, toggleChecked, setCheckedIds, clearChecked],
+    () => ({ view, openProblem, openTraining, openPractice, goHome, openDomainAdmin, openSpaceAdmin, filter, patchFilter, checked, toggleChecked, setChecked: setCheckedIds, clearChecked }),
+    [view, openProblem, openTraining, openPractice, goHome, openDomainAdmin, openSpaceAdmin, filter, patchFilter, checked, toggleChecked, setCheckedIds, clearChecked],
   )
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }

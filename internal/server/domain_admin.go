@@ -75,13 +75,25 @@ func (s *Server) domainOrDefault(c *fiber.Ctx, user *accounts.User) (*int64, err
 
 // ---------- 域管理（global_admin） ----------
 
-// handleListDomains GET /api/admin/domains → 全部域。
+// handleListDomains GET /api/admin/domains → 全部域（含空间数/题目数概览）。
 func (s *Server) handleListDomains(c *fiber.Ctx) error {
 	domains, err := s.Store.ListDomains()
 	if err != nil {
 		return err
 	}
-	return respondData(c, fiber.StatusOK, fiber.Map{"domains": domains})
+	type view struct {
+		model.Domain
+		SpaceCount   int `json:"spaceCount"`
+		ProblemCount int `json:"problemCount"`
+	}
+	out := make([]view, 0, len(domains))
+	for _, d := range domains {
+		v := view{Domain: d}
+		_ = s.Store.DB.QueryRow(`SELECT COUNT(1) FROM spaces WHERE domain_id=?`, d.ID).Scan(&v.SpaceCount)
+		_ = s.Store.DB.QueryRow(`SELECT COUNT(1) FROM problems WHERE domain_id=?`, d.ID).Scan(&v.ProblemCount)
+		out = append(out, v)
+	}
+	return respondData(c, fiber.StatusOK, fiber.Map{"domains": out})
 }
 
 // handleCreateDomain POST /api/admin/domains {name, adminUsername?, adminPassword?}
@@ -187,6 +199,28 @@ func (s *Server) handleListDomainAdmins(c *fiber.Ctx) error {
 		return err
 	}
 	return respondData(c, fiber.StatusOK, fiber.Map{"admins": admins})
+}
+
+// handleRemoveDomainAdmin DELETE /api/admin/domains/:id/admins/:uid → 降级为普通成员。
+func (s *Server) handleRemoveDomainAdmin(c *fiber.Ctx) error {
+	id, err := paramID(c, "id")
+	if err != nil {
+		return respondError(c, fiber.StatusBadRequest, "invalid id")
+	}
+	uid, err := paramID(c, "uid")
+	if err != nil {
+		return respondError(c, fiber.StatusBadRequest, "invalid user id")
+	}
+	if _, err := s.Store.GetDomain(id); err != nil {
+		return respondError(c, fiber.StatusNotFound, "域不存在")
+	}
+	if err := s.Accounts.RemoveDomainAdmin(uid); err != nil {
+		if err == accounts.ErrNotFound {
+			return respondError(c, fiber.StatusNotFound, "该用户不是域管理员")
+		}
+		return err
+	}
+	return c.SendStatus(fiber.StatusNoContent)
 }
 
 // handleSetDomainAdmin PUT /api/admin/domains/:id/admin {username, password?}

@@ -92,6 +92,7 @@ func New(s *store.Store, acc *accounts.Store, uploadsDir, webDist string) *fiber
 	domainAdmin.Delete("/:id", srv.handleDeleteDomain)
 	domainAdmin.Put("/:id/admin", srv.handleSetDomainAdmin)
 	domainAdmin.Get("/:id/admins", srv.handleListDomainAdmins)
+	domainAdmin.Delete("/:id/admins/:uid", srv.handleRemoveDomainAdmin)
 
 	// 空间管理（系统/域管理员；/api 组已限管理员，handler 内再按域校验）
 	spaceAdmin := api.Group("/admin/spaces")

@@ -2,6 +2,7 @@ package server
 
 import (
 	"errors"
+	"strconv"
 
 	"github.com/gofiber/fiber/v2"
 
@@ -19,7 +20,18 @@ type trainingPayload struct {
 }
 
 func (s *Server) handleListTrainings(c *fiber.Ctx) error {
-	list, err := s.Store.ListTrainings()
+	var list []model.Training
+	var err error
+	if raw := c.Query("domainId"); raw != "" {
+		// 仓库页按域列模板：仅含该域题目的训练
+		id, perr := strconv.ParseInt(raw, 10, 64)
+		if perr != nil || id <= 0 {
+			return respondError(c, fiber.StatusBadRequest, "invalid domainId")
+		}
+		list, err = s.Store.ListTrainingsInDomain(id)
+	} else {
+		list, err = s.Store.ListTrainings()
+	}
 	if err != nil {
 		return err
 	}
@@ -213,7 +225,17 @@ type practicePayload struct {
 }
 
 func (s *Server) handleListPractices(c *fiber.Ctx) error {
-	list, err := s.Store.ListPractices()
+	var list []model.Practice
+	var err error
+	if raw := c.Query("domainId"); raw != "" {
+		id, perr := strconv.ParseInt(raw, 10, 64)
+		if perr != nil || id <= 0 {
+			return respondError(c, fiber.StatusBadRequest, "invalid domainId")
+		}
+		list, err = s.Store.ListPracticesInDomain(id)
+	} else {
+		list, err = s.Store.ListPractices()
+	}
 	if err != nil {
 		return err
 	}

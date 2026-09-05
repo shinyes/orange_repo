@@ -3,10 +3,13 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import { toast } from 'sonner'
 import {
   BookOpenIcon,
+  Building2Icon,
   ChevronRightIcon,
   ChevronsDownUpIcon,
   ChevronsUpDownIcon,
   DownloadIcon,
+  GlobeIcon,
+  LayoutGridIcon,
   LogOutIcon,
   MoreVerticalIcon,
   PencilIcon,
@@ -21,6 +24,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import {
   Dialog,
   DialogContent,
@@ -36,6 +40,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { api } from '@/lib/api'
 import { useAppState } from '@/lib/app-context'
+import { useDomain } from '@/lib/domain-context'
 import { useMenuAnchorHold } from '@/lib/use-menu-anchor-hold'
 import type { ProblemSummary, ProblemType, TagCount, TagNode } from '@/lib/types'
 import { AddToGroupDialog, ConfirmDialog, ImportDialog, NewProblemDialog } from './dialogs'
@@ -45,63 +50,122 @@ const TYPE_LABEL: Record<ProblemType, string> = { programming: '编程', single_
 
 // 第一栏：标签筛选（搜索 / 类型 / 标签树）。
 export function TagFilterColumn({ onLogout, onOpenSettings }: { onLogout: () => void; onOpenSettings: () => void }) {
-  const { filter, patchFilter } = useAppState()
+  const { filter, patchFilter, openDomainAdmin, openSpaceAdmin } = useAppState()
+  const { user, domainId } = useDomain()
+  const role = user?.role ?? null
+  const isGlobal = role === 'global_admin'
+  const noDomain = domainId == null
+  const canManageSpaces = role === 'domain_admin' || (isGlobal && !noDomain)
 
   return (
     <div className="flex h-full flex-col bg-sidebar">
-      {/* 头部 */}
-      <div className="flex items-center gap-2 px-3 pt-3">
+      {/* 头部：品牌 + 角色/域 + 管理入口 */}
+      <div className="flex items-center gap-1.5 px-3 pt-3">
         <img src="/favicon.png" alt="OrangeRepo" className="size-8 rounded-lg" />
         <div className="min-w-0 flex-1 leading-tight">
           <div className="truncate text-sm font-semibold">OrangeRepo</div>
+          <div className="truncate text-[11px] text-muted-foreground">
+            {isGlobal ? '系统管理员' : '域管理员'}{!noDomain && domainId != null && ` · 域 #${domainId}`}
+          </div>
         </div>
+        {isGlobal && (
+          <Button variant="ghost" size="icon-sm" title="域管理" onClick={openDomainAdmin}>
+            <Building2Icon />
+          </Button>
+        )}
+        {canManageSpaces && (
+          <Button variant="ghost" size="icon-sm" title="空间管理" onClick={openSpaceAdmin}>
+            <LayoutGridIcon />
+          </Button>
+        )}
         <Button variant="ghost" size="icon-sm" title="修改密码" onClick={onOpenSettings}>
           <SettingsIcon />
         </Button>
         <BackupMenu />
-        <Button variant="outline" size="sm" title="退出登录" onClick={onLogout}>
-          <LogOutIcon data-icon="inline-start" />
-          退出
+        <Button variant="ghost" size="icon-sm" title="退出登录" onClick={onLogout}>
+          <LogOutIcon />
         </Button>
       </div>
 
-      {/* 搜索 */}
-      <div className="relative px-3 pt-3">
-        <SearchIcon className="pointer-events-none absolute top-1/2 left-5 size-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          value={filter.q}
-          onChange={(e) => patchFilter({ q: e.target.value })}
-          placeholder="搜索标题 / 标签…"
-          className="pl-8"
-        />
-      </div>
+      {isGlobal && (
+        <div className="px-3 pt-2">
+          <DomainSwitcher />
+        </div>
+      )}
 
-      {/* 类型过滤 */}
-      <div className="flex gap-1 px-3 pt-2">
-        {(
-          [
-            ['', '全部'],
-            ['programming', '编程'],
-            ['single_choice', '单选'],
-            ['true_false', '判断'],
-          ] as [ProblemType | '', string][]
-        ).map(([v, label]) => (
-          <button
-            key={label}
-            type="button"
-            onClick={() => patchFilter({ type: v })}
-            className={`rounded-md px-2 py-1 text-xs transition-colors ${
-              filter.type === v ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'
-            }`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+      {noDomain ? (
+        <div className="flex flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
+          <GlobeIcon className="size-8 text-muted-foreground/60" />
+          <p className="text-sm font-medium">请选择域</p>
+          <p className="text-xs text-muted-foreground">作为系统管理员，请先在上方选择要管理的域，再浏览题目与标签。</p>
+        </div>
+      ) : (
+        <>
+          {/* 搜索 */}
+          <div className="relative px-3 pt-3">
+            <SearchIcon className="pointer-events-none absolute top-1/2 left-5 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={filter.q}
+              onChange={(e) => patchFilter({ q: e.target.value })}
+              placeholder="搜索标题 / 标签…"
+              className="pl-8"
+            />
+          </div>
 
-      {/* 标签树（标题行/已选/查找固定，树体内部滚动） */}
-      <TagTreePanel />
+          {/* 类型过滤 */}
+          <div className="flex gap-1 px-3 pt-2">
+            {(
+              [
+                ['', '全部'],
+                ['programming', '编程'],
+                ['single_choice', '单选'],
+                ['true_false', '判断'],
+              ] as [ProblemType | '', string][]
+            ).map(([v, label]) => (
+              <button
+                key={label}
+                type="button"
+                onClick={() => patchFilter({ type: v })}
+                className={`rounded-md px-2 py-1 text-xs transition-colors ${
+                  filter.type === v ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {/* 标签树（标题行/已选/查找固定，树体内部滚动） */}
+          <TagTreePanel />
+        </>
+      )}
     </div>
+  )
+}
+
+// 系统管理员域下拉：来自 GET /api/admin/domains，选择持久化并驱动 api 域上下文。
+function DomainSwitcher() {
+  const { domainId, setDomainId } = useDomain()
+  const q = useQuery({ queryKey: ['domains', 'select'], queryFn: api.domains })
+  const domains = q.data?.domains ?? []
+  return (
+    <Select
+      items={domains.map((d) => ({ value: String(d.id), label: d.name }))}
+      value={domainId != null ? String(domainId) : ''}
+      onValueChange={(v) => setDomainId(v ? Number(v) : null)}
+    >
+      <SelectTrigger size="sm" className="w-full">
+        <GlobeIcon data-icon="inline-start" className="size-3.5" />
+        <SelectValue placeholder={q.isLoading ? '加载域…' : '请选择域'} />
+      </SelectTrigger>
+      <SelectContent>
+        {domains.map((d) => (
+          <SelectItem key={d.id} value={String(d.id)}>
+            {d.name}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   )
 }
 

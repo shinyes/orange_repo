@@ -1,10 +1,11 @@
-import { lazy, Suspense, useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query'
 import { Toaster } from '@/components/ui/sonner'
 import { BookOpenIcon, ListChecksIcon, TagsIcon } from 'lucide-react'
 
 import { api } from '@/lib/api'
 import { AppStateProvider, useAppState } from '@/lib/app-context'
+import { DomainProvider, useDomain } from '@/lib/domain-context'
 import { Login } from '@/components/Login'
 import { PasswordDialog } from '@/components/PasswordDialog'
 import { ProblemListColumn, TagFilterColumn } from '@/components/Sidebar'
@@ -14,6 +15,9 @@ const ProblemPane = lazy(() => import('@/components/ProblemPane').then((m) => ({
 const BookletColumn = lazy(() => import('@/components/BookletColumn').then((m) => ({ default: m.BookletColumn })))
 const TrainingDetail = lazy(() => import('@/components/GroupsPane').then((m) => ({ default: m.TrainingDetail })))
 const PracticeDetail = lazy(() => import('@/components/GroupsPane').then((m) => ({ default: m.PracticeDetail })))
+// OJ 重构：全宽管理页（域管理 = 系统管理员；空间管理 = 域管理员 / 系统管理员选中域后）
+const DomainAdmin = lazy(() => import('@/components/DomainAdmin').then((m) => ({ default: m.DomainAdmin })))
+const SpaceAdmin = lazy(() => import('@/components/SpaceAdmin').then((m) => ({ default: m.SpaceAdmin })))
 
 // 右栏懒加载占位。
 function PaneFallback() {
@@ -27,63 +31,97 @@ const queryClient = new QueryClient({
 })
 
 export default function App() {
-  const [authed, setAuthed] = useState<boolean | null>(null)
-
-  useEffect(() => {
-    api.me().then((d) => setAuthed(d.authenticated)).catch(() => setAuthed(false))
-    const on401 = () => setAuthed(false)
-    window.addEventListener('orangerepo:unauthorized', on401)
-    return () => window.removeEventListener('orangerepo:unauthorized', on401)
-  }, [])
-
-  if (authed === null) {
-    return <div className="flex h-screen items-center justify-center text-sm text-muted-foreground">正在连接题库…</div>
-  }
-
   return (
     <QueryClientProvider client={queryClient}>
-      {authed ? (
-        <AppStateProvider>
-          <Main onLogout={() => void api.logout().finally(() => setAuthed(false))} />
-        </AppStateProvider>
-      ) : (
-        <Login onSuccess={() => setAuthed(true)} />
-      )}
+      <DomainProvider>
+        <Shell />
+      </DomainProvider>
       <Toaster position="top-center" richColors closeButton />
     </QueryClientProvider>
   )
 }
 
-function Main({ onLogout }: { onLogout: () => void }) {
+// 会话状态机：加载中（"正在连接"）→ 登录 / 主界面。
+function Shell() {
+  const { status, refresh } = useDomain()
+  if (status === 'loading') {
+    return <div className="flex h-screen items-center justify-center text-sm text-muted-foreground">正在连接…</div>
+  }
+  if (status === 'anon') {
+    return <Login onSuccess={() => void refresh()} />
+  }
+  return (
+    <AppStateProvider>
+      <Main />
+    </AppStateProvider>
+  )
+}
+
+function Main() {
   const [pwOpen, setPwOpen] = useState(false)
   const [showBooklets, setShowBooklets] = useState(false)
-  const { view } = useAppState()
+  const { view, goHome } = useAppState()
+  const { user, domainId, logout } = useDomain()
+  const role = user?.role ?? null
 
   // 打开训练/练习时自动展开题册列
   useEffect(() => {
     if (view.kind === 'training' || view.kind === 'practice') setShowBooklets(true)
   }, [view.kind === 'training', view.kind === 'practice'])
 
+  // 切换域后回到首页：旧域打开的题目/题册详情不再属于当前域
+  const lastDomain = useRef<number | null>(null)
+  useEffect(() => {
+    if (lastDomain.current !== null && lastDomain.current !== domainId) {
+      goHome()
+      setShowBooklets(false)
+    }
+    lastDomain.current = domainId
+  }, [domainId, goHome])
+
+  // 全宽管理页：隐藏三栏工作区，仅渲染管理内容
+  const adminPage = view.kind === 'domainadmin' || view.kind === 'spaceadmin'
+  // 系统管理员尚未选域：仅第一栏（含「请选择域」+ 域下拉），不渲染数据栏/右栏避免跨域读取
+  const needsDomainPick = role === 'global_admin' && domainId == null
+
+  if (adminPage) {
+    return (
+      <div className="h-screen overflow-hidden">
+        <main className="h-full overflow-y-auto">
+          <Suspense fallback={<PaneFallback />}>
+            {view.kind === 'domainadmin' && <DomainAdmin />}
+            {view.kind === 'spaceadmin' && <SpaceAdmin />}
+          </Suspense>
+        </main>
+        <PasswordDialog open={pwOpen} onOpenChange={setPwOpen} />
+      </div>
+    )
+  }
+
   return (
     <div className="flex h-screen overflow-hidden">
-      <aside className="w-[270px] shrink-0 border-r">
-        <TagFilterColumn onLogout={onLogout} onOpenSettings={() => setPwOpen(true)} />
+      <aside className={needsDomainPick ? 'w-[min(420px,90vw)] shrink-0 border-r' : 'w-[270px] shrink-0 border-r'}>
+        <TagFilterColumn onLogout={() => void logout()} onOpenSettings={() => setPwOpen(true)} />
       </aside>
-      <aside className="w-[320px] shrink-0 border-r">
-        <ProblemListColumn showBooklets={showBooklets} onToggleBooklets={() => setShowBooklets((v) => !v)} />
-      </aside>
-      {showBooklets && (
-        <aside className="w-[280px] shrink-0 border-r">
-          <Suspense fallback={null}>
-            <BookletColumn />
-          </Suspense>
-        </aside>
+      {!needsDomainPick && (
+        <>
+          <aside className="w-[320px] shrink-0 border-r">
+            <ProblemListColumn showBooklets={showBooklets} onToggleBooklets={() => setShowBooklets((v) => !v)} />
+          </aside>
+          {showBooklets && (
+            <aside className="w-[280px] shrink-0 border-r">
+              <Suspense fallback={null}>
+                <BookletColumn />
+              </Suspense>
+            </aside>
+          )}
+          <main className="min-w-0 flex-1 overflow-y-auto">
+            <Suspense fallback={<PaneFallback />}>
+              <RightPane />
+            </Suspense>
+          </main>
+        </>
       )}
-      <main className="min-w-0 flex-1 overflow-y-auto">
-        <Suspense fallback={<PaneFallback />}>
-          <RightPane />
-        </Suspense>
-      </main>
       <PasswordDialog open={pwOpen} onOpenChange={setPwOpen} />
     </div>
   )
