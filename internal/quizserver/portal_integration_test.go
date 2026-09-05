@@ -220,4 +220,11 @@ func TestPortalMemberFlow(t *testing.T) {
 	if rows[0].(map[string]any)["solved"].(float64) != 2 {
 		t.Fatalf("rank solved = %v（应 2：uuid 去重）", rows[0])
 	}
+
+	// 空间成员可经 OJ 端点取题（空间训练/练习引用域内题；编程题跳转做题页前提）
+	p0 := ids["p0"] // 编程题（域内，未在任何训练但属该域）
+	respOJ, outOJ := doJSON(t, app, "GET", fmt.Sprintf("/api/oj/problem/%d", p0), stuCookie, nil)
+	if respOJ.StatusCode != 200 {
+		t.Fatalf("空间成员取域内题 = %d %v（应可见）", respOJ.StatusCode, outOJ)
+	}
 }

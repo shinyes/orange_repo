@@ -59,6 +59,30 @@ func (s *Server) problemVisibleToUser(userID, problemID int64) (bool, error) {
 			}
 		}
 	}
+	// 空间模型可见性：用户加入的空间（域内做题），题目属于任一加入空间的域即可见
+	// （空间训练/练习/刷题引用域内题目；纯空间成员无旧 assignments 也能做题）
+	return s.problemVisibleViaSpaces(userID, problemID)
+}
+
+// problemVisibleViaSpaces 用户加入的空间所在域是否包含该题目。
+func (s *Server) problemVisibleViaSpaces(userID, problemID int64) (bool, error) {
+	spaces, err := s.QS.Repo.UserDomainSpaceIDs(userID)
+	if err != nil {
+		return false, err
+	}
+	if len(spaces) == 0 {
+		return false, nil
+	}
+	var pdomain int64
+	err = s.QS.Repo.DB.QueryRow(`SELECT domain_id FROM problems WHERE id=?`, problemID).Scan(&pdomain)
+	if err != nil {
+		return false, nil // 题目不存在/无域 → 不可见
+	}
+	for _, sp := range spaces {
+		if sp.DomainID == pdomain {
+			return true, nil
+		}
+	}
 	return false, nil
 }
 
