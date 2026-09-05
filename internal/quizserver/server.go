@@ -99,6 +99,20 @@ func (s *Server) buildApp() *fiber.App {
 	oj.Get("/problem/:id/submissions", s.handleOJSubmissions)
 	oj.Get("/submission/:id/poll", s.handleOJSubmissionPoll)
 
+	// ---- OrangeOJ 门户（空间化）：空间切换 / 训练 / 练习 / 刷题 / 排行榜 ----
+	portal := app.Group("/api/portal", s.requireSession)
+	portal.Get("/spaces", s.handlePortalSpaces)
+	portal.Get("/space/:id/home", s.handlePortalSpaceHome)
+	portal.Get("/space/:id/training/:tid", s.handlePortalTraining)
+	portal.Post("/space/:id/training/:tid/answer", s.handlePortalTrainingAnswer)
+	portal.Get("/space/:id/practice/:pid", s.handlePortalPractice)
+	portal.Post("/space/:id/practice/:pid/submit", s.handlePortalPracticeSubmit)
+	portal.Get("/space/:id/practice/:pid/submissions", s.handlePortalPracticeSubmissions)
+	portal.Get("/space/:id/quizzes", s.handlePortalSpaceQuizzes)
+	portal.Get("/quiz/:qid/problem", s.handlePortalQuizProblem)
+	portal.Post("/quiz/:qid/answer", s.handlePortalQuizAnswer)
+	portal.Get("/rank", s.handlePortalRank)
+
 	admin := app.Group("/api/admin", s.requireSession, s.requireAdmin)
 	admin.Get("/subjects", s.handleAdminListSubjects)
 	admin.Post("/subjects", s.handleAdminCreateSubject)

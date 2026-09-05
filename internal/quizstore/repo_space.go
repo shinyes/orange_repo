@@ -1,0 +1,317 @@
+// RepoReader 空间内容只读访问（门户用）：读取主库中的空间/域结构、空间训练/练习/刷题
+// 定义与题目域归属校验。只 SELECT，不写入主库。
+package quizstore
+
+import (
+	"database/sql"
+	"encoding/json"
+	"errors"
+)
+
+// SpaceBrief 门户空间视图。
+type SpaceBrief struct {
+	ID       int64  `json:"id"`
+	DomainID int64  `json:"domainId"`
+	Name     string `json:"name"`
+}
+
+// SpaceTrainingBrief 空间训练列表项。
+type SpaceTrainingBrief struct {
+	ID           int64    `json:"id"`
+	SpaceID      int64    `json:"spaceId"`
+	Title        string   `json:"title"`
+	Description  string   `json:"description"`
+	Tags         []string `json:"tags"`
+	MaxAttempts  int      `json:"maxAttempts"`
+	ProblemCount int      `json:"problemCount"`
+}
+
+// SpaceTrainingChapter 空间训练章节（含条目题目简讯）。
+type SpaceTrainingChapter struct {
+	ID     int64             `json:"id"`
+	Title  string            `json:"title"`
+	OrderNo int              `json:"orderNo"`
+	Items  []SpaceTrainingItem `json:"items"`
+}
+
+// SpaceTrainingItem 空间训练条目（题目 id + 类型，作答判定用）。
+type SpaceTrainingItem struct {
+	ID          int64  `json:"id"`
+	ProblemID   int64  `json:"problemId"`
+	OrderNo     int    `json:"orderNo"`
+	ProblemType string `json:"problemType,omitempty"`
+	ProblemUUID string `json:"problemUuid,omitempty"`
+}
+
+// SpacePracticeBrief 空间练习列表项。
+type SpacePracticeBrief struct {
+	ID           int64    `json:"id"`
+	SpaceID      int64    `json:"spaceId"`
+	Title        string   `json:"title"`
+	Description  string   `json:"description"`
+	Tags         []string `json:"tags"`
+	ProblemCount int      `json:"problemCount"`
+}
+
+// SpacePracticeItem 空间练习条目。
+type SpacePracticeItem struct {
+	ID          int64  `json:"id"`
+	ProblemID   int64  `json:"problemId"`
+	OrderNo     int    `json:"orderNo"`
+	ProblemType string `json:"problemType,omitempty"`
+	ProblemUUID string `json:"problemUuid,omitempty"`
+}
+
+// SpaceQuizBrief 空间刷题项目。
+type SpaceQuizBrief struct {
+	ID          int64    `json:"id"`
+	SpaceID     int64    `json:"spaceId"`
+	Title       string   `json:"title"`
+	Tags        []string `json:"tags"`
+	SourceType  string   `json:"sourceType"`
+	RepoKind    string   `json:"repoKind,omitempty"`
+	RepoID      int64    `json:"repoId,omitempty"`
+	ProblemCount int     `json:"problemCount"`
+}
+
+// SpaceOfDomain 空间属于域？
+func (r *RepoReader) SpaceOfDomain(spaceID, domainID int64) (bool, error) {
+	var n int
+	err := r.DB.QueryRow(`SELECT COUNT(1) FROM spaces WHERE id=? AND domain_id=?`, spaceID, domainID).Scan(&n)
+	return n > 0, err
+}
+
+// SpaceDomain 空间所属域（作答/排行榜域校验）。
+func (r *RepoReader) SpaceDomain(spaceID int64) (int64, error) {
+	var d int64
+	err := r.DB.QueryRow(`SELECT domain_id FROM spaces WHERE id=?`, spaceID).Scan(&d)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, ErrNotFound
+	}
+	return d, err
+}
+
+// UserDomainSpaceIDs 用户加入的全部空间（门户切换；space_members 在主库）。
+func (r *RepoReader) UserDomainSpaceIDs(userID int64) ([]SpaceBrief, error) {
+	rows, err := r.DB.Query(`SELECT sp.id,sp.domain_id,sp.name FROM space_members m
+		JOIN spaces sp ON sp.id=m.space_id WHERE m.user_id=? ORDER BY sp.id`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []SpaceBrief
+	for rows.Next() {
+		var b SpaceBrief
+		if err := rows.Scan(&b.ID, &b.DomainID, &b.Name); err != nil {
+			return nil, err
+		}
+		out = append(out, b)
+	}
+	return out, rows.Err()
+}
+
+// SpaceMember 是否空间成员（成员访问校验）。
+func (r *RepoReader) SpaceMember(spaceID, userID int64) (bool, error) {
+	var n int
+	err := r.DB.QueryRow(`SELECT COUNT(1) FROM space_members WHERE space_id=? AND user_id=?`, spaceID, userID).Scan(&n)
+	return n > 0, err
+}
+
+// DomainSpaceIDs 域内全部空间 id（排行榜域范围/域管理员内容管理）。
+func (r *RepoReader) DomainSpaceIDs(domainID int64) ([]int64, error) {
+	rows, err := r.DB.Query(`SELECT id FROM spaces WHERE domain_id=? ORDER BY id`, domainID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
+}
+
+// ---------- 空间训练/练习/刷题结构（门户只读） ----------
+
+// ListSpaceTrainingsBrief 空间训练列表（含题量）。
+func (r *RepoReader) ListSpaceTrainingsBrief(spaceID int64) ([]SpaceTrainingBrief, error) {
+	rows, err := r.DB.Query(`SELECT t.id,t.space_id,t.title,t.description,t.tags_json,t.max_attempts,
+		(SELECT COUNT(*) FROM space_training_items i JOIN space_training_chapters c ON i.chapter_id=c.id WHERE c.training_id=t.id)
+		FROM space_trainings t WHERE t.space_id=? ORDER BY t.id`, spaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []SpaceTrainingBrief
+	for rows.Next() {
+		var b SpaceTrainingBrief
+		var tags string
+		if err := rows.Scan(&b.ID, &b.SpaceID, &b.Title, &b.Description, &tags, &b.MaxAttempts, &b.ProblemCount); err != nil {
+			return nil, err
+		}
+		b.Tags = decodeRepoTags(tags)
+		out = append(out, b)
+	}
+	return out, rows.Err()
+}
+
+// GetSpaceTrainingBrief 单训练（含章节+条目题目类型/uuid——作答限次判定）。
+func (r *RepoReader) GetSpaceTrainingBrief(trainingID int64) (*SpaceTrainingBrief, []SpaceTrainingChapter, error) {
+	var b SpaceTrainingBrief
+	var tags string
+	err := r.DB.QueryRow(`SELECT t.id,t.space_id,t.title,t.description,t.tags_json,t.max_attempts,
+		(SELECT COUNT(*) FROM space_training_items i JOIN space_training_chapters c ON i.chapter_id=c.id WHERE c.training_id=t.id)
+		FROM space_trainings t WHERE t.id=?`, trainingID).
+		Scan(&b.ID, &b.SpaceID, &b.Title, &b.Description, &tags, &b.MaxAttempts, &b.ProblemCount)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, nil, err
+	}
+	b.Tags = decodeRepoTags(tags)
+	rows, err := r.DB.Query(`SELECT id,title,order_no FROM space_training_chapters WHERE training_id=? ORDER BY order_no,id`, trainingID)
+	if err != nil {
+		return nil, nil, err
+	}
+	var chapters []SpaceTrainingChapter
+	for rows.Next() {
+		var ch SpaceTrainingChapter
+		if err := rows.Scan(&ch.ID, &ch.Title, &ch.OrderNo); err != nil {
+			rows.Close()
+			return nil, nil, err
+		}
+		chapters = append(chapters, ch)
+	}
+	rows.Close()
+	for i := range chapters {
+		items, err := r.spaceTrainingItems(chapters[i].ID)
+		if err != nil {
+			return nil, nil, err
+		}
+		chapters[i].Items = items
+	}
+	return &b, chapters, nil
+}
+
+func (r *RepoReader) spaceTrainingItems(chapterID int64) ([]SpaceTrainingItem, error) {
+	rows, err := r.DB.Query(`SELECT i.id,i.problem_id,i.order_no,p.type,p.uuid
+		FROM space_training_items i LEFT JOIN problems p ON p.id=i.problem_id
+		WHERE i.chapter_id=? ORDER BY i.order_no,i.id`, chapterID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []SpaceTrainingItem
+	for rows.Next() {
+		var it SpaceTrainingItem
+		var tN, uN sql.NullString
+		if err := rows.Scan(&it.ID, &it.ProblemID, &it.OrderNo, &tN, &uN); err != nil {
+			return nil, err
+		}
+		if tN.Valid {
+			it.ProblemType = tN.String
+		}
+		if uN.Valid {
+			it.ProblemUUID = uN.String
+		}
+		out = append(out, it)
+	}
+	return out, rows.Err()
+}
+
+// ListSpacePracticesBrief 空间练习列表。
+func (r *RepoReader) ListSpacePracticesBrief(spaceID int64) ([]SpacePracticeBrief, error) {
+	rows, err := r.DB.Query(`SELECT p.id,p.space_id,p.title,p.description,p.tags_json,
+		(SELECT COUNT(*) FROM space_practice_items i WHERE i.practice_id=p.id)
+		FROM space_practices p WHERE p.space_id=? ORDER BY p.id`, spaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []SpacePracticeBrief
+	for rows.Next() {
+		var b SpacePracticeBrief
+		var tags string
+		if err := rows.Scan(&b.ID, &b.SpaceID, &b.Title, &b.Description, &tags, &b.ProblemCount); err != nil {
+			return nil, err
+		}
+		b.Tags = decodeRepoTags(tags)
+		out = append(out, b)
+	}
+	return out, rows.Err()
+}
+
+// GetSpacePracticeBrief 单练习（含条目）。
+func (r *RepoReader) GetSpacePracticeBrief(practiceID int64) (*SpacePracticeBrief, []SpacePracticeItem, error) {
+	var b SpacePracticeBrief
+	var tags string
+	err := r.DB.QueryRow(`SELECT p.id,p.space_id,p.title,p.description,p.tags_json,
+		(SELECT COUNT(*) FROM space_practice_items i WHERE i.practice_id=p.id)
+		FROM space_practices p WHERE p.id=?`, practiceID).
+		Scan(&b.ID, &b.SpaceID, &b.Title, &b.Description, &tags, &b.ProblemCount)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, nil, err
+	}
+	b.Tags = decodeRepoTags(tags)
+	rows, err := r.DB.Query(`SELECT i.id,i.problem_id,i.order_no,p.type,p.uuid
+		FROM space_practice_items i LEFT JOIN problems p ON p.id=i.problem_id
+		WHERE i.practice_id=? ORDER BY i.order_no,i.id`, practiceID)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer rows.Close()
+	var items []SpacePracticeItem
+	for rows.Next() {
+		var it SpacePracticeItem
+		var tN, uN sql.NullString
+		if err := rows.Scan(&it.ID, &it.ProblemID, &it.OrderNo, &tN, &uN); err != nil {
+			return nil, nil, err
+		}
+		if tN.Valid {
+			it.ProblemType = tN.String
+		}
+		if uN.Valid {
+			it.ProblemUUID = uN.String
+		}
+		items = append(items, it)
+	}
+	return &b, items, nil
+}
+
+// ListSpaceQuizzesBrief 空间刷题项目列表。
+func (r *RepoReader) ListSpaceQuizzesBrief(spaceID int64) ([]SpaceQuizBrief, error) {
+	rows, err := r.DB.Query(`SELECT id,space_id,title,tags_json,source_type,repo_kind,repo_id
+		FROM space_quizzes WHERE space_id=? ORDER BY id`, spaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []SpaceQuizBrief
+	for rows.Next() {
+		var b SpaceQuizBrief
+		var tags string
+		if err := rows.Scan(&b.ID, &b.SpaceID, &b.Title, &tags, &b.SourceType, &b.RepoKind, &b.RepoID); err != nil {
+			return nil, err
+		}
+		b.Tags = decodeRepoTags(tags)
+		out = append(out, b)
+	}
+	return out, rows.Err()
+}
+
+// decodeRepoTags 解析主库 tags_json（与 store.decodeTags 等价，避免跨包私有依赖）。
+func decodeRepoTags(s string) []string {
+	var tags []string
+	if err := json.Unmarshal([]byte(s), &tags); err != nil || tags == nil {
+		return []string{}
+	}
+	return tags
+}
