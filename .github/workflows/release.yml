@@ -22,8 +22,8 @@ jobs:
         id: vars
         shell: bash
         run: |
-          echo "image=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
-          echo "judge_image=ghcr.io/${GITHUB_REPOSITORY,,}-judge" >> "$GITHUB_OUTPUT"
+          echo "image=ghcr.io/shinyes/orangeoj" >> "$GITHUB_OUTPUT"
+          echo "judge_image=ghcr.io/shinyes/orangeoj-judge" >> "$GITHUB_OUTPUT"
 
       # judge 镜像仅在其相关文件自上一 tag 有变更时才重建（nsjail 编译耗时；
       # compose 默认引用 judge:latest，未变更时沿用既有镜像）。
@@ -113,11 +113,11 @@ jobs:
           IMAGE: ${{ steps.vars.outputs.image }}
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          ASSET="orangerepo-${VERSION}-linux-amd64-image.tar.gz"
+          ASSET="orangeoj-${VERSION}-linux-amd64-image.tar.gz"
           docker pull "${IMAGE}:${VERSION}"
-          docker image save "${IMAGE}:${VERSION}" -o orangerepo-image.tar
-          gzip -9 orangerepo-image.tar
-          mv orangerepo-image.tar.gz "${ASSET}"
+          docker image save "${IMAGE}:${VERSION}" -o orangeoj-image.tar
+          gzip -9 orangeoj-image.tar
+          mv orangeoj-image.tar.gz "${ASSET}"
           echo "ASSET=${ASSET}" >> "$GITHUB_ENV"
 
       # ---------- Release 附件：判题沙箱离线包（仅 judge 变更时构建） ----------
@@ -127,7 +127,7 @@ jobs:
           JUDGE_IMAGE: ${{ steps.vars.outputs.judge_image }}
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          JUDGE_ASSET="orangerepo-${VERSION}-judge-linux-amd64-image.tar.gz"
+          JUDGE_ASSET="orangeoj-${VERSION}-judge-linux-amd64-image.tar.gz"
           docker pull "${JUDGE_IMAGE}:${VERSION}"
           docker image save "${JUDGE_IMAGE}:${VERSION}" -o judge-image.tar
           gzip -9 judge-image.tar
@@ -152,7 +152,7 @@ jobs:
             ```
 
             判题沙箱（judge-runtime，nsjail 隔离）——**仅当本版本包含 judge 相关变更时构建**：
-            若未随本版发布，则沿用 `ghcr.io/shinyes/orange_repo-judge:latest`（compose 默认引用 latest）：
+            若未随本版发布，则沿用 `ghcr.io/shinyes/orangeoj-judge:latest`（compose 默认引用 latest）：
 
             ```bash
             docker pull ${{ steps.vars.outputs.judge_image }}:latest

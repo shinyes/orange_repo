@@ -6,11 +6,11 @@
 #
 # orangejudge 是真正执行学生代码的容器（nsjail 隔离），需要 privileged + cgroup v2 挂载，
 # 与上游 OrangeOJ 的 judge-runtime 容器配置一致；镜像由 GitHub Actions 发布：
-# judge 相关文件变更的版本会构建 ghcr.io/shinyes/orange_repo-judge:<版本> 并刷新 :latest，
+# judge 相关文件变更的版本会构建 ghcr.io/shinyes/orangeoj-judge:<版本> 并刷新 :latest，
 # 其余版本沿用 latest（compose 默认引用 latest，可用 ORANGEOJ_JUDGE_IMAGE 覆盖）。
 services:
   orangeoj-main:
-    image: ghcr.io/shinyes/orange_repo:1.12.8
+    image: ghcr.io/shinyes/orangeoj:1.12.8
     container_name: orangeoj-main
     ports:
       - "8080:8080"
@@ -22,7 +22,7 @@ services:
   # 自有数据写入同一卷内的 quiz.db）；主库表结构变化时请与主站同版本部署。
   # 判题：连接 orangejudge（-judge-endpoint / -judge-token 必填否则判题 503）。
   orangeoj-quiz:
-    image: ghcr.io/shinyes/orange_repo:1.12.8
+    image: ghcr.io/shinyes/orangeoj:1.12.8
     container_name: orangeoj-quiz
     entrypoint: ["/app/quiz"]
     command: [
@@ -44,7 +44,7 @@ services:
 
   # 判题沙箱：真正执行 Python/C++ 代码；nsjail 需要特权与宿主机 cgroup v2。
   orangejudge:
-    image: ${ORANGEOJ_JUDGE_IMAGE:-ghcr.io/shinyes/orange_repo-judge:latest}
+    image: ${ORANGEOJ_JUDGE_IMAGE:-ghcr.io/shinyes/orangeoj-judge:latest}
     container_name: orangejudge
     restart: unless-stopped
     privileged: true
