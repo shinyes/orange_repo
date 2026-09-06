@@ -54,8 +54,8 @@ function AdminTop({ user, onLogout }: { user: User; onLogout: () => void }) {
 
   const navItems = [
     { to: '/admin/problems', label: '题目管理', icon: ShieldIcon, show: true },
-    { to: '/admin/domains', label: '域管理', icon: Building2Icon, show: isGlobal },
     { to: '/admin/spaces', label: '空间管理', icon: LayoutGridIcon, show: canManageSpaces },
+    { to: '/admin/domains', label: '域管理', icon: Building2Icon, show: isGlobal },
   ].filter((n) => n.show)
 
   return (
