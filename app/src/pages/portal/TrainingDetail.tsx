@@ -93,6 +93,8 @@ function TrainingFlow({ sid, tid, data }: {
 
   return (
     <SpacePageShell spaceId={sid} backTo={`/s/${sid}/training`} backLabel="返回训练列表">
+      {/* 内容区：桌面端为左侧悬浮导航器预留 288px（内容在剩余区域居中） */}
+      <div className="flex h-full min-h-0 flex-col lg:pl-72">
       {/* 移动端：顶部浮动「题目导航」按钮 */}
       <div className="sticky top-0 z-20 flex items-center justify-between gap-2 border-b bg-background/95 px-3 py-2 backdrop-blur lg:hidden">
         <span className="min-w-0 truncate text-xs font-medium text-muted-foreground">
@@ -104,7 +106,7 @@ function TrainingFlow({ sid, tid, data }: {
       </div>
 
       {/* 主区 */}
-      <PageContainer className="lg:pl-72">
+      <PageContainer className="flex-1">
         <TrainingHeader title={training.title} description={training.description} maxAttempts={training.maxAttempts} total={all.length} solved={solvedCount} />
 
         {item && (
@@ -175,8 +177,9 @@ function TrainingFlow({ sid, tid, data }: {
           </p>
         )}
       </PageContainer>
+      </div>{/* /内容区 wrapper（lg:pl-72） */}
 
-      {/* PC：悬浮导航器（固定右下，章节分组 + 题目格子） */}
+      {/* PC：悬浮导航器（左侧垂直居中，章节分组 + 题目格子） */}
       <TrainingNavigator
         all={all}
         activeIdx={activeIdx}
