@@ -22,4 +22,8 @@ web-quiz/node_modules/
 web-quiz/dist/
 
 web-quiz/node_modules.bak/
+
+# node / vite (single frontend app)
+app/node_modules/
+app/dist/
 .commandcode/
