@@ -12,6 +12,8 @@ import { Button } from '@/components/ui/button'
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
+import { useSpaceById } from '@/pages/portal/portal-context'
+import { PageContainer, SpacePageShell } from '@/pages/portal/SpacePageShell'
 import { cn } from '@/lib/utils'
 
 // 训练详情：章节分组题目行；客观题点击弹层内联作答（即答即判 + 绿/红状态徽标）；
@@ -20,14 +22,15 @@ export function TrainingDetail() {
   const { spaceId, trainingId } = useParams()
   const sid = Number(spaceId)
   const tid = Number(trainingId)
+  const space = useSpaceById(sid)
   const q = useQuery({
     queryKey: ['portal-training', sid, tid],
     queryFn: () => api.portalTraining(sid, tid),
   })
   const data = q.data
 
-  if (q.isLoading) return <Center text="加载训练中…" />
-  if (q.isError || !data) return <Center text="训练不存在或无权访问" />
+  if (space === 'loading' || q.isLoading) return <Center text="加载训练中…" />
+  if (space === null || q.isError || !data) return <Center text="训练不存在或无权访问" />
 
   const { training, chapters } = data
   const all = (chapters ?? []).flatMap((c) => c.items ?? [])
@@ -35,7 +38,8 @@ export function TrainingDetail() {
   const solvedCount = objective.filter((i) => i.solved).length
 
   return (
-    <div className="mx-auto w-full max-w-3xl px-4 py-5 lg:px-8">
+    <SpacePageShell spaceId={sid} backTo="/" backLabel={space.name}>
+    <PageContainer>
       <Link
         to={`/s/${sid}/training`}
         className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
@@ -67,7 +71,8 @@ export function TrainingDetail() {
           <ChapterBlock key={ch.id} sid={sid} tid={tid} chapter={ch} maxAttempts={training.maxAttempts} />
         ))}
       </div>
-    </div>
+    </PageContainer>
+    </SpacePageShell>
   )
 }
 

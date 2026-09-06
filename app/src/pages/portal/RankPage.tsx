@@ -1,29 +1,39 @@
 import { useQuery } from '@tanstack/react-query'
-import { Link } from 'react-router-dom'
-import { ArrowLeftIcon, CrownIcon, Loader2Icon, MedalIcon, TrophyIcon } from 'lucide-react'
+import { useParams } from 'react-router-dom'
+import { CrownIcon, Loader2Icon, MedalIcon, TrophyIcon } from 'lucide-react'
 
 import { api } from '@/api'
-import { usePortalCtx } from './SpaceShell'
+import { usePortalSession, useSpaceById } from './portal-context'
+import { PageContainer, SpacePageShell } from './SpacePageShell'
 import { cn } from '@/lib/utils'
 
-// 排行榜（按域总榜，uuid 去重通过数）：名次 / 用户名 / 通过数；高亮自己。独立页形态，左上返回空间首页。
+// 排行榜（按域总榜，uuid 去重通过数）：名次 / 用户名 / 通过数；高亮自己。独立全屏页。
 export function RankPage() {
-  const { space, user } = usePortalCtx()
+  const { spaceId } = useParams()
+  const sid = Number(spaceId)
+  const space = useSpaceById(sid)
+  const { user } = usePortalSession()
+
+  if (space === 'loading') return <FullCenter text="加载中…" />
+  if (space === null) return <FullCenter text="空间不存在或无权访问" />
+
+  return (
+    <SpacePageShell spaceId={sid} backTo="/" backLabel={space.name}>
+      <RankBody domainId={space.domainId} userId={user.id} />
+    </SpacePageShell>
+  )
+}
+
+function RankBody({ domainId, userId }: { domainId: number; userId: number }) {
   const q = useQuery({
-    queryKey: ['portal-rank', space.domainId],
-    queryFn: () => api.portalRank(space.domainId),
+    queryKey: ['portal-rank', domainId],
+    queryFn: () => api.portalRank(domainId),
   })
 
   return (
-    <div className="mx-auto w-full max-w-2xl px-4 py-5 lg:px-6">
-      <Link
-        to={`/s/${space.id}`}
-        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
-      >
-        <ArrowLeftIcon className="size-4" /> 返回
-      </Link>
+    <PageContainer className="max-w-2xl lg:px-6">
       <h1 className="mb-1 mt-2 text-lg font-semibold">排行榜</h1>
-      <p className="mb-4 text-xs text-muted-foreground">空间「{space.name}」所属域的总榜（按题目通过数排序）</p>
+      <p className="mb-4 text-xs text-muted-foreground">本空间所属域的总榜（按题目通过数排序）</p>
 
       {q.isLoading && (
         <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
@@ -42,7 +52,7 @@ export function RankPage() {
             <div className="p-10 text-center text-sm text-muted-foreground">暂无排名数据</div>
           ) : (
             q.data.rank.map((row, i) => {
-              const me = row.userId === user.id
+              const me = row.userId === userId
               const medal = i < 3 ? <MedalIcon className={cn('size-4', i === 0 ? 'text-amber-400' : i === 1 ? 'text-slate-400' : 'text-orange-400')} /> : null
               return (
                 <div
@@ -69,6 +79,10 @@ export function RankPage() {
           )}
         </div>
       )}
-    </div>
+    </PageContainer>
   )
+}
+
+function FullCenter({ text }: { text: string }) {
+  return <div className="flex h-dvh items-center justify-center text-sm text-muted-foreground">{text}</div>
 }

@@ -6,7 +6,8 @@ import { toast } from 'sonner'
 
 import { api } from '@/api'
 import type { CorrectAnswer, ObjectiveAnswer, QuizProblemResponse } from '@/api/types'
-import { usePortalCtx } from './SpaceShell'
+import { useSpaceById } from './portal-context'
+import { PageContainer, SpacePageShell } from './SpacePageShell'
 import { ObjectiveQuestion } from '@/components/portal/objective'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -17,11 +18,22 @@ export function QuizSolve() {
   const { spaceId, quizId } = useParams()
   const sid = Number(spaceId)
   const qid = Number(quizId)
-  const { space } = usePortalCtx()
+  const space = useSpaceById(sid)
   const quizNameQ = useQuery({ queryKey: ['portal-space-home', sid], queryFn: () => api.portalSpaceHome(sid) })
   const quizName = quizNameQ.data?.quizzes.find((q) => q.id === qid)?.title ?? `刷题 #${qid}`
 
-  return <QuizRound key={qid} sid={sid} qid={qid} quizName={quizName} spaceName={space.name} />
+  if (space === 'loading') return <Center text="加载中…" />
+  if (space === null) return <Center text="空间不存在或无权访问" />
+
+  return (
+    <SpacePageShell spaceId={sid} backTo="/" backLabel={space.name}>
+      <QuizRound key={qid} sid={sid} qid={qid} quizName={quizName} spaceName={space.name} />
+    </SpacePageShell>
+  )
+}
+
+function Center({ text }: { text: string }) {
+  return <div className="flex h-dvh items-center justify-center text-sm text-muted-foreground">{text}</div>
 }
 
 function QuizRound({ sid, qid, quizName, spaceName }: { sid: number; qid: number; quizName: string; spaceName: string }) {
@@ -86,7 +98,7 @@ function QuizRound({ sid, qid, quizName, spaceName }: { sid: number; qid: number
   }
 
   return (
-    <div className="mx-auto w-full max-w-2xl px-4 py-5 lg:px-6">
+    <PageContainer className="max-w-2xl lg:px-6">
       <Link
         to={`/s/${sid}/quiz`}
         className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
@@ -137,7 +149,7 @@ function QuizRound({ sid, qid, quizName, spaceName }: { sid: number; qid: number
           </div>
         )}
       </div>
-    </div>
+    </PageContainer>
   )
 }
 

@@ -15,6 +15,8 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
   AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import { useSpaceById } from '@/pages/portal/portal-context'
+import { PageContainer, SpacePageShell } from '@/pages/portal/SpacePageShell'
 import { cn } from '@/lib/utils'
 
 // 练习整卷：列出全部题目（客观题题面+选项就地可答可改；编程题跳现做题页），
@@ -23,16 +25,21 @@ export function PracticeSolve() {
   const { spaceId, practiceId } = useParams()
   const sid = Number(spaceId)
   const pid = Number(practiceId)
+  const space = useSpaceById(sid)
   const q = useQuery({
     queryKey: ['portal-practice', sid, pid],
     queryFn: () => api.portalPractice(sid, pid),
   })
   const data = q.data
 
-  if (q.isLoading) return <Center text="加载练习中…" />
-  if (q.isError || !data) return <Center text="练习不存在或无权访问" />
+  if (space === 'loading' || q.isLoading) return <Center text="加载练习中…" />
+  if (space === null || q.isError || !data) return <Center text="练习不存在或无权访问" />
 
-  return <PracticePaper key={pid} sid={sid} pid={pid} data={data} />
+  return (
+    <SpacePageShell spaceId={sid} backTo="/" backLabel={space.name}>
+      <PracticePaper key={pid} sid={sid} pid={pid} data={data} />
+    </SpacePageShell>
+  )
 }
 
 function PracticePaper({ sid, pid, data }: {
@@ -84,7 +91,7 @@ function PracticePaper({ sid, pid, data }: {
   const answeredCount = Object.keys(answers).length
 
   return (
-    <div className="mx-auto w-full max-w-3xl px-4 py-5 lg:px-8">
+    <PageContainer>
       <Link
         to={`/s/${sid}/practice`}
         className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
@@ -171,7 +178,7 @@ function PracticePaper({ sid, pid, data }: {
       </AlertDialog>
 
       <HistoryList sid={sid} pid={pid} />
-    </div>
+    </PageContainer>
   )
 }
 

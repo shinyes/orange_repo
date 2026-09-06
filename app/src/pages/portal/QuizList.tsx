@@ -1,35 +1,44 @@
-import { Link } from 'react-router-dom'
-import { ArrowLeftIcon, BookOpenIcon } from 'lucide-react'
+import { Link, useParams } from 'react-router-dom'
+import { BookOpenIcon } from 'lucide-react'
 
 import type { QuizBrief } from '@/api/types'
+import { useSpaceById } from './portal-context'
+import { PageContainer, SpacePageShell } from './SpacePageShell'
 import { useSpaceHome } from './useSpaceHome'
-import { usePortalCtx } from './SpaceShell'
 
-// 空间刷题项目列表。独立页形态，左上角返回空间首页。
+// 空间刷题项目列表。独立全屏页。
 export function QuizList() {
-  const { space } = usePortalCtx()
-  const home = useSpaceHome(space)
+  const { spaceId } = useParams()
+  const sid = Number(spaceId)
+  const space = useSpaceById(sid)
+
+  if (space === 'loading') return <FullCenter text="加载中…" />
+  if (space === null) return <FullCenter text="空间不存在或无权访问" />
+
+  return (
+    <SpacePageShell spaceId={sid} backTo="/" backLabel={space.name}>
+      <QuizListBody spaceId={sid} />
+    </SpacePageShell>
+  )
+}
+
+function QuizListBody({ spaceId }: { spaceId: number }) {
+  const home = useSpaceHome({ id: spaceId })
   const list = home.data?.quizzes ?? []
   return (
-    <div className="mx-auto w-full max-w-3xl px-4 py-5 lg:px-8">
-      <Link
-        to={`/s/${space.id}`}
-        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
-      >
-        <ArrowLeftIcon className="size-4" /> 返回
-      </Link>
+    <PageContainer>
       <h1 className="mb-1 mt-2 text-lg font-semibold">刷题</h1>
       <p className="mb-4 text-xs text-muted-foreground">随机单题即时反馈：答对记通过（uuid 去重），一组全过即完成；答错不限制次数</p>
       {home.isLoading && <p className="py-10 text-center text-sm text-muted-foreground">加载中…</p>}
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-        {list.map((qz) => <QuizCard key={qz.id} q={qz} spaceId={space.id} />)}
+        {list.map((qz) => <QuizCard key={qz.id} q={qz} spaceId={spaceId} />)}
       </div>
       {!home.isLoading && list.length === 0 && (
         <div className="rounded-xl border border-dashed p-12 text-center text-sm text-muted-foreground">
           本空间暂无刷题项目
         </div>
       )}
-    </div>
+    </PageContainer>
   )
 }
 
@@ -48,4 +57,8 @@ function QuizCard({ q, spaceId }: { q: QuizBrief; spaceId: number }) {
       </span>
     </Link>
   )
+}
+
+function FullCenter({ text }: { text: string }) {
+  return <div className="flex h-dvh items-center justify-center text-sm text-muted-foreground">{text}</div>
 }

@@ -1,35 +1,45 @@
-import { ArrowLeftIcon, FolderKanbanIcon } from 'lucide-react'
-import { Link } from 'react-router-dom'
+import { FolderKanbanIcon } from 'lucide-react'
+import { Link, useParams } from 'react-router-dom'
 
 import type { TrainingBrief } from '@/api/types'
-import { usePortalCtx } from './SpaceShell'
+import { useSpaceById } from './portal-context'
+import { PageContainer, SpacePageShell } from './SpacePageShell'
 import { useSpaceHome } from './useSpaceHome'
 
-// 训练列表：空间内训练卡片（点击进入章节做题）。独立页形态，左上角返回空间首页。
+// 训练列表：空间内训练卡片（点击进入章节做题）。独立全屏页，顶栏左「返回空间」。
 export function TrainingList() {
-  const { space } = usePortalCtx()
-  const home = useSpaceHome(space)
+  const { spaceId } = useParams()
+  const sid = Number(spaceId)
+  const space = useSpaceById(sid)
+
+  if (space === 'loading') return <FullCenter text="加载中…" />
+  if (space === null) return <FullCenter text="空间不存在或无权访问" />
+  const spaceName = space.name
+
+  return (
+    <SpacePageShell spaceId={sid} backTo="/" backLabel={spaceName} spaceName="">
+      <TrainingListBody spaceId={sid} />
+    </SpacePageShell>
+  )
+}
+
+function TrainingListBody({ spaceId }: { spaceId: number }) {
+  const home = useSpaceHome({ id: spaceId })
   const list = home.data?.trainings ?? []
   return (
-    <div className="mx-auto w-full max-w-3xl px-4 py-5 lg:px-8">
-      <Link
-        to={`/s/${space.id}`}
-        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
-      >
-        <ArrowLeftIcon className="size-4" /> 返回
-      </Link>
+    <PageContainer>
       <h1 className="mb-1 mt-2 text-lg font-semibold">训练</h1>
       <p className="mb-4 text-xs text-muted-foreground">按章节组织的训练，客观题限次作答（答对绿勾 / 次数用尽标红）</p>
       {home.isLoading && <p className="py-10 text-center text-sm text-muted-foreground">加载中…</p>}
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-        {list.map((t) => <TrainingCard key={t.id} t={t} spaceId={space.id} />)}
+        {list.map((t) => <TrainingCard key={t.id} t={t} spaceId={spaceId} />)}
       </div>
       {!home.isLoading && list.length === 0 && (
         <div className="rounded-xl border border-dashed p-12 text-center text-sm text-muted-foreground">
           本空间暂无训练
         </div>
       )}
-    </div>
+    </PageContainer>
   )
 }
 
@@ -50,4 +60,8 @@ function TrainingCard({ t, spaceId }: { t: TrainingBrief; spaceId: number }) {
       </span>
     </Link>
   )
+}
+
+function FullCenter({ text }: { text: string }) {
+  return <div className="flex h-dvh items-center justify-center text-sm text-muted-foreground">{text}</div>
 }

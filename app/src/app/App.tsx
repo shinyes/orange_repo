@@ -17,6 +17,7 @@ import { MyPage } from '@/pages/portal/MyPage'
 import { SpacePicker } from '@/pages/portal/SpacePicker'
 import { SpaceHome } from '@/pages/portal/SpaceHome'
 import { SpaceShell } from '@/pages/portal/SpaceShell'
+import { PortalSessionProvider } from '@/pages/portal/portal-context'
 import { TrainingList } from '@/pages/portal/TrainingList'
 import { TrainingDetail } from '@/pages/portal/TrainingDetail'
 import { PracticeList } from '@/pages/portal/PracticeList'
@@ -82,7 +83,8 @@ export default function App() {
       <BrowserRouter>
         {authed && user ? (
           <Suspense fallback={<PageFallback />}>
-            <Routes>
+            <PortalSessionProvider value={{ user, onLogout }}>
+              <Routes>
               <Route path="/login" element={<Navigate to="/" replace />} />
 
               {/* 非空间页：顶部壳（品牌 + 我的 [+ 管理]） */}
@@ -92,17 +94,19 @@ export default function App() {
                 <Route path="problem/:problemId" element={<ProblemSolvePage />} />
               </Route>
 
-              {/* 空间壳：/s/:spaceId/*（菜单首页 → 训练/练习/刷题/排行榜独立列表页） */}
+              {/* 空间菜单首页（壳内含 ←空间名 + 快捷 tab） */}
               <Route path="/s/:spaceId" element={<SpaceShell user={user} onLogout={onLogout} />}>
                 <Route index element={<SpaceHome />} />
-                <Route path="training" element={<TrainingList />} />
-                <Route path="training/:trainingId" element={<TrainingDetail />} />
-                <Route path="practice" element={<PracticeList />} />
-                <Route path="practice/:practiceId" element={<PracticeSolve />} />
-                <Route path="quiz" element={<QuizList />} />
-                <Route path="quiz/:quizId" element={<QuizSolve />} />
-                <Route path="rank" element={<RankPage />} />
               </Route>
+
+              {/* 独立全屏页：训练/练习/刷题/排行榜（点卡片后进入，脱离空间壳，自带左上返回） */}
+              <Route path="/s/:spaceId/training" element={<TrainingList />} />
+              <Route path="/s/:spaceId/training/:trainingId" element={<TrainingDetail />} />
+              <Route path="/s/:spaceId/practice" element={<PracticeList />} />
+              <Route path="/s/:spaceId/practice/:practiceId" element={<PracticeSolve />} />
+              <Route path="/s/:spaceId/quiz" element={<QuizList />} />
+              <Route path="/s/:spaceId/quiz/:quizId" element={<QuizSolve />} />
+              <Route path="/s/:spaceId/rank" element={<RankPage />} />
 
               {/* 管理区：仅管理员（global_admin/domain_admin），member 重定向回门户 */}
               <Route path="/admin" element={<RequireAdmin user={user}><AdminLayout user={user} onLogout={onLogout} /></RequireAdmin>}>
@@ -114,7 +118,8 @@ export default function App() {
               </Route>
 
               <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
+              </Routes>
+            </PortalSessionProvider>
           </Suspense>
         ) : (
           <Login onSuccess={(u) => { setUser(u); setAuthed(true) }} />
