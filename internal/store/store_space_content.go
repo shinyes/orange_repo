@@ -98,13 +98,33 @@ func (s *Store) GetSpaceTraining(id int64) (*SpaceTraining, []SpaceChapter, erro
 	return &t, chapters, nil
 }
 
-// UpdateSpaceTrainingMeta 更新训练名称/描述/标签/上限。
-func (s *Store) UpdateSpaceTrainingMeta(id int64, title, description string, tags []string, maxAttempts int) error {
-	if maxAttempts <= 0 {
-		maxAttempts = 3
+// UpdateSpaceTrainingMeta 部分更新训练元信息（nil 指针 = 该字段不变）。
+// maxAttempts 语义：0 = 不限次（显式）；>0 = 限 N 次；nil = 不变。
+func (s *Store) UpdateSpaceTrainingMeta(id int64, title, description *string, tags []string, maxAttempts *int) error {
+	// 读当前值组装 UPDATE（保持部分更新；tags nil = 不变）
+	var curTitle, curDesc, curTags string
+	var curMax int
+	if err := s.DB.QueryRow(`SELECT title,description,tags_json,max_attempts FROM space_trainings WHERE id=?`, id).
+		Scan(&curTitle, &curDesc, &curTags, &curMax); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrNotFound
+		}
+		return err
+	}
+	if title != nil {
+		curTitle = *title
+	}
+	if description != nil {
+		curDesc = *description
+	}
+	if tags != nil {
+		curTags = encodeTags(tags)
+	}
+	if maxAttempts != nil {
+		curMax = *maxAttempts
 	}
 	res, err := s.DB.Exec(`UPDATE space_trainings SET title=?,description=?,tags_json=?,max_attempts=? WHERE id=?`,
-		title, description, encodeTags(tags), maxAttempts, id)
+		curTitle, curDesc, curTags, curMax, id)
 	if err != nil {
 		return err
 	}
@@ -163,6 +183,64 @@ func (s *Store) DeleteSpaceChapter(id int64) error {
 		return ErrNotFound
 	}
 	return nil
+}
+
+// ReorderSpaceChapters 按给定章节 id 顺序重写训练内章节 order_no（快编/管理端章节排序）。
+func (s *Store) ReorderSpaceChapters(trainingID int64, chapterIDs []int64) error {
+	tx, err := s.DB.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	// 校验全部章节归属该训练（防跨训练重排）
+	for _, cid := range chapterIDs {
+		var tid int64
+		err := tx.QueryRow(`SELECT training_id FROM space_training_chapters WHERE id=?`, cid).Scan(&tid)
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrNotFound
+		}
+		if err != nil {
+			return err
+		}
+		if tid != trainingID {
+			return ErrNotFound
+		}
+	}
+	for i, cid := range chapterIDs {
+		if _, err := tx.Exec(`UPDATE space_training_chapters SET order_no=? WHERE id=?`, i+1, cid); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// ReorderSpaceChapterItems 按给定条目 id 顺序重写章节内条目 order_no（题目排序）。
+func (s *Store) ReorderSpaceChapterItems(chapterID int64, itemIDs []int64) error {
+	tx, err := s.DB.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	// 校验全部条目归属该章节
+	for _, iid := range itemIDs {
+		var chID int64
+		err := tx.QueryRow(`SELECT chapter_id FROM space_training_items WHERE id=?`, iid).Scan(&chID)
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrNotFound
+		}
+		if err != nil {
+			return err
+		}
+		if chID != chapterID {
+			return ErrNotFound
+		}
+	}
+	for i, iid := range itemIDs {
+		if _, err := tx.Exec(`UPDATE space_training_items SET order_no=? WHERE id=?`, i+1, iid); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }
 
 // AddSpaceChapterItems 章节追加题目（跳过不存在的题；返回加入的 item id）。

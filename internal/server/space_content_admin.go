@@ -199,15 +199,23 @@ func (s *Server) handleUpdateSpaceTrainingMeta(c *fiber.Ctx) error {
 		return err
 	}
 	var req struct {
-		Title       string   `json:"title"`
-		Description string   `json:"description"`
+		Title       *string  `json:"title"`
+		Description *string  `json:"description"`
 		Tags        []string `json:"tags"`
-		MaxAttempts int      `json:"maxAttempts"`
+		MaxAttempts *int     `json:"maxAttempts"`
 	}
 	if err := c.BodyParser(&req); err != nil {
 		return respondError(c, fiber.StatusBadRequest, "invalid request")
 	}
-	if err := s.Store.UpdateSpaceTrainingMeta(tid, req.Title, req.Description, req.Tags, req.MaxAttempts); err != nil {
+	// title 显式提供时不得为空
+	if req.Title != nil && strings.TrimSpace(*req.Title) == "" {
+		return respondError(c, fiber.StatusBadRequest, "标题不能为空")
+	}
+	var tagsPtr []string
+	if req.Tags != nil {
+		tagsPtr = req.Tags
+	}
+	if err := s.Store.UpdateSpaceTrainingMeta(tid, req.Title, req.Description, tagsPtr, req.MaxAttempts); err != nil {
 		if err == store.ErrNotFound {
 			return respondError(c, fiber.StatusNotFound, "训练不存在")
 		}
@@ -333,6 +341,114 @@ func (s *Server) handleAddSpaceChapterItems(c *fiber.Ctx) error {
 		return err
 	}
 	return respondData(c, fiber.StatusCreated, fiber.Map{"itemIds": ids})
+}
+
+// chapterGuard 解析 :cid 章节并做归属校验，返回空间 id（共用：重命名/删除/条目重排）。
+func (s *Server) chapterGuard(c *fiber.Ctx) (spaceID, cid int64, err error) {
+	cid, perr := paramID(c, "cid")
+	if perr != nil {
+		return 0, 0, respondError(c, fiber.StatusBadRequest, "invalid chapter id")
+	}
+	user := currentUser(c)
+	as, serr := s.Store.SpaceIDOfChapter(cid)
+	if serr != nil {
+		if serr == store.ErrNotFound {
+			return 0, 0, respondError(c, fiber.StatusNotFound, "章节不存在")
+		}
+		return 0, 0, serr
+	}
+	if aerr := s.requireSpaceAccess(c, user, as); aerr != nil {
+		return 0, 0, aerr
+	}
+	return as, cid, nil
+}
+
+// handleRenameSpaceChapter PUT /api/space/chapters/:cid {title} → 章节重命名。
+func (s *Server) handleRenameSpaceChapter(c *fiber.Ctx) error {
+	_, cid, err := s.chapterGuard(c)
+	if err != nil {
+		return err
+	}
+	var req struct {
+		Title string `json:"title"`
+	}
+	if err := c.BodyParser(&req); err != nil {
+		return respondError(c, fiber.StatusBadRequest, "invalid request")
+	}
+	if strings.TrimSpace(req.Title) == "" {
+		return respondError(c, fiber.StatusBadRequest, "章节名称不能为空")
+	}
+	if err := s.Store.RenameSpaceChapter(cid, strings.TrimSpace(req.Title)); err != nil {
+		if err == store.ErrNotFound {
+			return respondError(c, fiber.StatusNotFound, "章节不存在")
+		}
+		return err
+	}
+	return c.SendStatus(fiber.StatusNoContent)
+}
+
+// handleDeleteSpaceChapter DELETE /api/space/chapters/:cid → 删除章节（级联条目）。
+func (s *Server) handleDeleteSpaceChapter(c *fiber.Ctx) error {
+	_, cid, err := s.chapterGuard(c)
+	if err != nil {
+		return err
+	}
+	if err := s.Store.DeleteSpaceChapter(cid); err != nil {
+		if err == store.ErrNotFound {
+			return respondError(c, fiber.StatusNotFound, "章节不存在")
+		}
+		return err
+	}
+	return c.SendStatus(fiber.StatusNoContent)
+}
+
+// handleReorderSpaceChapters PUT /api/space/trainings/:tid/chapters/order {chapterIds}
+// → 按给定顺序重排章节。
+func (s *Server) handleReorderSpaceChapters(c *fiber.Ctx) error {
+	tid, err := paramID(c, "tid")
+	if err != nil {
+		return respondError(c, fiber.StatusBadRequest, "invalid training id")
+	}
+	user := currentUser(c)
+	as, err := s.Store.SpaceIDOfTraining(tid)
+	if err != nil {
+		if err == store.ErrNotFound {
+			return respondError(c, fiber.StatusNotFound, "训练不存在")
+		}
+		return err
+	}
+	if err := s.requireSpaceAccess(c, user, as); err != nil {
+		return err
+	}
+	var req struct {
+		ChapterIDs []int64 `json:"chapterIds"`
+	}
+	if err := c.BodyParser(&req); err != nil {
+		return respondError(c, fiber.StatusBadRequest, "invalid request")
+	}
+	if err := s.Store.ReorderSpaceChapters(tid, req.ChapterIDs); err != nil {
+		return err
+	}
+	return c.SendStatus(fiber.StatusNoContent)
+}
+
+// handleReorderSpaceChapterItems PUT /api/space/chapters/:cid/items/order {itemIds}
+// → 按给定顺序重排章节内题目。
+func (s *Server) handleReorderSpaceChapterItems(c *fiber.Ctx) error {
+	_, cid, err := s.chapterGuard(c)
+	if err != nil {
+		return err
+	}
+	var req struct {
+		ItemIDs []int64 `json:"itemIds"`
+	}
+	if err := c.BodyParser(&req); err != nil {
+		return respondError(c, fiber.StatusBadRequest, "invalid request")
+	}
+	if err := s.Store.ReorderSpaceChapterItems(cid, req.ItemIDs); err != nil {
+		return err
+	}
+	return c.SendStatus(fiber.StatusNoContent)
 }
 
 // handleDeleteSpaceItem DELETE /api/space/space-items/:itemId（空间条目删除：训练/练习通用，

@@ -207,13 +207,25 @@ export const adminApi = {
   ) => req<{ id: number }>(`/api/space/${spaceId}/trainings`, json({ method: 'POST', body: JSON.stringify(body) })),
   getSpaceTraining: (spaceId: number, tid: number) =>
     req<{ training: SpaceTraining; chapters: SpaceChapter[] }>(`/api/space/${spaceId}/trainings/${tid}`),
-  updateSpaceTraining: (spaceId: number, tid: number, body: { title: string; description?: string; tags?: string[]; maxAttempts?: number }) =>
+  /** 更新训练元信息（部分更新：仅发送的字段被修改；title 提供时不可为空） */
+  updateSpaceTraining: (spaceId: number, tid: number, body: { title?: string; description?: string; tags?: string[]; maxAttempts?: number }) =>
     req<void>(`/api/space/${spaceId}/trainings/${tid}`, json({ method: 'PUT', body: JSON.stringify(body) })),
   deleteSpaceTraining: (spaceId: number, tid: number) => req<void>(`/api/space/${spaceId}/trainings/${tid}`, { method: 'DELETE' }),
   createSpaceChapter: (spaceId: number, tid: number, title: string) =>
     req<{ id: number }>(`/api/space/${spaceId}/trainings/${tid}/chapters`, json({ method: 'POST', body: JSON.stringify({ title }) })),
   addSpaceChapterItems: (spaceId: number, chapterId: number, problemIds: number[]) =>
     req<{ itemIds: number[] }>(`/api/space/${spaceId}/chapters/${chapterId}/items`, json({ method: 'POST', body: JSON.stringify({ problemIds }) })),
+  /** 章节重命名 */
+  renameSpaceChapter: (chapterId: number, title: string) =>
+    req<void>(`/api/space/chapters/${chapterId}`, json({ method: 'PUT', body: JSON.stringify({ title }) })),
+  /** 删除章节（级联条目） */
+  deleteSpaceChapter: (chapterId: number) => req<void>(`/api/space/chapters/${chapterId}`, { method: 'DELETE' }),
+  /** 章节排序（chapterIds 全量顺序；按训练归属校验） */
+  reorderSpaceChapters: (trainingId: number, chapterIds: number[]) =>
+    req<void>(`/api/space/trainings/${trainingId}/chapters/order`, json({ method: 'PUT', body: JSON.stringify({ chapterIds }) })),
+  /** 章节内题目排序（itemIds 全量顺序） */
+  reorderSpaceChapterItems: (chapterId: number, itemIds: number[]) =>
+    req<void>(`/api/space/chapters/${chapterId}/items/order`, json({ method: 'PUT', body: JSON.stringify({ itemIds }) })),
   spacePractices: (spaceId: number) => req<{ practices: SpacePractice[] }>(`/api/space/${spaceId}/practices`),
   createSpacePractice: (
     spaceId: number,
