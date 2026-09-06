@@ -124,7 +124,7 @@ export default function App() {
           <Login onSuccess={(u) => { setUser(u); setAuthed(true) }} />
         )}
       </BrowserRouter>
-      <Toaster position="top-right" richColors closeButton />
+      <Toaster position="bottom-right" richColors closeButton />
     </QueryClientProvider>
   )
 }
