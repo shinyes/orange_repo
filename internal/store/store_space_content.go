@@ -73,7 +73,7 @@ func (s *Store) ListSpaceTrainings(spaceID int64) ([]SpaceTraining, error) {
 		t.Tags = decodeTags(tags)
 		out = append(out, t)
 	}
-	return out, rows.Err()
+	return nonNilSlice(out), rows.Err()
 }
 
 // GetSpaceTraining 取训练（含章节/条目题目信息）。
@@ -256,7 +256,7 @@ func (s *Store) AddSpaceChapterItems(chapterID int64, problemIDs []int64) ([]int
 		id, _ := res.LastInsertId()
 		out = append(out, id)
 	}
-	return out, nil
+	return nonNilSlice(out), nil
 }
 
 // RemoveSpaceChapterItem 从章节移除条目。
@@ -364,7 +364,7 @@ func (s *Store) ListSpaceChapters(trainingID int64) ([]SpaceChapter, error) {
 		}
 		chapters[i].Items = items
 	}
-	return chapters, nil
+	return nonNilSlice(chapters), nil
 }
 
 func (s *Store) spaceChapterItems(chapterID int64) ([]SpaceChapterItem, error) {
@@ -397,7 +397,7 @@ func (s *Store) spaceChapterItems(chapterID int64) ([]SpaceChapterItem, error) {
 		it.ProblemUUID = u
 		out = append(out, it)
 	}
-	return out, rows.Err()
+	return nonNilSlice(out), rows.Err()
 }
 
 // ---------- 空间练习 ----------
@@ -452,7 +452,7 @@ func (s *Store) ListSpacePractices(spaceID int64) ([]SpacePractice, error) {
 		p.Tags = decodeTags(tags)
 		out = append(out, p)
 	}
-	return out, rows.Err()
+	return nonNilSlice(out), rows.Err()
 }
 
 // GetSpacePractice 取练习及条目。
@@ -556,7 +556,7 @@ func (s *Store) ListSpacePracticeItems(practiceID int64) ([]SpacePracticeItem, e
 		}
 		out = append(out, it)
 	}
-	return out, rows.Err()
+	return nonNilSlice(out), rows.Err()
 }
 
 // ---------- 空间刷题项目 ----------
@@ -601,7 +601,7 @@ func (s *Store) ListSpaceQuizzes(spaceID int64) ([]SpaceQuiz, error) {
 		q.Tags = decodeTags(tags)
 		out = append(out, q)
 	}
-	return out, rows.Err()
+	return nonNilSlice(out), rows.Err()
 }
 
 // DeleteSpaceQuiz 删刷题项目。

@@ -71,7 +71,7 @@ export function TrainingQuickEditDialog(props: {
   }
 
   const training: SpaceTraining | undefined = q.data?.training
-  const chapters: SpaceChapter[] = q.data?.chapters ?? []
+  const chapters: SpaceChapter[] = (q.data?.chapters ?? []).map((c) => ({ ...c, items: c.items ?? [] }))
 
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
