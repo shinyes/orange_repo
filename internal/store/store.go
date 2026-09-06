@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	_ "modernc.org/sqlite"
@@ -38,9 +39,9 @@ func Open(dataDir string) (*Store, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite: %w", err)
 	}
-	db.SetMaxOpenConns(1) // SQLite 单写者，避免锁竞争
+	db.SetMaxOpenConns(4) // WAL 多读者；写者由 busy_timeout 串行
 	s := &Store{DB: db, DataDir: dataDir}
-	if err := s.migrate(); err != nil {
+	if err := s.migrateWithRetry(); err != nil {
 		db.Close()
 		return nil, err
 	}
@@ -51,7 +52,25 @@ func (s *Store) Close() error { return s.DB.Close() }
 
 // MigrateSchema 对任意连接执行全量建表/迁移（题库/域/空间结构表）。
 // 单库模式下 quizstore 等与主站共用同一 orangeoj.db 文件，可复用保证题库侧表齐全。
-func (s *Store) MigrateSchema() error { return s.migrate() }
+func (s *Store) MigrateSchema() error { return s.migrateWithRetry() }
+
+// migrateWithRetry 迁移带 SQLITE_BUSY 重试：双进程同库并发首启时 DDL 会撞写锁，
+// 重试若干次让先到者完成后再执行（每次重试重新探测，天然幂等）。
+func (s *Store) migrateWithRetry() error {
+	const attempts = 6
+	var lastErr error
+	for i := 0; i < attempts; i++ {
+		lastErr = s.migrate()
+		if lastErr == nil {
+			return nil
+		}
+		if !strings.Contains(lastErr.Error(), "database is locked") && !strings.Contains(lastErr.Error(), "SQLITE_BUSY") {
+			return lastErr
+		}
+		time.Sleep(time.Duration(200*(i+1)) * time.Millisecond)
+	}
+	return fmt.Errorf("migrate failed after %d attempts: %w", attempts, lastErr)
+}
 
 func (s *Store) migrate() error {
 	stmts := []string{
@@ -172,11 +191,17 @@ func (s *Store) backfillProblemDomain() error {
 		if err != sql.ErrNoRows {
 			return err
 		}
-		res, err := s.DB.Exec(`INSERT INTO domains(name) VALUES(?)`, DefaultDomainName)
+		res, err := s.DB.Exec(`INSERT OR IGNORE INTO domains(name) VALUES(?)`, DefaultDomainName)
 		if err != nil {
 			return err
 		}
 		domainID, _ = res.LastInsertId()
+		if domainID == 0 {
+			// 并发迁移：他方刚插入默认域 → 回读其 id
+			if err := s.DB.QueryRow(`SELECT id FROM domains WHERE name=?`, DefaultDomainName).Scan(&domainID); err != nil {
+				return err
+			}
+		}
 	}
 	if _, err := s.DB.Exec(`UPDATE problems SET domain_id=? WHERE domain_id IS NULL`, domainID); err != nil {
 		return err
@@ -243,6 +268,7 @@ func (s *Store) backfillProblemUUIDs() error {
 }
 
 // ensureColumn 幂等补列：仅当目标表缺少该列时执行 ALTER TABLE ADD COLUMN。
+// 双进程同库并发迁移时，另一方可能已补列——ALTER 报 duplicate column 视为成功。
 func (s *Store) ensureColumn(table, column, ddl string) error {
 	var n int
 	if err := s.DB.QueryRow(`SELECT COUNT(1) FROM pragma_table_info(?) WHERE name=?`, table, column).Scan(&n); err != nil {
@@ -252,12 +278,16 @@ func (s *Store) ensureColumn(table, column, ddl string) error {
 		return nil
 	}
 	if _, err := s.DB.Exec(`ALTER TABLE ` + table + ` ADD COLUMN ` + ddl); err != nil {
+		if strings.Contains(err.Error(), "duplicate column") {
+			return nil // 并发迁移：他方已加列
+		}
 		return fmt.Errorf("ensure column %s.%s: %w", table, column, err)
 	}
 	return nil
 }
 
 // dropColumn 幂等删列：仅当目标表存在该列时执行 ALTER TABLE DROP COLUMN。
+// 双进程同库并发迁移时，另一方可能已删列——ALTER 报 no such column 视为成功。
 func (s *Store) dropColumn(table, column string) error {
 	var n int
 	if err := s.DB.QueryRow(`SELECT COUNT(1) FROM pragma_table_info(?) WHERE name=?`, table, column).Scan(&n); err != nil {
@@ -267,6 +297,9 @@ func (s *Store) dropColumn(table, column string) error {
 		return nil
 	}
 	if _, err := s.DB.Exec(`ALTER TABLE ` + table + ` DROP COLUMN ` + column); err != nil {
+		if strings.Contains(err.Error(), "no such column") {
+			return nil // 并发迁移：他方已删列
+		}
 		return fmt.Errorf("drop column %s.%s: %w", table, column, err)
 	}
 	return nil

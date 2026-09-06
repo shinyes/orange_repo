@@ -99,6 +99,7 @@ export function DomainProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     void load()
     const on401 = () => {
+      qc.clear() // 会话失效：清空缓存，防换账号残留上一账号的仓库/空间数据
       setUser(null)
       setDomainIdState(null)
       setDomain(null)
@@ -106,7 +107,7 @@ export function DomainProvider({ children }: { children: ReactNode }) {
     }
     window.addEventListener('OrangeOJ:unauthorized', on401)
     return () => window.removeEventListener('OrangeOJ:unauthorized', on401)
-  }, [load])
+  }, [load, qc])
 
   const refresh = useCallback(async () => {
     setStatus('loading')
@@ -117,12 +118,13 @@ export function DomainProvider({ children }: { children: ReactNode }) {
     try {
       await api.logout()
     } finally {
+      qc.clear() // 登出清空缓存，防换账号残留
       setUser(null)
       setDomainIdState(null)
       setDomain(null)
       setStatus('anon')
     }
-  }, [])
+  }, [qc])
 
   /** 切换当前域（global_admin 域下拉用）：持久化并同步 api 模块。 */
   const setDomainId = useCallback(

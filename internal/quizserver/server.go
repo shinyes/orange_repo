@@ -38,10 +38,13 @@ type Server struct {
 // Queue 返回判题队列服务（nil 表示未启用——judge token 未配置）。
 func (s *Server) Queue() *judge.QueueService { return s.queue }
 
-// StopQueue 停止队列 worker（服务退出前调用）。
+// StopQueue 停止队列 worker 并等待全部退出（服务退出前调用；须早于数据库关闭）。
 func (s *Server) StopQueue() {
 	if s.queueCancel != nil {
 		s.queueCancel()
+	}
+	if s.queue != nil {
+		s.queue.Stop()
 	}
 }
 

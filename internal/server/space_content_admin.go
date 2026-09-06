@@ -316,38 +316,61 @@ func (s *Server) handleAddSpaceChapterItems(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil {
 		return respondError(c, fiber.StatusBadRequest, "invalid request")
 	}
-	ids, err := s.Store.AddSpaceChapterItems(cid, req.ProblemIDs)
+	// 域门禁：仅放行属于该空间域的题目（防跨域塞题）
+	domainID, err := s.Store.SpaceDomain(spaceID)
+	if err != nil {
+		return err
+	}
+	allowed, allOK, err := s.Store.FilterProblemsInDomain(req.ProblemIDs, domainID)
+	if err != nil {
+		return err
+	}
+	if !allOK {
+		return respondError(c, fiber.StatusBadRequest, "包含不属于该域的题目，已拒绝添加")
+	}
+	ids, err := s.Store.AddSpaceChapterItems(cid, allowed)
 	if err != nil {
 		return err
 	}
 	return respondData(c, fiber.StatusCreated, fiber.Map{"itemIds": ids})
 }
 
-// handleDeleteSpaceItem DELETE /api/space/space-items/:itemId（空间训练章节条目删除）
+// handleDeleteSpaceItem DELETE /api/space/space-items/:itemId（空间条目删除：训练/练习通用，
+// 按条目归属表自动路由）。
 func (s *Server) handleDeleteSpaceItem(c *fiber.Ctx) error {
 	itemID, err := paramID(c, "itemId")
 	if err != nil {
 		return respondError(c, fiber.StatusBadRequest, "invalid item id")
 	}
-	// 归属校验：条目 → 章节 → 训练 → 空间（防跨空间越权删除）
-	spaceID, err := s.Store.SpaceIDOfTrainingItem(itemID)
-	if err != nil {
-		if err == store.ErrNotFound {
-			return respondError(c, fiber.StatusNotFound, "条目不存在")
-		}
-		return err
-	}
 	user := currentUser(c)
-	if err := s.requireSpaceAccess(c, user, spaceID); err != nil {
-		return err
-	}
-	if err := s.Store.RemoveSpaceChapterItem(itemID); err != nil {
-		if err == store.ErrNotFound {
-			return respondError(c, fiber.StatusNotFound, "条目不存在")
+	// 归属校验（先判训练条目，再判练习条目），防跨空间越权删除
+	spaceID, err := s.Store.SpaceIDOfTrainingItem(itemID)
+	if err == nil {
+		if err := s.requireSpaceAccess(c, user, spaceID); err != nil {
+			return err
 		}
+		if err := s.Store.RemoveSpaceChapterItem(itemID); err != nil {
+			return err
+		}
+		return c.SendStatus(fiber.StatusNoContent)
+	}
+	if err != store.ErrNotFound {
 		return err
 	}
-	return c.SendStatus(fiber.StatusNoContent)
+	spaceID, err = s.Store.SpaceIDOfPracticeItem(itemID)
+	if err == nil {
+		if err := s.requireSpaceAccess(c, user, spaceID); err != nil {
+			return err
+		}
+		if err := s.Store.RemoveSpacePracticeItem(itemID); err != nil {
+			return err
+		}
+		return c.SendStatus(fiber.StatusNoContent)
+	}
+	if err != store.ErrNotFound {
+		return err
+	}
+	return respondError(c, fiber.StatusNotFound, "条目不存在")
 }
 
 // ---------- 空间练习管理 ----------
@@ -507,7 +530,19 @@ func (s *Server) handleAddSpacePracticeItems(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil {
 		return respondError(c, fiber.StatusBadRequest, "invalid request")
 	}
-	if err := s.Store.AddSpacePracticeItems(pid, req.ProblemIDs); err != nil {
+	// 域门禁：仅放行属于该空间域的题目（防跨域塞题）
+	domainID, err := s.Store.SpaceDomain(spaceID)
+	if err != nil {
+		return err
+	}
+	allowed, allOK, err := s.Store.FilterProblemsInDomain(req.ProblemIDs, domainID)
+	if err != nil {
+		return err
+	}
+	if !allOK {
+		return respondError(c, fiber.StatusBadRequest, "包含不属于该域的题目，已拒绝添加")
+	}
+	if err := s.Store.AddSpacePracticeItems(pid, allowed); err != nil {
 		return err
 	}
 	return c.SendStatus(fiber.StatusNoContent)

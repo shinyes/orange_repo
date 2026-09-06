@@ -4,6 +4,7 @@ package store
 
 import (
 	"database/sql"
+	"strings"
 
 	"orangeoj/internal/model"
 )
@@ -88,4 +89,41 @@ func (s *Store) PracticeInDomain(practiceID, domainID int64) (bool, error) {
 		JOIN problems p ON p.id=i.problem_id
 		WHERE i.practice_id=? AND (p.domain_id IS NULL OR p.domain_id != ?)`, practiceID, domainID).Scan(&n)
 	return n == 0, err
+}
+
+// FilterProblemsInDomain 过滤出属于 domainID 的题目 id（加题域门禁：仅放行同域题，
+// 不存在的题目自然被滤除；返回过滤后的列表与是否全部通过）。
+func (s *Store) FilterProblemsInDomain(ids []int64, domainID int64) ([]int64, bool, error) {
+	if len(ids) == 0 {
+		return ids, true, nil
+	}
+	ph := strings.TrimRight(strings.Repeat("?,", len(ids)), ",")
+	args := make([]any, 0, len(ids)+1)
+	args = append(args, domainID)
+	for _, id := range ids {
+		args = append(args, id)
+	}
+	rows, err := s.DB.Query(`SELECT id FROM problems WHERE domain_id=? AND id IN (`+ph+`)`, args...)
+	if err != nil {
+		return nil, false, err
+	}
+	defer rows.Close()
+	allowed := map[int64]bool{}
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, false, err
+		}
+		allowed[id] = true
+	}
+	if err := rows.Err(); err != nil {
+		return nil, false, err
+	}
+	out := make([]int64, 0, len(ids))
+	for _, id := range ids {
+		if allowed[id] {
+			out = append(out, id)
+		}
+	}
+	return out, len(out) == len(ids), nil
 }

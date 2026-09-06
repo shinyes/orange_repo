@@ -1,5 +1,5 @@
-// RepoReader：以只读模式（mode=ro）访问主站题库数据库 orangeoj.db。
-// 本文件只有 SELECT，绝不迁移、绝不写入主库。
+// RepoReader：单库 orangeoj.db 的题库侧读取句柄（与作答同库；仅承载题库/空间结构 SELECT，
+// 指向与 Store 同一连接，见 quizstore.Open）。
 // 标签匹配/题目正文读取按判题场景直接以 SQL 取数（见 repo_oj.go/repo_space.go）。
 package quizstore
 
@@ -8,12 +8,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"path/filepath"
-
-	_ "modernc.org/sqlite"
 )
 
-// RepoReader 主库只读句柄。
+// RepoReader 题库侧读取句柄（同一 orangeoj.db 连接）。
 type RepoReader struct {
 	DB *sql.DB
 }
@@ -23,25 +20,6 @@ type AnswerEnvelope struct {
 	Type        string
 	AnswerIndex *int
 	Answer      *bool
-}
-
-// OpenRepoReader 只读打开主库题库并探活（确认存在 problems 表）。
-// 只读连接放开并发上限：主库为 WAL 模式（主站维护），多连接只读可并行，
-// 避免大量并发读被单连接串行化（原 SetMaxOpenConns(1) 在刷题/判题读密集下是瓶颈）。
-func OpenRepoReader(path string) (*RepoReader, error) {
-	dsn := "file:" + filepath.ToSlash(path) + "?mode=ro&_pragma=busy_timeout(5000)"
-	db, err := sql.Open("sqlite", dsn)
-	if err != nil {
-		return nil, fmt.Errorf("open repo sqlite: %w", err)
-	}
-	db.SetMaxOpenConns(8)
-	db.SetMaxIdleConns(8)
-	var n int
-	if err := db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='problems'`).Scan(&n); err != nil || n == 0 {
-		db.Close()
-		return nil, fmt.Errorf("未找到题库数据库 %s：请先运行主站服务初始化题库", path)
-	}
-	return &RepoReader{DB: db}, nil
 }
 
 // GetAnswer 读取判题所需答案。

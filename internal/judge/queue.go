@@ -14,6 +14,8 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"strconv"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -31,6 +33,7 @@ type QueueService struct {
 	runner  Runner
 	loader  SubmissionLoader
 	workers int
+	wg      sync.WaitGroup
 }
 
 // NewQueueService 构造队列服务（workers < 1 视为 1）。
@@ -43,12 +46,19 @@ func NewQueueService(db *sql.DB, runner Runner, loader SubmissionLoader, workers
 
 // Start 启动全部 worker goroutine（随 ctx 取消退出）。
 func (q *QueueService) Start(ctx context.Context) {
+	q.wg.Add(q.workers)
 	for i := 0; i < q.workers; i++ {
 		go q.workerLoop(ctx, i+1)
 	}
 }
 
+// Stop 等待全部 worker 退出（配合 ctx cancel；须在关闭 DB 前调用）。
+func (q *QueueService) Stop() {
+	q.wg.Wait()
+}
+
 func (q *QueueService) workerLoop(ctx context.Context, idx int) {
+	defer q.wg.Done()
 	for {
 		select {
 		case <-ctx.Done():
@@ -74,7 +84,10 @@ func (q *QueueService) workerLoop(ctx context.Context, idx int) {
 	}
 }
 
-// claimJob 原子认领一个 queued 任务（RETURNING，事务内完成）。
+// orphanReclaimMinutes 超过该时长的 running 任务视为孤儿（进程被杀残留），可被重新认领。
+const orphanReclaimMinutes = 10
+
+// claimJob 原子认领任务：queued 优先，其次超时 running 孤儿（RETURNING，事务内完成）。
 func (q *QueueService) claimJob(ctx context.Context) (*jobItem, error) {
 	tx, err := q.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -86,8 +99,10 @@ func (q *QueueService) claimJob(ctx context.Context) (*jobItem, error) {
 WITH cte AS (
 	SELECT id
 	FROM judge_jobs
-	WHERE status='queued' AND datetime(available_at) <= datetime('now')
-	ORDER BY priority DESC, id ASC
+	WHERE (status='queued' AND datetime(available_at) <= datetime('now'))
+	   OR (status='running' AND started_at IS NOT NULL
+	       AND datetime(started_at) <= datetime('now', '-`+strconv.Itoa(orphanReclaimMinutes)+` minutes'))
+	ORDER BY CASE status WHEN 'queued' THEN 0 ELSE 1 END, priority DESC, id ASC
 	LIMIT 1
 )
 UPDATE judge_jobs

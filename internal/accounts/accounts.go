@@ -97,12 +97,29 @@ func OpenDB(dataDir string) (*sql.DB, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open accounts sqlite: %w", err)
 	}
-	db.SetMaxOpenConns(1)
-	if err := Migrate(db); err != nil {
+	db.SetMaxOpenConns(4) // WAL 多读者；写者由 busy_timeout 串行
+	if err := MigrateWithRetry(db); err != nil {
 		db.Close()
 		return nil, err
 	}
 	return db, nil
+}
+
+// MigrateWithRetry 账号表迁移带 SQLITE_BUSY 重试（双进程同库并发首启/升级时 DDL 撞写锁）。
+func MigrateWithRetry(db *sql.DB) error {
+	const attempts = 6
+	var lastErr error
+	for i := 0; i < attempts; i++ {
+		lastErr = Migrate(db)
+		if lastErr == nil {
+			return nil
+		}
+		if !strings.Contains(lastErr.Error(), "database is locked") && !strings.Contains(lastErr.Error(), "SQLITE_BUSY") {
+			return lastErr
+		}
+		time.Sleep(time.Duration(200*(i+1)) * time.Millisecond)
+	}
+	return fmt.Errorf("accounts migrate failed after %d attempts: %w", attempts, lastErr)
 }
 
 // Migrate 幂等创建账号表（users/sessions）并迁移角色模型：

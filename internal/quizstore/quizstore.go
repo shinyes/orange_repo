@@ -15,6 +15,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
+	"time"
 
 	_ "modernc.org/sqlite"
 
@@ -45,22 +47,42 @@ func Open(dataDir string) (*Store, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open quiz sqlite: %w", err)
 	}
-	db.SetMaxOpenConns(1)
+	db.SetMaxOpenConns(8) // 读密集（门户/判题读题）；写由 busy_timeout 串行
 	s := &Store{DB: db, Accounts: accounts.New(db), Repo: &RepoReader{DB: db}}
-	if err := s.migrate(); err != nil {
-		db.Close()
-		return nil, err
+	// 双进程同库并发首启时 DDL 会撞写锁 → 三步迁移整体重试（幂等，先到者完成后再执行）
+	const migrateAttempts = 6
+	var migrateErr error
+	for i := 0; i < migrateAttempts; i++ {
+		migrateErr = s.migrateAll()
+		if migrateErr == nil {
+			break
+		}
+		if !strings.Contains(migrateErr.Error(), "database is locked") && !strings.Contains(migrateErr.Error(), "SQLITE_BUSY") {
+			break
+		}
+		time.Sleep(time.Duration(200*(i+1)) * time.Millisecond)
 	}
-	// 题库/域/空间结构表（与主站同库；若本服务先于主站启动也建齐全表）
-	if err := (&store.Store{DB: db}).MigrateSchema(); err != nil {
+	if migrateErr != nil {
 		db.Close()
-		return nil, err
+		return nil, fmt.Errorf("迁移失败（%d 次尝试）: %w", migrateAttempts, migrateErr)
 	}
 	return s, nil
 }
 
 func (s *Store) Close() error {
 	return s.DB.Close()
+}
+
+// migrateAll 依序执行：账号表 → 判题/作答表 → 题库/域/空间结构表。
+func (s *Store) migrateAll() error {
+	if err := s.migrate(); err != nil {
+		return err
+	}
+	// 题库/域/空间结构表（与主站同库；若本服务先于主站启动也建齐全表）
+	if err := (&store.Store{DB: s.DB}).MigrateSchema(); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (s *Store) migrate() error {
