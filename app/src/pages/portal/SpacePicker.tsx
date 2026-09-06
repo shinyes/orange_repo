@@ -51,10 +51,7 @@ export function SpacePicker({ user }: { user: User }) {
 
   return (
     <div className="mx-auto w-full max-w-2xl px-4 py-8 lg:max-w-3xl">
-      <div className="mb-5 flex items-center gap-2 text-lg font-semibold">
-        <img src="/favicon.png" alt="" className="size-7 rounded-lg" />
-        点击进入一个空间
-      </div>
+      <h1 className="mb-5 text-lg font-semibold">点击进入一个空间</h1>
 
       {spaces.length === 0 && (
         <div className="rounded-2xl border border-dashed p-12 text-center">
