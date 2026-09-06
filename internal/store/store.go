@@ -172,6 +172,29 @@ func (s *Store) migrate() error {
 	return s.backfillProblemDomain()
 }
 
+// EnsureDefaultDomain 返回默认域 id（不存在则创建；并发容错：他方先建则回读）。
+func (s *Store) EnsureDefaultDomain() (int64, error) {
+	var domainID int64
+	err := s.DB.QueryRow(`SELECT id FROM domains WHERE name=? ORDER BY id LIMIT 1`, DefaultDomainName).Scan(&domainID)
+	if err == nil {
+		return domainID, nil
+	}
+	if err != sql.ErrNoRows {
+		return 0, err
+	}
+	res, err := s.DB.Exec(`INSERT OR IGNORE INTO domains(name) VALUES(?)`, DefaultDomainName)
+	if err != nil {
+		return 0, err
+	}
+	domainID, _ = res.LastInsertId()
+	if domainID == 0 {
+		if err := s.DB.QueryRow(`SELECT id FROM domains WHERE name=?`, DefaultDomainName).Scan(&domainID); err != nil {
+			return 0, err
+		}
+	}
+	return domainID, nil
+}
+
 // DefaultDomainName 存量题库自动归属的默认域名。
 const DefaultDomainName = "默认域"
 

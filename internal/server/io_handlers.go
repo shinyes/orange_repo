@@ -111,6 +111,14 @@ func (s *Server) ImportZipData(data []byte, mode, nameHint string, folderID, dom
 	if err != nil {
 		return nil, fiber.NewError(fiber.StatusBadRequest, err.Error())
 	}
+	// 域缺省（seed/离线导入）→ 自动归默认域（找/建），保证题目始终有归属、可见
+	if domainID == nil {
+		id, derr := s.Store.EnsureDefaultDomain()
+		if derr != nil {
+			return nil, derr
+		}
+		domainID = &id
+	}
 	// auto：含章节结构 → 训练；否则 → 练习（平铺）
 	if mode == "auto" {
 		if meta != nil && len(meta.Chapters) > 0 {
