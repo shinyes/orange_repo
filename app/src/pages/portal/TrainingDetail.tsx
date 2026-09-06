@@ -21,6 +21,7 @@ import { TrainingProgrammingCard } from '@/components/portal/TrainingProgramming
 import { ObjectiveQuestion } from '@/components/portal/objective'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
+import { Markdown, preserveLineBreaks } from '@/lib/markdown'
 import { useSpaceById } from '@/pages/portal/portal-context'
 import { PageContainer, SpacePageShell } from '@/pages/portal/SpacePageShell'
 import { cn } from '@/lib/utils'
@@ -63,11 +64,9 @@ function TrainingFlow({ sid, tid, data }: {
     })
   }, [chapters])
   const all = useMemo(() => groups.flatMap((g) => g.items), [groups])
-  const objective = all.filter((i) => i.problemType !== 'programming')
   const [activeIdx, setActiveIdx] = useState(0)
   const [navOpen, setNavOpen] = useState(false) // 移动端导航浮窗
   const item = all[activeIdx] ?? null
-  const solvedCount = objective.filter((i) => i.solved).length
 
   useEffect(() => {
     if (all.length === 0) return
@@ -98,7 +97,7 @@ function TrainingFlow({ sid, tid, data }: {
     <SpacePageShell spaceId={sid} backTo={`/s/${sid}/training`} backLabel="返回训练列表">
       <div className="flex h-full min-h-0 flex-col">
         {/* 移动端顶部：训练名 + 题目导航按钮 */}
-        <div className="flex items-center justify-between gap-2 border-b bg-background px-3 py-1.5 lg:hidden">
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b bg-background px-3 py-1.5 lg:hidden">
           <span className="min-w-0 truncate text-xs font-medium text-muted-foreground">
             {training.title} · {activeIdx + 1}/{all.length}
           </span>
@@ -107,9 +106,9 @@ function TrainingFlow({ sid, tid, data }: {
           </Button>
         </div>
 
-        {/* 内容行：左导航 + 题目区 */}
+        {/* 内容区：flex 行（左导航 + 题区/编辑区），唯一滚动由各自子区承担 */}
         <div className="flex min-h-0 flex-1 flex-col md:flex-row">
-          {/* 左训练导航（PC 常显；章节不折叠） */}
+          {/* 左训练导航（PC） */}
           <aside className="hidden w-48 shrink-0 overflow-y-auto border-r bg-muted/20 p-2.5 md:block">
             <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
               <Code2Icon className="size-3.5 text-primary/60" />
@@ -160,52 +159,58 @@ function TrainingFlow({ sid, tid, data }: {
             </p>
           </aside>
 
-          {/* 中央题目区 */}
-          <div className="min-h-0 flex-1 overflow-y-auto">
-            <PageContainer className="py-4">
-              {item && (
-                <div className="rounded-2xl border bg-card p-4 md:p-5">
-                  {/* 题目头 */}
-                  <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 border-b pb-2 text-xs text-muted-foreground">
-                    <span className="rounded bg-muted px-1.5 py-0.5 font-medium">{item.chapterTitle}</span>
-                    <span>第 {activeIdx + 1} / {all.length} 题</span>
-                    {itemObjective && (
-                      <>
-                        <span>{training.maxAttempts > 0 ? `限答 ${training.maxAttempts} 次` : '不限次'}</span>
-                        {item.solved && (
-                          <span className="inline-flex items-center gap-1 text-emerald-600">
-                            <CircleCheckBigIcon className="size-3.5" /> 已通过
-                          </span>
-                        )}
-                        {!item.solved && item.locked && (
-                          <span className="inline-flex items-center gap-1 text-red-600">已达上限，可回顾</span>
-                        )}
-                      </>
-                    )}
-                  </div>
-
-                  {itemObjective ? (
-                    <ObjectiveCard
-                      key={`${sid}-${tid}-${item.problemId}-${item.solved ? 1 : 0}-${item.locked ? 1 : 0}`}
-                      sid={sid} tid={tid} item={item} maxAttempts={training.maxAttempts}
-                      onAnswered={invalidate}
-                    />
-                  ) : (
-                    // 编程题：页内直接答题（编辑器 + 运行/测试/提交 + 控制台）
-                    <div>
-                      <div className="mb-3 rounded-xl bg-muted/40 p-3">
-                        <span className="mb-1 inline-flex items-center gap-1 text-sm font-medium">
-                          <Code2Icon className="size-4 text-primary" /> 编程题
-                          {itemSolved && (
-                            <span className="ml-1 inline-flex items-center gap-1 text-emerald-600">
+          {/* 中央：题目内容区（客观题：题面卡；编程题：题面与编辑器分栏占满） */}
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:flex-row">
+            {item && (
+              <>
+                {/* 题目（题面+作答）——客观题与编程题都完整展示题面，可滚动 */}
+                <div className="min-h-0 flex-1 overflow-y-auto border-b lg:border-r lg:border-b-0">
+                  <PageContainer className="py-4">
+                    {/* 题目头 */}
+                    <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                      <span className="rounded bg-muted px-1.5 py-0.5 font-medium">{item.chapterTitle}</span>
+                      <span>第 {activeIdx + 1} / {all.length} 题</span>
+                      {itemObjective && (
+                        <>
+                          <span>{training.maxAttempts > 0 ? `限答 ${training.maxAttempts} 次` : '不限次'}</span>
+                          {item.solved && (
+                            <span className="inline-flex items-center gap-1 text-emerald-600">
                               <CircleCheckBigIcon className="size-3.5" /> 已通过
                             </span>
                           )}
+                          {!item.solved && item.locked && (
+                            <span className="inline-flex items-center gap-1 text-red-600">已达上限，可回顾</span>
+                          )}
+                        </>
+                      )}
+                    </div>
+
+                    {itemObjective ? (
+                      // 客观题：题面+选项 完整居中卡
+                      <ObjectiveCard
+                        key={`${sid}-${tid}-${item.problemId}-${item.solved ? 1 : 0}-${item.locked ? 1 : 0}`}
+                        sid={sid} tid={tid} item={item} maxAttempts={training.maxAttempts}
+                        onAnswered={invalidate}
+                      />
+                    ) : (
+                      // 编程题题面：题干 + 输入/输出格式 + 样例（完整可滚动）
+                      <ProgrammingStatement problemId={item.problemId} itemSolved={itemSolved} />
+                    )}
+                  </PageContainer>
+                </div>
+
+                {/* 编程题编辑器（lg 右分栏占满高度；移动端在题面下方） */}
+                {!itemObjective && (
+                  <div className="flex min-h-0 flex-col bg-background lg:w-[42%] lg:shrink-0">
+                    <div className="border-b px-3 py-2 text-xs font-medium text-muted-foreground">
+                      {itemSolved && (
+                        <span className="mr-2 inline-flex items-center gap-1 text-emerald-600">
+                          <CircleCheckBigIcon className="size-3.5" /> 已通过
                         </span>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          在下方编辑器作答（草稿自动保存）：「运行」自定义输入、「测试」样例用例、「提交」正式评测，通过后本题自动标记完成。
-                        </p>
-                      </div>
+                      )}
+                      代码编辑器
+                    </div>
+                    <div className="min-h-0 flex-1 overflow-y-auto p-3">
                       <TrainingProgrammingCard
                         problemId={item.problemId}
                         trainingId={tid}
@@ -213,19 +218,10 @@ function TrainingFlow({ sid, tid, data }: {
                         onSolved={invalidate}
                       />
                     </div>
-                  )}
-                </div>
-              )}
-
-              {/* 最后一题完成提示 */}
-              {activeIdx === all.length - 1 && (
-                <p className="mt-3 text-center text-xs text-muted-foreground">
-                  {objective.length > 0 && solvedCount < objective.length
-                    ? `已是最后一题（客观题已通过 ${solvedCount}/${objective.length}）`
-                    : '训练全部完成 🎉 可在左侧回顾任意题目'}
-                </p>
-              )}
-            </PageContainer>
+                  </div>
+                )}
+              </>
+            )}
           </div>
         </div>
 
@@ -293,6 +289,80 @@ function TrainingFlow({ sid, tid, data }: {
         </DialogContent>
       </Dialog>
     </SpacePageShell>
+  )
+}
+
+// ---------- 编程题题面（题干/格式/样例 完整展示） ----------
+
+function ProgrammingStatement({ problemId, itemSolved }: { problemId: number; itemSolved: boolean }) {
+  const q = useQuery({
+    queryKey: ['oj-problem', problemId],
+    queryFn: () => api.ojProblem(problemId),
+    retry: 1,
+  })
+  if (q.isLoading) {
+    return <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground"><Loader2Icon className="size-4 animate-spin" /> 加载题面…</div>
+  }
+  if (q.isError || !q.data) {
+    return <p className="py-6 text-center text-sm text-muted-foreground">题面加载失败（{q.error instanceof Error ? q.error.message : '未知错误'}）</p>
+  }
+  const p = q.data
+  const body = p.bodyJson as { inputFormat?: string; outputFormat?: string; samples?: { input?: string; output?: string }[] }
+  return (
+    <div className="space-y-3 rounded-2xl border bg-card p-4 md:p-5">
+      <div className="flex flex-wrap items-center gap-2">
+        <h1 className="flex min-w-0 flex-1 items-center gap-2 text-lg font-semibold">
+          <Code2Icon className="size-5 shrink-0 text-primary" />
+          <span className="min-w-0 truncate">{p.title}</span>
+        </h1>
+        {itemSolved && (
+          <span className="inline-flex items-center gap-1 text-xs text-emerald-600">
+            <CircleCheckBigIcon className="size-4" /> 已通过
+          </span>
+        )}
+      </div>
+      <div className="rounded-xl bg-muted/50 p-3">
+        <Markdown text={preserveLineBreaks(p.statementMd || '（暂无题面）')} className="markdown-body text-[15px] leading-relaxed" />
+      </div>
+      {body.inputFormat && (
+        <Section title="输入格式"><Markdown text={preserveLineBreaks(body.inputFormat)} className="markdown-body text-sm" /></Section>
+      )}
+      {body.outputFormat && (
+        <Section title="输出格式"><Markdown text={preserveLineBreaks(body.outputFormat)} className="markdown-body text-sm" /></Section>
+      )}
+      {(body.samples ?? []).length > 0 && (
+        <div>
+          <div className="mb-1.5 text-sm font-semibold">样例</div>
+          <div className="space-y-2">
+            {(body.samples ?? []).map((s, i) => (
+              <div key={i} className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <SampleBox label={`输入样例 ${i + 1}`} text={s.input ?? ''} />
+                <SampleBox label={`输出样例 ${i + 1}`} text={s.output ?? ''} />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      <div className="text-xs text-muted-foreground">时间限制：{p.timeLimitMs} ms · 内存限制：{p.memoryLimitMiB} MiB</div>
+    </div>
+  )
+}
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <div className="mb-1.5 text-sm font-semibold">{title}</div>
+      {children}
+    </div>
+  )
+}
+
+function SampleBox({ label, text }: { label: string; text: string }) {
+  return (
+    <div className="rounded-lg border bg-muted/30">
+      <div className="border-b px-2 py-1 text-[11px] font-medium text-muted-foreground">{label}</div>
+      <pre className="overflow-x-auto px-2 py-1.5 font-mono text-xs whitespace-pre-wrap">{text}</pre>
+    </div>
   )
 }
 
