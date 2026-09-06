@@ -144,7 +144,6 @@ function TopShell({ user, onLogout }: { user: User; onLogout: () => void }) {
             <img src="/favicon.png" alt="OrangeOJ" className="size-7 rounded-lg" />
             OrangeOJ
           </NavLink>
-          <span className="hidden text-xs text-muted-foreground sm:inline">刷题门户</span>
           {isAdmin && (
             <NavLink
               to="/admin"
