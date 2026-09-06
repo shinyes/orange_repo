@@ -176,11 +176,10 @@ function ItemRow({ item, idx, sid, tid, maxAttempts, onOpen }: {
   return (
     <button
       type="button"
-      disabled={locked}
       onClick={onOpen}
       className={cn(
         'flex w-full items-center gap-3 px-4 py-3 text-left transition-colors',
-        locked ? 'cursor-not-allowed opacity-80' : 'hover:bg-primary/5',
+        locked ? 'opacity-90 hover:bg-primary/5' : 'hover:bg-primary/5',
       )}
     >
       <span className={cn(
@@ -276,7 +275,11 @@ function TrainingObjectiveDialog({ sid, tid, item, maxAttempts, open, onClose }:
           <DialogDescription>
             {item.problemType === 'single_choice' ? '单选题' : '判断题'}
             {maxAttempts > 0 ? <> · 本训练限答 {maxAttempts} 次（已用 {used} 次）</> : <> · 不限作答次数（已答 {used} 次）</>}
-            {(locked || exhausted) && ' · 本题已锁定'}
+            {item.solved
+              ? ' · 已通过（查看回顾）'
+              : locked || exhausted
+                ? ' · 已达上限（查看回顾，不可再答）'
+                : ''}
           </DialogDescription>
         </DialogHeader>
 
@@ -321,9 +324,11 @@ function TrainingObjectiveDialog({ sid, tid, item, maxAttempts, open, onClose }:
               再答一次
             </Button>
           )}
-          <Button onClick={() => { resetLocal(); onClose() }} disabled={!feedback}>
-            完成
-          </Button>
+          {!locked && (
+            <Button onClick={() => { resetLocal(); onClose() }} disabled={!feedback}>
+              完成
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -1,18 +1,8 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 
-interface KatexDelimiter {
-  left: string
-  right: string
-  display: boolean
-}
-interface RenderMathInElementOptions {
-  delimiters?: KatexDelimiter[]
-  throwOnError?: boolean
-}
-
-// 与上游 OrangeOJ 相同的渲染链路：marked → DOMPurify → KaTeX auto-render。
+// 与上游 OrangeOJ 相同的渲染链路：marked → DOMPurify → KaTeX。
 export function renderMarkdown(text: string): string {
   const raw = marked.parse(text ?? '', { async: false })
   return DOMPurify.sanitize(raw)
@@ -62,33 +52,69 @@ export function preserveLineBreaks(text: string): string {
   return lines.join('\n')
 }
 
-const KATEX_OPTIONS: RenderMathInElementOptions = {
-  delimiters: [
-    { left: '$$', right: '$$', display: true },
-    { left: '$', right: '$', display: false },
-    { left: '\\[', right: '\\]', display: true },
-    { left: '\\(', right: '\\)', display: false },
-  ],
-  throwOnError: false,
+// renderMathHTML 把 sanitize 后的 HTML 中的公式定界符（$$…$$ / $…$ / \[…\] / \(…\)）
+// 渲染为 KaTeX HTML（renderToString）。**文本级替换，无 DOM 侵入、可重复执行**——
+// 避免了 auto-render 的动态 DOM 修改在组件重渲染/重挂时丢失或破坏公式的问题。
+function renderMathHTML(html: string, katex: { renderToString: (tex: string, opts: Record<string, unknown>) => string }): string {
+  const esc = (s: string) => s
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;')
+  const render = (tex: string, display: boolean): string => {
+    try {
+      return katex.renderToString(tex, {
+        displayMode: display,
+        throwOnError: false,
+        output: 'html',
+      })
+    } catch {
+      // 渲染失败时保留原样（转义后显示源码），不影响正文
+      return esc(tex)
+    }
+  }
+  // 逐段处理，避免 $$ 与 $ 相互干扰：先 display（$$…$$ 与 \[…\]），再 inline（$…$ 与 \(…\)）
+  // 公式内不允许出现未转义 HTML（sanitize 后文本安全）。
+  let out = html
+  // $$ ... $$（跨行）
+  out = out.replace(/\$\$([\s\S]+?)\$\$/g, (_m, tex: string) => render(tex, true))
+  // \[ ... \]（display；文本中可能被 marked 转义为 \[，还原处理）
+  out = out.replace(/\\\[([\s\S]+?)\\\]/g, (_m, tex: string) => render(tex, true))
+  // $ ... $（inline，不跨行，避免匹配货币等单 $）
+  out = out.replace(/(^|[^\\$])\$([^$\n]+?)\$(?!\d)/g, (_m, pre: string, tex: string) => pre + render(tex, false))
+  // \( ... \)（inline）
+  out = out.replace(/\\\(([^\\\n]+?)\\\)/g, (_m, tex: string) => render(tex, false))
+  return out
+}
+
+// 是否疑似含公式（懒加载 KaTeX 的判定）。
+function looksMath(text: string): boolean {
+  return /\$|\\\(|\\\[/.test(text)
 }
 
 export function Markdown({ text, className }: { text: string; className?: string }) {
   const html = useMemo(() => renderMarkdown(text), [text])
-  const ref = useRef<HTMLDivElement>(null)
+  const needsMath = looksMath(html)
+  const [mathHtml, setMathHtml] = useState<string | null>(null)
+
+  // 懒加载 KaTeX 并做文本级公式替换（结果缓存在 state；组件重渲染/重挂只重放同一结果，
+  // 无 DOM 侵入、幂等安全——修「切换语言后公式消失」：旧 auto-render 在重渲染竞态下
+  // 可能对已渲染 DOM 二次处理或回调丢失）。
   useEffect(() => {
-    if (!ref.current) return
-    // 仅当渲染结果里疑似含公式定界符时才动态加载 KaTeX（体积大，避免进首屏）
-    const looksMath = /\$|\\\(|\\\[/.test(html)
-    if (!looksMath) return
+    if (!needsMath) {
+      setMathHtml(null)
+      return
+    }
     let alive = true
-    void import('katex/contrib/auto-render').then((mod) => {
-      if (!alive || !ref.current) return
-      const renderMathInElement = (mod as { default?: unknown }).default ?? mod
-      ;(renderMathInElement as (el: HTMLElement, opts?: RenderMathInElementOptions) => void)(ref.current, KATEX_OPTIONS)
-    }).catch(() => { /* 公式渲染失败不影响正文 */ })
+    void import('katex').then((mod) => {
+      if (!alive) return
+      const m = mod as unknown as { default?: unknown; renderToString?: (tex: string, opts: Record<string, unknown>) => string }
+      const renderToString = typeof m.renderToString === 'function' ? m.renderToString : (m.default as { renderToString: (tex: string, opts: Record<string, unknown>) => string }).renderToString
+      setMathHtml(renderMathHTML(html, { renderToString }))
+    }).catch(() => { /* 公式不可用则保留源码 */ })
     return () => {
       alive = false
     }
-  }, [html])
-  return <div ref={ref} className={className} dangerouslySetInnerHTML={{ __html: html }} />
+  }, [html, needsMath])
+
+  const finalHtml = needsMath ? (mathHtml ?? html) : html
+  return <div className={className} dangerouslySetInnerHTML={{ __html: finalHtml }} />
 }
