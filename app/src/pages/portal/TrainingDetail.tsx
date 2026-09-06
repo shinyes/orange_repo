@@ -104,7 +104,7 @@ function TrainingFlow({ sid, tid, data }: {
       </div>
 
       {/* 主区 */}
-      <PageContainer className="lg:pr-72">
+      <PageContainer className="lg:pl-72">
         <TrainingHeader title={training.title} description={training.description} maxAttempts={training.maxAttempts} total={all.length} solved={solvedCount} />
 
         {item && (
@@ -181,7 +181,7 @@ function TrainingFlow({ sid, tid, data }: {
         all={all}
         activeIdx={activeIdx}
         onSelect={go}
-        className="fixed right-4 bottom-4 z-20 hidden max-h-[70vh] w-64 lg:block"
+        className="fixed top-1/2 left-4 z-20 hidden max-h-[70vh] w-64 -translate-y-1/2 lg:block"
       />
 
       {/* 移动端：导航浮窗 */}
