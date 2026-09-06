@@ -55,7 +55,7 @@ export function MyPage() {
 
         <div className="mt-6 space-y-2.5">
           {currentSpace && (
-            <Button className="w-full min-h-10 justify-start" onClick={() => navigate(`/s/${currentSpace}/training`)}>
+            <Button className="w-full min-h-10 justify-start" onClick={() => navigate(`/s/${currentSpace}`)}>
               <LayoutGridIcon className="size-4" />
               回到我的空间
             </Button>

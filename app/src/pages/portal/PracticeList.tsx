@@ -1,18 +1,24 @@
 import { Link } from 'react-router-dom'
-import { ClipboardListIcon } from 'lucide-react'
+import { ArrowLeftIcon, ClipboardListIcon } from 'lucide-react'
 
 import type { PracticeBrief } from '@/api/types'
 import { useSpaceHome } from './useSpaceHome'
 import { usePortalCtx } from './SpaceShell'
 
-// 练习列表：整卷交卷式练习卡片。
+// 练习列表：整卷交卷式练习卡片。独立页形态，左上角返回空间首页。
 export function PracticeList() {
   const { space } = usePortalCtx()
   const home = useSpaceHome(space)
   const list = home.data?.practices ?? []
   return (
-    <div className="mx-auto w-full max-w-3xl px-4 py-6 lg:px-8">
-      <h1 className="mb-1 text-lg font-semibold">练习</h1>
+    <div className="mx-auto w-full max-w-3xl px-4 py-5 lg:px-8">
+      <Link
+        to={`/s/${space.id}`}
+        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+      >
+        <ArrowLeftIcon className="size-4" /> 返回
+      </Link>
+      <h1 className="mb-1 mt-2 text-lg font-semibold">练习</h1>
       <p className="mb-4 text-xs text-muted-foreground">整卷作答后统一交卷评分，可重复交卷（每次记录）</p>
       {home.isLoading && <p className="py-10 text-center text-sm text-muted-foreground">加载中…</p>}
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">

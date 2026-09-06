@@ -15,6 +15,7 @@ import { Toaster } from '@/components/ui/sonner'
 import { Login } from '@/components/Login'
 import { MyPage } from '@/pages/portal/MyPage'
 import { SpacePicker } from '@/pages/portal/SpacePicker'
+import { SpaceHome } from '@/pages/portal/SpaceHome'
 import { SpaceShell } from '@/pages/portal/SpaceShell'
 import { TrainingList } from '@/pages/portal/TrainingList'
 import { TrainingDetail } from '@/pages/portal/TrainingDetail'
@@ -91,9 +92,9 @@ export default function App() {
                 <Route path="problem/:problemId" element={<ProblemSolvePage />} />
               </Route>
 
-              {/* 空间壳：/s/:spaceId/* */}
+              {/* 空间壳：/s/:spaceId/*（菜单首页 → 训练/练习/刷题/排行榜独立列表页） */}
               <Route path="/s/:spaceId" element={<SpaceShell user={user} onLogout={onLogout} />}>
-                <Route index element={<Navigate to="training" replace />} />
+                <Route index element={<SpaceHome />} />
                 <Route path="training" element={<TrainingList />} />
                 <Route path="training/:trainingId" element={<TrainingDetail />} />
                 <Route path="practice" element={<PracticeList />} />

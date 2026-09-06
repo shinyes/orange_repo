@@ -1,18 +1,24 @@
-import { FolderKanbanIcon } from 'lucide-react'
+import { ArrowLeftIcon, FolderKanbanIcon } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
 import type { TrainingBrief } from '@/api/types'
 import { usePortalCtx } from './SpaceShell'
 import { useSpaceHome } from './useSpaceHome'
 
-// 训练列表：空间内训练卡片（点击进入章节做题）。
+// 训练列表：空间内训练卡片（点击进入章节做题）。独立页形态，左上角返回空间首页。
 export function TrainingList() {
   const { space } = usePortalCtx()
   const home = useSpaceHome(space)
   const list = home.data?.trainings ?? []
   return (
-    <div className="mx-auto w-full max-w-3xl px-4 py-6 lg:px-8">
-      <h1 className="mb-1 text-lg font-semibold">训练</h1>
+    <div className="mx-auto w-full max-w-3xl px-4 py-5 lg:px-8">
+      <Link
+        to={`/s/${space.id}`}
+        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+      >
+        <ArrowLeftIcon className="size-4" /> 返回
+      </Link>
+      <h1 className="mb-1 mt-2 text-lg font-semibold">训练</h1>
       <p className="mb-4 text-xs text-muted-foreground">按章节组织的训练，客观题限次作答（答对绿勾 / 次数用尽标红）</p>
       {home.isLoading && <p className="py-10 text-center text-sm text-muted-foreground">加载中…</p>}
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">

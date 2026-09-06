@@ -44,7 +44,7 @@ export function SpacePicker({ user }: { user: User }) {
 
   // member 单空间：自动进入（无需选择）
   if (user.role === 'member' && spaces.length === 1) {
-    return <Navigate to={`/s/${spaces[0].id}/training`} replace />
+    return <Navigate to={`/s/${spaces[0].id}`} replace />
   }
 
   const saved = savedSpaceId()
@@ -73,7 +73,7 @@ export function SpacePicker({ user }: { user: User }) {
 function SpaceCard({ space, isSaved, showDomain }: { space: PortalSpace; isSaved: boolean; showDomain: boolean }) {
   return (
     <Link
-      to={`/s/${space.id}/training`}
+      to={`/s/${space.id}`}
       onClick={() => saveSpaceId(space.id)}
       className={cn(
         'flex w-full flex-col gap-1.5 rounded-2xl border bg-card p-5 transition-colors hover:border-primary/50 hover:bg-primary/5',

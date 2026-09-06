@@ -1,11 +1,12 @@
 import { useQuery } from '@tanstack/react-query'
-import { CrownIcon, Loader2Icon, MedalIcon, TrophyIcon } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { ArrowLeftIcon, CrownIcon, Loader2Icon, MedalIcon, TrophyIcon } from 'lucide-react'
 
 import { api } from '@/api'
 import { usePortalCtx } from './SpaceShell'
 import { cn } from '@/lib/utils'
 
-// 排行榜（按域总榜，uuid 去重通过数）：名次 / 用户名 / 通过数；高亮自己。
+// 排行榜（按域总榜，uuid 去重通过数）：名次 / 用户名 / 通过数；高亮自己。独立页形态，左上返回空间首页。
 export function RankPage() {
   const { space, user } = usePortalCtx()
   const q = useQuery({
@@ -14,8 +15,14 @@ export function RankPage() {
   })
 
   return (
-    <div className="mx-auto w-full max-w-2xl px-4 py-6 lg:px-6">
-      <h1 className="mb-1 text-lg font-semibold">排行榜</h1>
+    <div className="mx-auto w-full max-w-2xl px-4 py-5 lg:px-6">
+      <Link
+        to={`/s/${space.id}`}
+        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+      >
+        <ArrowLeftIcon className="size-4" /> 返回
+      </Link>
+      <h1 className="mb-1 mt-2 text-lg font-semibold">排行榜</h1>
       <p className="mb-4 text-xs text-muted-foreground">空间「{space.name}」所属域的总榜（按题目通过数排序）</p>
 
       {q.isLoading && (
