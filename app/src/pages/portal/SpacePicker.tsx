@@ -5,7 +5,7 @@ import { Globe2Icon, LayoutGridIcon } from 'lucide-react'
 
 import { api } from '@/api'
 import { resolveEntrySpace, savedSpaceId, saveSpaceId } from '@/api/space'
-import type { PortalSpace, Role, User } from '@/api/types'
+import type { PortalSpace, User } from '@/api/types'
 import { cn } from '@/lib/utils'
 
 // 空间选择页（/）：登录后列出「我的空间」卡片；member 单空间自动直入；
@@ -51,11 +51,10 @@ export function SpacePicker({ user }: { user: User }) {
 
   return (
     <div className="mx-auto w-full max-w-2xl px-4 py-8 lg:max-w-3xl">
-      <div className="mb-1 flex items-center gap-2 text-lg font-semibold">
+      <div className="mb-5 flex items-center gap-2 text-lg font-semibold">
         <img src="/favicon.png" alt="" className="size-7 rounded-lg" />
-        我的空间
+        点击进入一个空间
       </div>
-      <p className="mb-5 text-xs text-muted-foreground">{roleNote(user.role)}</p>
 
       {spaces.length === 0 && (
         <div className="rounded-2xl border border-dashed p-12 text-center">
@@ -72,17 +71,6 @@ export function SpacePicker({ user }: { user: User }) {
       </div>
     </div>
   )
-}
-
-function roleNote(role: Role): string {
-  switch (role) {
-    case 'member':
-      return '选择空间进入做题：'
-    case 'domain_admin':
-      return '域管理员：可进入本域空间做题（内容在管理区维护）：'
-    case 'global_admin':
-      return '系统管理员：可查看并进入全部域空间：'
-  }
 }
 
 function SpaceCard({ space, isSaved, showDomain }: { space: PortalSpace; isSaved: boolean; showDomain: boolean }) {
