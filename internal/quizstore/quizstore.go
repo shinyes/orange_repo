@@ -34,6 +34,12 @@ type Store struct {
 	Accounts *accounts.Store
 }
 
+// Wrap 基于已有连接构造刷题存储（单进程合服：与主站共享同一连接与账号库）。
+// DB/Repo/Accounts 指向同一连接：Repo 为题库/空间结构只读句柄，Accounts 为统一账号库。
+func Wrap(db *sql.DB) *Store {
+	return &Store{DB: db, Repo: &RepoReader{DB: db}, Accounts: accounts.New(db)}
+}
+
 // Open 打开（必要时创建）数据目录与唯一数据库 orangeoj.db 并迁移全部表。
 // 单库模式：题库/域/空间结构表与账号/判题/作答表同处一个文件；本服务读写同一库，
 // Repo 指向同一连接（原只读 RepoReader 已随单库化移除）。
@@ -48,7 +54,7 @@ func Open(dataDir string) (*Store, error) {
 		return nil, fmt.Errorf("open quiz sqlite: %w", err)
 	}
 	db.SetMaxOpenConns(8) // 读密集（门户/判题读题）；写由 busy_timeout 串行
-	s := &Store{DB: db, Accounts: accounts.New(db), Repo: &RepoReader{DB: db}}
+	s := Wrap(db)
 	// 双进程同库并发首启时 DDL 会撞写锁 → 三步迁移整体重试（幂等，先到者完成后再执行）
 	const migrateAttempts = 6
 	var migrateErr error
@@ -71,6 +77,13 @@ func Open(dataDir string) (*Store, error) {
 
 func (s *Store) Close() error {
 	return s.DB.Close()
+}
+
+// EnsureSchema 对已打开连接补齐全部迁移（账号/判题/作答 + 题库/域/空间结构；幂等）。
+// 单进程合服：主站 store.Open 打开连接后，对本 Store 调用一次即可建全所有表
+// （Open 内部已迁移，此处供 Wrap 场景复用）。
+func (s *Store) EnsureSchema() error {
+	return s.migrateAll()
 }
 
 // migrateAll 依序执行：账号表 → 判题/作答表 → 题库/域/空间结构表。

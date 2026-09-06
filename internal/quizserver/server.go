@@ -17,8 +17,8 @@ import (
 	"orangeoj/internal/quizstore"
 )
 
-// SessionCookie 会话 Cookie 名（与主站 orange_session 隔离）。
-const SessionCookie = "quiz_session"
+// SessionCookie 会话 Cookie 名（合服后与管理端共用 orange_session）。
+const SessionCookie = "orange_session"
 
 const userLocals = "quiz_user"
 
@@ -46,17 +46,25 @@ func (s *Server) StopQueue() {
 	if s.queue != nil {
 		s.queue.Stop()
 	}
+	s.queue, s.queueCancel = nil, nil
 }
 
-// New 在 srv 上组装 Fiber 应用（路由/中间件/判题队列），并返回应用。
-// runner 非空时启动判题队列 worker（workers<=0 用 1）；服务退出前调用 srv.StopQueue()。
-func New(srv *Server, runner judge.Runner, workers int) *fiber.App {
-	srv.Runner = runner
-	if runner != nil {
-		srv.queueCtx, srv.queueCancel = context.WithCancel(context.Background())
-		srv.queue = judge.NewQueueService(srv.QS.DB, runner, srv.QS, workers)
-		srv.queue.Start(srv.queueCtx)
+// StartQueue 配置并启动判题队列（runner 非空才启动；workers<=0 用 1）。
+// 合服场景由组装层在单一 app 上启动；退出前调用 StopQueue。
+func (s *Server) StartQueue(runner judge.Runner, workers int) {
+	s.Runner = runner
+	if runner == nil {
+		return
 	}
+	s.queueCtx, s.queueCancel = context.WithCancel(context.Background())
+	s.queue = judge.NewQueueService(s.QS.DB, runner, s.QS, workers)
+	s.queue.Start(s.queueCtx)
+}
+
+// New 在 srv 上组装独立 Fiber 应用（路由/中间件/判题队列），并返回应用。
+// 保留签名供测试与独立运行；合服组装请用 RegisterRoutes 挂到既有 app 上。
+func New(srv *Server, runner judge.Runner, workers int) *fiber.App {
+	srv.StartQueue(runner, workers)
 	return srv.buildApp()
 }
 
@@ -76,12 +84,32 @@ func (s *Server) buildApp() *fiber.App {
 
 	app.Get("/api/health", func(c *fiber.Ctx) error { return c.JSON(fiber.Map{"ok": true}) })
 
-	auth := app.Group("/api/auth")
-	auth.Post("/login", s.handleLogin)
-	auth.Post("/logout", s.requireSession, s.handleLogout)
-	auth.Get("/me", s.handleMe)
-	auth.Put("/password", s.requireSession, s.handleChangePassword)
+	s.RegisterAuth(app)
+	s.RegisterRoutes(app)
 
+	// 上传图片与主站同路径约定（题面/解析中的 /api/uploads/... 可正常显示）
+	if s.UploadsDir != "" {
+		if _, err := os.Stat(s.UploadsDir); err == nil {
+			app.Group("/api").Static("/uploads", s.UploadsDir)
+		}
+	}
+
+	// 前端静态资源 + SPA 回退
+	if s.WebDist != "" {
+		if _, err := os.Stat(filepath.Join(s.WebDist, "index.html")); err == nil {
+			app.Static("/", s.WebDist)
+			app.Get("*", func(c *fiber.Ctx) error {
+				return c.SendFile(filepath.Join(s.WebDist, "index.html"))
+			})
+		}
+	}
+	return app
+}
+
+// RegisterRoutes 挂载门户与刷题 API 到既有 app（合服组装用）：
+// /api/oj/* 与 /api/portal/*，鉴权 requireSession（token 有效即可，任意角色）。
+// 不含 health/auth/静态——auth 在 server 包 RegisterAuth 统一挂载。
+func (s *Server) RegisterRoutes(app *fiber.App) {
 	// ---- OrangeOJ：学生端做题（/api/oj：题目正文/判题/历史，可见性=空间模型） ----
 	oj := app.Group("/api/oj", s.requireSession)
 	oj.Get("/problem/:id", s.handleOJProblem)
@@ -105,29 +133,21 @@ func (s *Server) buildApp() *fiber.App {
 	portal.Get("/quiz/:qid/problem", s.handlePortalQuizProblem)
 	portal.Post("/quiz/:qid/answer", s.handlePortalQuizAnswer)
 	portal.Get("/rank", s.handlePortalRank)
+}
 
-	// 上传图片与主站同路径约定（题面/解析中的 /api/uploads/... 可正常显示）
-	if s.UploadsDir != "" {
-		if _, err := os.Stat(s.UploadsDir); err == nil {
-			app.Group("/api").Static("/uploads", s.UploadsDir)
-		}
-	}
-
-	// 前端静态资源 + SPA 回退
-	if s.WebDist != "" {
-		if _, err := os.Stat(filepath.Join(s.WebDist, "index.html")); err == nil {
-			app.Static("/", s.WebDist)
-			app.Get("*", func(c *fiber.Ctx) error {
-				return c.SendFile(filepath.Join(s.WebDist, "index.html"))
-			})
-		}
-	}
-	return app
+// RegisterAuth 挂载本服务认证端点（独立进程模式/测试用）。
+// 合服时 auth 由 server 包 RegisterAuth 统一挂载，勿重复挂。
+func (s *Server) RegisterAuth(app *fiber.App) {
+	auth := app.Group("/api/auth")
+	auth.Post("/login", s.handleLogin)
+	auth.Post("/logout", s.requireSession, s.handleLogout)
+	auth.Get("/me", s.handleMe)
+	auth.Put("/password", s.requireSession, s.handleChangePassword)
 }
 
 // ---------- 中间件 ----------
 
-// requireSession 会话校验：token 有效则注入当前用户。
+// requireSession 会话校验：token 有效则注入当前用户（任意角色——门户/刷题端 member 可用）。
 func (s *Server) requireSession(c *fiber.Ctx) error {
 	u, ok := s.QS.Accounts.GetUserByToken(c.Cookies(SessionCookie))
 	if !ok {

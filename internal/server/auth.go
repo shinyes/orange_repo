@@ -27,8 +27,19 @@ func isAdminRole(r accounts.Role) bool {
 	return r == accounts.RoleGlobalAdmin || r == accounts.RoleDomainAdmin
 }
 
-// requireSession 会话校验：令牌有效且为管理员（仓库页为管理工具，成员会话无权进入）。
-func (s *Server) requireSession(c *fiber.Ctx) error {
+// requireAny 会话校验：令牌有效即放行（管理/门户共用登录态；member 也可访问门户 API）。
+func (s *Server) requireAny(c *fiber.Ctx) error {
+	u, ok := s.Accounts.GetUserByToken(c.Cookies(SessionCookie))
+	if !ok {
+		return respondError(c, fiber.StatusUnauthorized, "unauthorized")
+	}
+	c.Locals(userLocals, u)
+	return c.Next()
+}
+
+// requireAdmin 管理 API 会话校验：令牌有效且为管理员（系统/域管理员）。
+// 合服后 member 也能登录，但仓库管理 API 由此中间件挡在门外。
+func (s *Server) requireAdmin(c *fiber.Ctx) error {
 	u, ok := s.Accounts.GetUserByToken(c.Cookies(SessionCookie))
 	if !ok || !isAdminRole(u.Role) {
 		return respondError(c, fiber.StatusUnauthorized, "unauthorized")
@@ -86,7 +97,8 @@ type loginRequest struct {
 	Password string `json:"password"`
 }
 
-// handleLogin 统一账号库登录：仅管理员（系统/域管理员）可登录仓库页。
+// handleLogin 统一账号库登录：放行任意角色（member 也登录，门户与管理端共用会话；
+// 管理 API 由 requireAdmin 中间件按角色拦截，登录端点本身不设角色门槛）。
 func (s *Server) handleLogin(c *fiber.Ctx) error {
 	var req loginRequest
 	if err := c.BodyParser(&req); err != nil || strings.TrimSpace(req.Username) == "" || req.Password == "" {
@@ -95,9 +107,6 @@ func (s *Server) handleLogin(c *fiber.Ctx) error {
 	u, err := s.Accounts.CheckPassword(strings.TrimSpace(req.Username), req.Password)
 	if err != nil {
 		return respondError(c, fiber.StatusUnauthorized, "用户名或密码错误")
-	}
-	if !isAdminRole(u.Role) {
-		return respondError(c, fiber.StatusForbidden, "仅管理员可登录")
 	}
 	token, err := s.Accounts.CreateSession(u.ID)
 	if err != nil {

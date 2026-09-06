@@ -15,7 +15,7 @@ import (
 	"orangeoj/internal/store"
 )
 
-// SessionCookie 会话 Cookie 名。
+// SessionCookie 会话 Cookie 名（合服后管理端/门户共用同一会话）。
 const SessionCookie = "orange_session"
 
 // Server 持有存储、共享账号库与上传目录。
@@ -26,10 +26,28 @@ type Server struct {
 	WebDist    string
 }
 
-// New 创建 Fiber 应用（含路由与中间件）。
+// New 创建管理端 Fiber 应用（含路由与中间件）——保留签名供测试与旧单进程模式。
+// 合服组装请使用 RegisterAuth + RegisterRoutes 挂到既有 app 上。
 func New(s *store.Store, acc *accounts.Store, uploadsDir, webDist string) *fiber.App {
 	srv := &Server{Store: s, Accounts: acc, UploadsDir: uploadsDir, WebDist: webDist}
-	app := fiber.New(fiber.Config{
+	app := NewApp()
+	app.Use(logger.New())
+	app.Use(recover.New())
+	app.Get("/api/health", func(c *fiber.Ctx) error { return c.JSON(fiber.Map{"ok": true}) })
+	srv.RegisterAuth(app)
+	RegisterRoutes(s, acc, uploadsDir, app)
+
+	// 前端静态资源 + SPA 回退
+	if webDist != "" {
+		mountSPA(app, webDist)
+	}
+	return app
+}
+
+// NewApp 创建带统一配置（BodyLimit/ErrorHandler）的空 Fiber 应用。
+// 合服时由组装层创建单一 app 后分别挂载 RegisterAuth / RegisterRoutes。
+func NewApp() *fiber.App {
+	return fiber.New(fiber.Config{
 		BodyLimit: 200 << 20,
 		ErrorHandler: func(c *fiber.Ctx, err error) error {
 			if e, ok := err.(*fiber.Error); ok {
@@ -38,132 +56,155 @@ func New(s *store.Store, acc *accounts.Store, uploadsDir, webDist string) *fiber
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
 		},
 	})
-	app.Use(logger.New())
-	app.Use(recover.New())
+}
 
-	app.Get("/api/health", func(c *fiber.Ctx) error { return c.JSON(fiber.Map{"ok": true}) })
-
+// RegisterAuth 在 app 上挂载一份统一认证端点（login 放行任意角色；
+// logout/me 无门槛，password 需有效会话）。合服后全端共用，仅挂一次。
+func (s *Server) RegisterAuth(app *fiber.App) {
 	auth := app.Group("/api/auth")
-	auth.Post("/login", srv.handleLogin)
-	auth.Post("/logout", srv.handleLogout)
-	auth.Get("/me", srv.handleMe)
-	auth.Put("/password", srv.requireSession, srv.handleChangePassword)
+	auth.Post("/login", s.handleLogin)
+	auth.Post("/logout", s.handleLogout)
+	auth.Get("/me", s.handleMe)
+	auth.Put("/password", s.requireAny, s.handleChangePassword)
+}
 
-	api := app.Group("/api", srv.requireSession)
-
-	api.Get("/problems", srv.handleListProblems)
-	api.Post("/problems", srv.handleCreateProblem)
-	api.Get("/problems/:id", srv.handleGetProblem)
-	api.Put("/problems/:id", srv.handleUpdateProblem)
-	api.Delete("/problems/:id", srv.handleDeleteProblem)
-	api.Put("/problems/:id/solutions", srv.handleUpdateSolutions)
-
-	api.Get("/tags", srv.handleListTags)
-	api.Patch("/tags", srv.handleRenameTag)
-	api.Delete("/tags", srv.handleDeleteTag)
-	api.Get("/tag-order", srv.handleGetTagOrder)
-	api.Put("/tag-order", srv.handleSetTagOrder)
-
-	api.Post("/images", srv.handleUploadImage)
-	api.Get("/uploads/cleanup", srv.handleCleanupImages)
-	api.Post("/uploads/cleanup", srv.handleCleanupImages)
-	// 注意：挂载在 /api 组内，前缀只需 /uploads（组前缀合成 /api/uploads）
-	api.Static("/uploads", uploadsDir)
-
-	api.Get("/booklet-directories", srv.handleListBookletDirectories)
-	api.Post("/booklet-directories", srv.handleCreateBookletDirectory)
-	api.Put("/booklet-directories/layout", srv.handleSetBookletDirectoryLayout)
-	api.Patch("/booklet-directories/:id", srv.handleRenameBookletDirectory)
-	api.Delete("/booklet-directories/:id", srv.handleDeleteBookletDirectory)
-
-	api.Post("/import", srv.handleImport)
-	api.Get("/export/problems", srv.handleExportProblems)
-	api.Get("/export/trainings/:id", srv.handleExportTraining)
-	api.Get("/export/practices/:id", srv.handleExportPractice)
-	// 全库备份/迁移：导出单包 / 导入恢复（见 backup.go）
-	api.Get("/export/backup", srv.handleExportBackup)
-	api.Post("/import/backup", srv.handleImportBackup)
-
-	// 域管理（系统管理员）：域 CRUD + 域管理员
-	domainAdmin := api.Group("/admin/domains", srv.requireGlobalAdmin)
-	domainAdmin.Get("/", srv.handleListDomains)
-	domainAdmin.Post("/", srv.handleCreateDomain)
-	domainAdmin.Patch("/:id", srv.handleRenameDomain)
-	domainAdmin.Delete("/:id", srv.handleDeleteDomain)
-	domainAdmin.Put("/:id/admin", srv.handleSetDomainAdmin)
-	domainAdmin.Get("/:id/admins", srv.handleListDomainAdmins)
-	domainAdmin.Delete("/:id/admins/:uid", srv.handleRemoveDomainAdmin)
-
-	// 空间管理（系统/域管理员；/api 组已限管理员，handler 内再按域校验）
-	spaceAdmin := api.Group("/admin/spaces")
-	spaceAdmin.Get("/", srv.handleListSpaces)
-	spaceAdmin.Post("/", srv.handleCreateSpace)
-	spaceAdmin.Patch("/:id", srv.handleRenameSpace)
-	spaceAdmin.Delete("/:id", srv.handleDeleteSpace)
-	spaceAdmin.Get("/:id/members", srv.handleListSpaceMembers)
-	spaceAdmin.Put("/:id/members", srv.handleSetSpaceMembers)
-
-	// 空间成员账号管理（系统/域管理员）：member 账号 CRUD
-	userAdmin := api.Group("/admin/users")
-	userAdmin.Post("/", srv.handleCreateUser)
-	userAdmin.Get("/", srv.handleListUsers)
-	userAdmin.Delete("/:id", srv.handleDeleteUser)
-	userAdmin.Put("/:id/password", srv.handleResetUserPassword)
-
-	// 空间内容管理（系统/域管理员；成员不可达主站）：空间训练/练习/刷题 结构 CRUD
-	sp := api.Group("/space")
-	sp.Get("/:id/trainings", srv.handleListSpaceTrainings)
-	sp.Post("/:id/trainings", srv.handleCreateSpaceTraining)
-	sp.Get("/:id/trainings/:tid", srv.handleGetSpaceTraining)
-	sp.Put("/:id/trainings/:tid", srv.handleUpdateSpaceTrainingMeta)
-	sp.Delete("/:id/trainings/:tid", srv.handleDeleteSpaceTraining)
-	sp.Post("/:id/trainings/:tid/chapters", srv.handleCreateSpaceChapter)
-	sp.Post("/:id/chapters/:cid/items", srv.handleAddSpaceChapterItems)
-	sp.Get("/:id/practices", srv.handleListSpacePractices)
-	sp.Post("/:id/practices", srv.handleCreateSpacePractice)
-	sp.Get("/:id/practices/:pid", srv.handleGetSpacePractice)
-	sp.Put("/:id/practices/:pid", srv.handleUpdateSpacePractice)
-	sp.Delete("/:id/practices/:pid", srv.handleDeleteSpacePractice)
-	sp.Post("/:id/practices/:pid/items", srv.handleAddSpacePracticeItems)
-	sp.Delete("/space-items/:itemId", srv.handleDeleteSpaceItem)
-	sp.Get("/:id/quizzes", srv.handleListSpaceQuizzes)
-	sp.Post("/:id/quizzes", srv.handleCreateSpaceQuiz)
-	sp.Delete("/:id/quizzes/:qid", srv.handleDeleteSpaceQuiz)
-
-	api.Get("/trainings", srv.handleListTrainings)
-	api.Post("/trainings", srv.handleCreateTraining)
-	api.Get("/trainings/:id", srv.handleGetTraining)
-	api.Put("/trainings/:id", srv.handleUpdateTraining)
-	api.Delete("/trainings/:id", srv.handleDeleteTraining)
-	api.Post("/trainings/:id/chapters", srv.handleCreateChapter)
-	api.Put("/trainings/:id/folder", srv.handleSetTrainingFolder)
-	api.Put("/chapters/:id", srv.handleUpdateChapter)
-	api.Delete("/chapters/:id", srv.handleDeleteChapter)
-	api.Post("/chapters/:id/items", srv.handleAddChapterItems)
-	api.Put("/chapters/:id/items", srv.handleReorderChapterItems)
-	api.Put("/trainings/:id/layout", srv.handleTrainingLayout)
-	api.Delete("/items/:id", srv.handleDeleteItem)
-
-	api.Get("/practices", srv.handleListPractices)
-	api.Post("/practices", srv.handleCreatePractice)
-	api.Get("/practices/:id", srv.handleGetPractice)
-	api.Put("/practices/:id", srv.handleUpdatePractice)
-	api.Delete("/practices/:id", srv.handleDeletePractice)
-	api.Post("/practices/:id/items", srv.handleAddPracticeItems)
-	api.Put("/practices/:id/folder", srv.handleSetPracticeFolder)
-	api.Put("/practices/:id/items", srv.handleReorderPracticeItems)
-	api.Delete("/practice-items/:id", srv.handleDeletePracticeItem)
-
-	// 前端静态资源 + SPA 回退
-	if webDist != "" {
-		if _, err := os.Stat(filepath.Join(webDist, "index.html")); err == nil {
-			app.Static("/", webDist)
-			app.Get("*", func(c *fiber.Ctx) error {
-				return c.SendFile(filepath.Join(webDist, "index.html"))
-			})
+// RegisterRoutes 将仓库管理 API 挂载到既有 app（鉴权：requireAdmin 组级，
+// 域管理子组 requireGlobalAdmin）。静态 /api/uploads 匿名（题面图片对门户也需可见）。
+func RegisterRoutes(s *store.Store, acc *accounts.Store, uploadsDir string, app *fiber.App) {
+	srv := &Server{Store: s, Accounts: acc, UploadsDir: uploadsDir}
+	srv.registerManagement(app)
+	// 题面/题解图片：匿名可读（门户做题页也要显示）。仅当目录存在时挂载。
+	if uploadsDir != "" {
+		if _, err := os.Stat(uploadsDir); err == nil {
+			app.Group("/api").Static("/uploads", uploadsDir)
 		}
 	}
-	return app
+}
+
+// registerManagement 挂载管理 API 的全部子路由（problems/tags/…/space）。
+//
+// 注意：不采用 app.Group("/api", requireAdmin) 的「前缀级中间件」——Fiber 的组中间件
+// 注册为全局前缀 USE 路由，会同时拦截拼到同一 app 上的 /api/portal、/api/oj 与匿名
+// /api/uploads 静态。故此处按「每条叶子路由挂 requireAdmin（组级语义）」实现：
+// 仅精确覆盖管理端点，门户/刷题/图片静态不受前缀遮蔽。
+func (s *Server) registerManagement(app *fiber.App) {
+	api := app.Group("/api") // 纯前缀，不挂中间件
+
+	// adminGet/… 给管理叶子路由逐个挂 requireAdmin（可再叠加 requireGlobalAdmin）。
+	ga := func(method, path string, h fiber.Handler) {
+		api.Add(method, path, s.requireAdmin, h)
+	}
+
+	ga("GET", "/problems", s.handleListProblems)
+	ga("POST", "/problems", s.handleCreateProblem)
+	ga("GET", "/problems/:id", s.handleGetProblem)
+	ga("PUT", "/problems/:id", s.handleUpdateProblem)
+	ga("DELETE", "/problems/:id", s.handleDeleteProblem)
+	ga("PUT", "/problems/:id/solutions", s.handleUpdateSolutions)
+
+	ga("GET", "/tags", s.handleListTags)
+	ga("PATCH", "/tags", s.handleRenameTag)
+	ga("DELETE", "/tags", s.handleDeleteTag)
+	ga("GET", "/tag-order", s.handleGetTagOrder)
+	ga("PUT", "/tag-order", s.handleSetTagOrder)
+
+	ga("POST", "/images", s.handleUploadImage)
+	ga("GET", "/uploads/cleanup", s.handleCleanupImages)
+	ga("POST", "/uploads/cleanup", s.handleCleanupImages)
+
+	ga("GET", "/booklet-directories", s.handleListBookletDirectories)
+	ga("POST", "/booklet-directories", s.handleCreateBookletDirectory)
+	ga("PUT", "/booklet-directories/layout", s.handleSetBookletDirectoryLayout)
+	ga("PATCH", "/booklet-directories/:id", s.handleRenameBookletDirectory)
+	ga("DELETE", "/booklet-directories/:id", s.handleDeleteBookletDirectory)
+
+	ga("POST", "/import", s.handleImport)
+	ga("GET", "/export/problems", s.handleExportProblems)
+	ga("GET", "/export/trainings/:id", s.handleExportTraining)
+	ga("GET", "/export/practices/:id", s.handleExportPractice)
+	// 全库备份/迁移：导出单包 / 导入恢复（见 backup.go）
+	ga("GET", "/export/backup", s.handleExportBackup)
+	ga("POST", "/import/backup", s.handleImportBackup)
+
+	// 域管理（系统管理员）：域 CRUD + 域管理员
+	gag := func(method, path string, h fiber.Handler) {
+		api.Add(method, path, s.requireAdmin, s.requireGlobalAdmin, h)
+	}
+	gag("GET", "/admin/domains", s.handleListDomains)
+	gag("POST", "/admin/domains", s.handleCreateDomain)
+	gag("PATCH", "/admin/domains/:id", s.handleRenameDomain)
+	gag("DELETE", "/admin/domains/:id", s.handleDeleteDomain)
+	gag("PUT", "/admin/domains/:id/admin", s.handleSetDomainAdmin)
+	gag("GET", "/admin/domains/:id/admins", s.handleListDomainAdmins)
+	gag("DELETE", "/admin/domains/:id/admins/:uid", s.handleRemoveDomainAdmin)
+
+	// 空间管理（系统/域管理员；requireAdmin 已限管理员，handler 内再按域校验）
+	ga("GET", "/admin/spaces", s.handleListSpaces)
+	ga("POST", "/admin/spaces", s.handleCreateSpace)
+	ga("PATCH", "/admin/spaces/:id", s.handleRenameSpace)
+	ga("DELETE", "/admin/spaces/:id", s.handleDeleteSpace)
+	ga("GET", "/admin/spaces/:id/members", s.handleListSpaceMembers)
+	ga("PUT", "/admin/spaces/:id/members", s.handleSetSpaceMembers)
+
+	// 空间成员账号管理（系统/域管理员）：member 账号 CRUD
+	ga("POST", "/admin/users", s.handleCreateUser)
+	ga("GET", "/admin/users", s.handleListUsers)
+	ga("DELETE", "/admin/users/:id", s.handleDeleteUser)
+	ga("PUT", "/admin/users/:id/password", s.handleResetUserPassword)
+
+	// 空间内容管理（系统/域管理员）：空间训练/练习/刷题 结构 CRUD
+	ga("GET", "/space/:id/trainings", s.handleListSpaceTrainings)
+	ga("POST", "/space/:id/trainings", s.handleCreateSpaceTraining)
+	ga("GET", "/space/:id/trainings/:tid", s.handleGetSpaceTraining)
+	ga("PUT", "/space/:id/trainings/:tid", s.handleUpdateSpaceTrainingMeta)
+	ga("DELETE", "/space/:id/trainings/:tid", s.handleDeleteSpaceTraining)
+	ga("POST", "/space/:id/trainings/:tid/chapters", s.handleCreateSpaceChapter)
+	ga("POST", "/space/:id/chapters/:cid/items", s.handleAddSpaceChapterItems)
+	ga("GET", "/space/:id/practices", s.handleListSpacePractices)
+	ga("POST", "/space/:id/practices", s.handleCreateSpacePractice)
+	ga("GET", "/space/:id/practices/:pid", s.handleGetSpacePractice)
+	ga("PUT", "/space/:id/practices/:pid", s.handleUpdateSpacePractice)
+	ga("DELETE", "/space/:id/practices/:pid", s.handleDeleteSpacePractice)
+	ga("POST", "/space/:id/practices/:pid/items", s.handleAddSpacePracticeItems)
+	ga("DELETE", "/space-items/:itemId", s.handleDeleteSpaceItem)
+	ga("GET", "/space/:id/quizzes", s.handleListSpaceQuizzes)
+	ga("POST", "/space/:id/quizzes", s.handleCreateSpaceQuiz)
+	ga("DELETE", "/space/:id/quizzes/:qid", s.handleDeleteSpaceQuiz)
+
+	ga("GET", "/trainings", s.handleListTrainings)
+	ga("POST", "/trainings", s.handleCreateTraining)
+	ga("GET", "/trainings/:id", s.handleGetTraining)
+	ga("PUT", "/trainings/:id", s.handleUpdateTraining)
+	ga("DELETE", "/trainings/:id", s.handleDeleteTraining)
+	ga("POST", "/trainings/:id/chapters", s.handleCreateChapter)
+	ga("PUT", "/trainings/:id/folder", s.handleSetTrainingFolder)
+	ga("PUT", "/chapters/:id", s.handleUpdateChapter)
+	ga("DELETE", "/chapters/:id", s.handleDeleteChapter)
+	ga("POST", "/chapters/:id/items", s.handleAddChapterItems)
+	ga("PUT", "/chapters/:id/items", s.handleReorderChapterItems)
+	ga("PUT", "/trainings/:id/layout", s.handleTrainingLayout)
+	ga("DELETE", "/items/:id", s.handleDeleteItem)
+
+	ga("GET", "/practices", s.handleListPractices)
+	ga("POST", "/practices", s.handleCreatePractice)
+	ga("GET", "/practices/:id", s.handleGetPractice)
+	ga("PUT", "/practices/:id", s.handleUpdatePractice)
+	ga("DELETE", "/practices/:id", s.handleDeletePractice)
+	ga("POST", "/practices/:id/items", s.handleAddPracticeItems)
+	ga("PUT", "/practices/:id/folder", s.handleSetPracticeFolder)
+	ga("PUT", "/practices/:id/items", s.handleReorderPracticeItems)
+	ga("DELETE", "/practice-items/:id", s.handleDeletePracticeItem)
+}
+
+// mountSPA 将单页前端目录挂到根路径并做 SPA 回退（目录含 index.html 时）。
+func mountSPA(app *fiber.App, webDist string) {
+	if _, err := os.Stat(filepath.Join(webDist, "index.html")); err != nil {
+		return
+	}
+	app.Static("/", webDist)
+	app.Get("*", func(c *fiber.Ctx) error {
+		return c.SendFile(filepath.Join(webDist, "index.html"))
+	})
 }
 
 // ---------- 响应辅助 ----------
