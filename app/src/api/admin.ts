@@ -102,12 +102,13 @@ export const adminApi = {
   },
   exportTrainingUrl: (id: number) => dq(`/api/export/trainings/${id}`),
   exportPracticeUrl: (id: number) => dq(`/api/export/practices/${id}`),
-  // 全库备份/迁移（全库级，不带域）
-  exportBackupUrl: () => `/api/export/backup`,
-  importBackup: async (file: File): Promise<{ imported: number; trainings: number; practices: number }> => {
+  // 全库备份/迁移（域级：导出该域 / 导入到该域，domainId 为空时后端回退默认域）
+  exportBackupUrl: (domainId?: number | null) =>
+    `/api/export/backup${domainId != null ? `?domainId=${domainId}` : ''}`,
+  importBackup: async (file: File, domainId?: number | null): Promise<{ imported: number; trainings: number; practices: number }> => {
     const body = new FormData()
     body.append('zip', file)
-    return req('/api/import/backup', { method: 'POST', body })
+    return req(`/api/import/backup${domainId != null ? `?domainId=${domainId}` : ''}`, { method: 'POST', body })
   },
 
   // ---- 题册目录（可嵌套） ----

@@ -23,7 +23,6 @@ import { cn } from '@/lib/utils'
 import { AdminDomainProvider, useDomain } from '@/pages/admin/domain-context'
 import { AppStateProvider } from '@/pages/admin/app-context'
 import { DomainSwitcher } from '@/pages/admin/Sidebar'
-import { BackupMenu } from '@/pages/admin/BackupMenu'
 import { SettingsDialog } from '@/pages/admin/settings-dialog'
 
 export type AdminShellCtx = { user: User; onLogout: () => void }
@@ -130,7 +129,6 @@ function AdminTop({ user, onLogout }: { user: User; onLogout: () => void }) {
             >
               <SettingsIcon className="size-4" />
             </button>
-            <BackupMenu />
             <button
               type="button"
               title="退出登录"

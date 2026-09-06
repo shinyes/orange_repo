@@ -15,6 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { api, ApiError } from '@/api'
 import { useDomain } from '@/pages/admin/domain-context'
 import type { Domain } from '@/api/types'
+import { DomainBackupMenu } from '@/pages/admin/BackupMenu'
 
 export function DomainAdmin() {
   const qc = useQueryClient()
@@ -103,6 +104,7 @@ export function DomainAdmin() {
                   <td className="px-4 py-2.5 text-muted-foreground">{new Date(d.createdAt).toLocaleString('zh-CN')}</td>
                   <td className="px-4 py-2.5">
                     <div className="flex items-center gap-1">
+                      <DomainBackupMenu domainId={d.id} domainName={d.name} />
                       <Button size="xs" variant="ghost" onClick={() => setAdminsOf(d)}>
                         <ShieldCheckIcon data-icon="inline-start" /> 域管理员
                       </Button>
@@ -130,7 +132,8 @@ export function DomainAdmin() {
       </div>
 
       <p className="mt-3 text-xs text-muted-foreground">
-        域内题目/标签/题册目录相互隔离。删除域将级联删除域内题目与空间（提示需强制时勾选确认）。
+        域内题目/标签/题册目录相互隔离。删除域将级联删除域内题目与空间（提示需强制时勾选确认）；
+        每行「备份」图标可导出该域单文件或导入备份到该域（仓库内容与域一一对应）。
       </p>
 
       <CreateDomainDialog open={creating} onOpenChange={setCreating} onCreated={invalidate} />
