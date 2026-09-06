@@ -2,7 +2,7 @@
 
 面向学校/机构的轻量 **在线判题与练习系统**：域级题库仓库 + 空间化训练/练习/刷题 + Python/C++ 沙箱判题。
 
-- **管理端（域仓库）**：域管理、题库（题目/标签/题册模板）、空间与成员管理
+- **管理端（域仓库，应用内 /admin）**：域管理、题库（题目/标签/题册模板）、空间与成员管理
 - **学生门户**：空间切换、训练（限次作答）、练习（整卷交卷）、刷题、排行榜
 - **判题内核**：独立沙箱进程（Linux: nsjail + cgroup v2），支持 Python 3 / C++
 
@@ -48,7 +48,7 @@
 
 ## 功能一览
 
-### 管理端（主站 · 域仓库）
+### 管理端（应用内 /admin · 域仓库）
 
 - **题库**：三栏管理（标签树前缀筛选 / 题目列表 / 题面·答案·题解同屏编辑）
   - 三种题型：编程（样例/测试点/时限内存）、单选、判断
@@ -103,16 +103,16 @@ export ORANGEOJ_JUDGE_SHARED_TOKEN='换成你的随机token'
 docker compose -f deploy/docker-compose.yml up -d
 ```
 
-访问（单服务，一个端口承载门户与管理端）：
+访问（单服务、单前端，一个端口承载门户与管理端）：
 
 - 学生门户：http://localhost:8080/
-- 仓库管理（管理员）：http://localhost:8080/admin
+- 管理端（管理员）：http://localhost:8080/admin
 - judge-runtime :9090 仅供容器内网，不对外
 
 首次启动自动创建管理员 `admin / 123456`，登录后请立即修改；随后：
 
 1. 系统管理员进入 **/admin**「域管理」新建域（可同时创建域管理员账号）；
-2. 域管理员进入仓库页维护题目（或 **导入 ZIP / 全量备份**，新库导入后即可用）；
+2. 域管理员在「题目管理」维护题目（或 **导入 ZIP / 全量备份**，新库导入后即可用）；
 3. 在「空间管理」新建空间、拉入成员账号；
 4. 在空间内编排训练/练习/刷题项目（自建或从仓库题册拷贝）；
 5. 学生登录门户（/）进入空间做题。
@@ -133,22 +133,21 @@ docker compose -f deploy/docker-compose.yml up -d
 
 | 组件 | 入口 | 默认端口 | 前端 |
 |---|---|---|---|
-| 主服务（管理 + 门户） | `go run . -data ./data -web ./web-quiz/dist -web-admin ./web/dist` | 8080 | `web/` + `web-quiz/`（Vite dev 各自代理 /api → :8080） |
+| 主服务（门户 + 管理端） | `go run . -data ./data -web ./app/dist` | 8080 | `app/`（单前端 Vite dev 代理 /api → :8080） |
 | 判题沙箱 | `go run ./cmd/judge-runtime`（见环境变量） | 9090 | — |
 
 开发机直接运行：
 
 ```powershell
-# Windows 一键脚本（后端单进程 + 两个 Vite dev + 判题 dev 模式）
+# Windows 一键脚本（后端单进程 + 单前端 Vite dev + 判题 dev 模式）
 scripts/dev.ps1
 
-# 或手动：先起后端（空库 -seed 灌入示例题册），再起各前端
+# 或手动：先起后端（空库 -seed 灌入示例题册），再起前端
 go run . -data ./data -seed -judge-token dev-token -judge-endpoint http://127.0.0.1:9090
-cd web && npm run dev        # 管理端 :5173
-cd web-quiz && npm run dev   # 门户 :5174
+cd app && npm run dev        # http://localhost:5175（门户 / + 管理端 /admin）
 ```
 
-> 单进程说明：全部 API/前端由同一 Go 进程承载（`.data/orangeoj.db` 单库）；生产用构建产物（`-web` 门户 dist 挂 `/`、`-web-admin` 管理 dist 挂 `/admin`），开发用 Vite 代理。
+> 单进程说明：全部 API/前端由同一 Go 进程承载（`.data/orangeoj.db` 单库）；生产用构建产物（`-web` 指向 `app/dist` 挂 `/`，管理区 `/admin` 由前端路由处理），开发用 Vite 代理。
 
 ---
 
@@ -160,8 +159,7 @@ go vet ./...
 go test ./...
 
 # 前端
-cd web && npm run build          # 或 node node_modules/typescript/bin/tsc -b
-cd web-quiz && npm run build
+cd app && npm run build          # 或 node node_modules/typescript/bin/tsc -b
 
 # 端到端（真实判题，需本地 g++ / Python）
 scripts/test-oj.ps1
@@ -188,8 +186,7 @@ internal/
   judgeserver/       nsjail 沙箱执行器
   model/             共享类型
   zipio/             OrangeOJ ZIP 导入导出格式
-web/                 管理端前端（React + TS）
-web-quiz/            学生门户前端（React Router + TS）
+app/                 单前端（React + TS）：门户 / + 管理端 /admin（唯一前端）
 deploy/              Docker Compose 部署示例
 scripts/             dev / 端到端测试脚本
 samples/             示例题册（-seed）

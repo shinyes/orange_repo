@@ -4,10 +4,6 @@ data/
 *.db-journal
 *.log
 
-# node / vite
-web/node_modules/
-web/dist/
-
 # go
 orange_repo.exe
 *.exe
@@ -16,12 +12,6 @@ orange_repo.exe
 # misc
 .DS_Store
 Thumbs.db
-
-# node / vite (quiz)
-web-quiz/node_modules/
-web-quiz/dist/
-
-web-quiz/node_modules.bak/
 
 # node / vite (single frontend app)
 app/node_modules/

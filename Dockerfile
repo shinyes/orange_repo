@@ -1,23 +1,14 @@
 # syntax=docker/dockerfile:1.7
 
-# ---------- 前端构建 ----------
+# ---------- 单前端构建（app/：门户 / + 管理区 /admin，一个 Vite 应用） ----------
 # node/npm 版本钉死：与本地生成 package-lock.json 的环境一致（node 24.15 / npm 11.12.1），
 # 避免浮点标签（node:24-alpine）漂移导致 npm ci 与 lockfile 的行为差异。
 FROM node:24.15-alpine AS web-build
-WORKDIR /src/web
+WORKDIR /src/app
 RUN npm install -g npm@11.12.1 --no-audit --no-fund
-COPY web/package.json web/package-lock.json ./
+COPY app/package.json app/package-lock.json ./
 RUN npm ci
-COPY web/ ./
-RUN npm run build
-
-# ---------- 刷题前端构建 ----------
-FROM node:24.15-alpine AS quiz-build
-WORKDIR /src/web-quiz
-RUN npm install -g npm@11.12.1 --no-audit --no-fund
-COPY web-quiz/package.json web-quiz/package-lock.json ./
-RUN npm ci
-COPY web-quiz/ ./
+COPY app/ ./
 RUN npm run build
 
 # ---------- 后端构建（modernc.org/sqlite 纯 Go，CGO_ENABLED=0 静态链接） ----------
@@ -41,8 +32,7 @@ WORKDIR /app
 COPY --from=backend-build /out/orangeoj /app/orangeoj
 # 预置属主，保证命名卷首次挂载与自定义非 root --user 场景可直接写入
 COPY --from=backend-build --chown=65532:65532 /out/data /app/data
-COPY --from=web-build /src/web/dist /app/web/dist
-COPY --from=quiz-build /src/web-quiz/dist /app/web-quiz/dist
+COPY --from=web-build /src/app/dist /app/dist
 COPY samples /app/samples
 
 VOLUME ["/app/data"]
@@ -50,5 +40,5 @@ EXPOSE 8080
 
 ENTRYPOINT ["/app/orangeoj"]
 # 追加 -seed 可在空库时导入示例包：docker run image -seed
-# 门户 dist 挂载 /；管理端 dist 以 -web-admin 传入（尽力而为挂 /admin，前端合并后移除）
-CMD ["-addr", ":8080", "-data", "/app/data", "-web", "/app/web-quiz/dist"]
+# 单前端 dist 挂载 /（门户 / + 管理区 /admin 由前端路由处理）
+CMD ["-addr", ":8080", "-data", "/app/data", "-web", "/app/dist"]

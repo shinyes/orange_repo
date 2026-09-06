@@ -43,7 +43,7 @@ try {
   if ($LASTEXITCODE -eq 0) { Ok 'go vet ./...' } else { Bad 'go vet ./...' }
   go test ./... 2>&1 | Out-Null
   if ($LASTEXITCODE -eq 0) { Ok 'go test ./...' } else { Bad 'go test ./...' }
-  foreach ($app in @('web', 'web-quiz')) {
+  foreach ($app in @('app')) {
     $dir = Join-Path $root $app
     if (Test-Path (Join-Path $dir 'node_modules')) {
       Push-Location $dir

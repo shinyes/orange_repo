@@ -1,6 +1,7 @@
-// 路由根（src/app/App.tsx）：单前端应用——门户 + 管理端骨架。
+// 路由根（src/app/App.tsx）：单前端应用——门户 + 管理端。
 // 门户为空间化结构（登录 → 空间选择/直达 → 空间内 训练/练习/刷题/排行榜）；
-// 管理员（domain_admin/global_admin）同为做题界面 + 顶栏管理入口；/admin 下为第二阶段待迁入的管理区。
+// 管理员（domain_admin/global_admin）同为做题界面 + 顶栏管理入口；/admin 为管理区
+// （题目管理三栏工作区 / 域管理 / 空间管理，路由化；member 访问重定向回 /）。
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { BrowserRouter, Navigate, NavLink, Outlet, Route, Routes } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -22,10 +23,13 @@ import { PracticeSolve } from '@/pages/portal/PracticeSolve'
 import { QuizList } from '@/pages/portal/QuizList'
 import { QuizSolve } from '@/pages/portal/QuizSolve'
 import { RankPage } from '@/pages/portal/RankPage'
-import { AdminIndex } from '@/pages/admin/AdminIndex'
+import { AdminLayout } from '@/pages/admin/AdminLayout'
 
-// 做题页等重量级组件懒加载，不进首屏主包。
+// 重量级页面懒加载，不进首屏主包（做题页 + 管理区各页）。
 const ProblemSolvePage = lazy(() => import('@/pages/oj/ProblemSolvePage').then((m) => ({ default: m.ProblemSolvePage })))
+const AdminProblemsWorkspace = lazy(() => import('@/pages/admin/ProblemsWorkspace').then((m) => ({ default: m.ProblemsWorkspace })))
+const AdminDomainAdmin = lazy(() => import('@/pages/admin/DomainAdmin').then((m) => ({ default: m.DomainAdmin })))
+const AdminSpaceAdmin = lazy(() => import('@/pages/admin/SpaceAdmin').then((m) => ({ default: m.SpaceAdmin })))
 
 function PageFallback() {
   return (
@@ -84,9 +88,6 @@ export default function App() {
                 <Route index element={<SpacePicker user={user} />} />
                 <Route path="mine" element={<MyPage />} />
                 <Route path="problem/:problemId" element={<ProblemSolvePage />} />
-
-                {/* 管理区骨架：第二阶段迁入 web/ 管理端功能 */}
-                <Route path="admin" element={<AdminIndex />} />
               </Route>
 
               {/* 空间壳：/s/:spaceId/* */}
@@ -99,6 +100,14 @@ export default function App() {
                 <Route path="quiz" element={<QuizList />} />
                 <Route path="quiz/:quizId" element={<QuizSolve />} />
                 <Route path="rank" element={<RankPage />} />
+              </Route>
+
+              {/* 管理区：仅管理员（global_admin/domain_admin），member 重定向回门户 */}
+              <Route path="/admin" element={<RequireAdmin user={user}><AdminLayout user={user} onLogout={onLogout} /></RequireAdmin>}>
+                <Route index element={<Navigate to="problems" replace />} />
+                <Route path="problems" element={<AdminProblemsWorkspace />} />
+                <Route path="domains" element={<AdminDomainAdmin />} />
+                <Route path="spaces" element={<AdminSpaceAdmin />} />
               </Route>
 
               <Route path="*" element={<Navigate to="/" replace />} />
@@ -114,6 +123,12 @@ export default function App() {
 }
 
 export type ShellContext = { user: User; onLogout: () => void }
+
+// /admin 角色守卫：仅 global_admin / domain_admin 可进入；member 访问重定向回门户首页。
+function RequireAdmin({ user, children }: { user: User; children: React.ReactNode }) {
+  if (user.role === 'member') return <Navigate to="/" replace />
+  return <>{children}</>
+}
 
 // 非空间页的轻量顶壳：品牌 → 我的（个人入口）；管理员额外展示「管理」入口。
 // 「我的」页含账号与退出。

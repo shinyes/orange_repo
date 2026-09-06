@@ -1,5 +1,5 @@
-# OrangeOJ dev script: start single Go backend (:8080) + both Vite frontends
-# (management :5173, portal :5174) + optional judge-runtime (:9090 dev token).
+# OrangeOJ dev script: start single Go backend (:8080) + single frontend Vite app (:5175)
+# + optional judge-runtime (:9090 dev token).
 # Usage: .\scripts\dev.ps1
 # NOTE: kept ASCII-only on purpose - PowerShell 5.1 misparses BOM-less UTF-8 scripts.
 # npm.cmd is used explicitly because Start-Process "npm" resolves to the
@@ -26,29 +26,25 @@ $goArgs = @("run", ".", "-data", (Join-Path $root "data"))
 if ($judge) { $goArgs += @("-judge-endpoint", "http://127.0.0.1:9090", "-judge-token", "dev-token") }
 $go = Start-Process -FilePath "go" -ArgumentList $goArgs -WorkingDirectory $root -PassThru -NoNewWindow
 
-function Start-Frontend([string]$dir, [int]$port, [string]$label) {
-  Write-Host "[dev] starting $label Vite on :$port (/api proxied to 8080) ..." -ForegroundColor Yellow
-  if (-not (Test-Path (Join-Path $dir "node_modules"))) {
-    Push-Location $dir
-    npm install
-    Pop-Location
-  }
-  $env:PORT = "$port"
-  return Start-Process -FilePath "npm.cmd" -ArgumentList "run", "dev" -WorkingDirectory $dir -PassThru -NoNewWindow
+Write-Host "[dev] starting single frontend (app) Vite on :5175 (/api proxied to 8080) ..." -ForegroundColor Yellow
+$appDir = Join-Path $root "app"
+if (-not (Test-Path (Join-Path $appDir "node_modules"))) {
+  Push-Location $appDir
+  npm install
+  Pop-Location
 }
-
-$web = Start-Frontend (Join-Path $root "web") 5173 "management web"
-$quiz = Start-Frontend (Join-Path $root "web-quiz") 5174 "portal web-quiz"
+$env:PORT = "5175"
+$fe = Start-Process -FilePath "npm.cmd" -ArgumentList "run", "dev" -WorkingDirectory $appDir -PassThru -NoNewWindow
 Remove-Item Env:PORT -ErrorAction SilentlyContinue
 
 Write-Host ""
-Write-Host "[dev] ready? management http://localhost:5173  portal http://localhost:5174  (default password: 123456)" -ForegroundColor Green
+Write-Host "[dev] ready? http://localhost:5175 (portal / + management /admin in one app; default password: 123456)" -ForegroundColor Green
 Write-Host "[dev] press Ctrl+C to stop all."
 
 try {
   Wait-Process -Id $go.Id -ErrorAction SilentlyContinue
 } finally {
-  foreach ($p in @($quiz, $web, $go, $judge)) {
+  foreach ($p in @($fe, $go, $judge)) {
     if ($p -and -not $p.HasExited) {
       taskkill /PID $p.Id /T /F 2>&1 | Out-Null
     }

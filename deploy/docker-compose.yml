@@ -1,9 +1,9 @@
 # OrangeOJ 生产部署示例（主服务 + 判题沙箱 两容器）
 # docker compose -f deploy/docker-compose.yml up -d
-#   → http://localhost:8080（单服务：学生门户 / + 仓库管理 /admin，默认 admin/123456）
+#   → http://localhost:8080（单服务：学生门户 / + 管理端 /admin，默认 admin/123456）
 #   → orangejudge :9090（判题沙箱，不对外）
 #
-# orangeoj 主服务 = 单 Go 进程托管全部前端（web-quiz 门户 dist 于 /，web 管理 dist 于 /admin）
+# orangeoj 主服务 = 单 Go 进程托管单前端（app dist：门户 / + 管理区 /admin 走前端路由）
 # 与全部 API（/api/*），数据在 ./data/orangeoj.db（单库）。
 # orangejudge 是真正执行学生代码的容器（nsjail 隔离），需要 privileged + cgroup v2 挂载；
 # 镜像由 GitHub Actions 发布：judge 相关文件变更的版本构建 ghcr.io/shinyes/orangeoj-judge:<版本>
@@ -16,8 +16,7 @@ services:
     command: [
       "-addr", ":8080",
       "-data", "/app/data",
-      "-web", "/app/web-quiz/dist",
-      "-web-admin", "/app/web/dist",
+      "-web", "/app/dist",
       "-judge-endpoint", "http://orangejudge:9090",
       "-judge-token", "${ORANGEOJ_JUDGE_SHARED_TOKEN:-change-this-in-production}",
       "-judge-workers", "2",

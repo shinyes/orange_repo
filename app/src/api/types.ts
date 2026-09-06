@@ -178,6 +178,245 @@ export interface RankView {
   domainId: number
 }
 
+// =====================================================================
+// 管理端（域仓库/域/空间）类型 —— 自原管理端前端类型文件合并
+// （合服单进程 /api 契约不变：/api/problems、/api/admin/*、/api/space/* 等）。
+// 与上方门户类型去重后统一命名；同义但用途不同的（仓库 Training vs 门户 TrainingBrief、
+// 仓库 Space vs 门户 PortalSpace）按语义区分保留。
+// =====================================================================
+
+export type ProblemType = 'programming' | 'single_choice' | 'true_false'
+
+export interface Solution {
+  language: string
+  code: string
+  markdown: string
+}
+
+export interface ProgrammingCase {
+  input: string
+  output: string
+}
+
+export interface ProgrammingBody {
+  inputFormat?: string
+  outputFormat?: string
+  samples?: ProgrammingCase[]
+  testCases?: ProgrammingCase[]
+}
+
+export interface ChoiceBody {
+  options?: string[]
+}
+
+// 仓库题目列表行（/api/problems 列表）。
+export interface ProblemSummary {
+  id: number
+  type: ProblemType
+  title: string
+  tags: string[]
+  timeLimitMs: number
+  memoryLimitMiB: number
+  createdAt: string
+}
+
+// 仓库题目详情（/api/problems/:id）。
+export interface Problem {
+  id: number
+  type: ProblemType
+  title: string
+  tags: string[]
+  statementMd: string
+  // OrangeOJ 原始 JSON 结构，按题型解释
+  bodyJson: Record<string, unknown>
+  answerJson: Record<string, unknown>
+  solutions: Solution[]
+  timeLimitMs: number
+  memoryLimitMiB: number
+  createdAt: string
+}
+
+export interface ProblemPayload {
+  type: ProblemType
+  title: string
+  tags: string[]
+  statementMd: string
+  bodyJson: Record<string, unknown>
+  answerJson: Record<string, unknown>
+  solutions?: Solution[]
+  timeLimitMs?: number
+  memoryLimitMiB?: number
+}
+
+// 标签树节点：tag 为完整路径（如 数学/几何），label 为最后一段。
+// 虚拟父节点由服务端分面接口直接给出计数。
+export interface TagNode {
+  tag: string
+  label: string
+  count: number
+  children: TagNode[]
+}
+
+export interface TagCount {
+  tag: string
+  count: number
+}
+
+// 仓库题册模板条目 / 章节（admin：题册模板管理）。
+export interface Item {
+  id: number
+  chapterId: number
+  problemId: number
+  orderNo: number
+  problemTitle?: string
+  problemType?: string
+}
+
+export interface Chapter {
+  id: number
+  trainingId: number
+  title: string
+  orderNo: number
+  items: Item[]
+}
+
+export interface Training {
+  id: number
+  title: string
+  description: string
+  tags: string[]
+  folderId?: number | null
+  problemCount: number
+  createdAt: string
+}
+
+// 题册目录节点（扁平列表，parentId 为 null 表示根目录）。
+export interface BookletDirectory {
+  id: number
+  name: string
+  parentId: number | null
+  orderNo: number
+}
+
+export interface PracticeItem {
+  id: number
+  practiceId: number
+  problemId: number
+  orderNo: number
+  problemTitle?: string
+  problemType?: string
+}
+
+export interface Practice {
+  id: number
+  title: string
+  description: string
+  tags: string[]
+  folderId?: number | null
+  problemCount: number
+  createdAt: string
+}
+
+export interface ProblemFilterState {
+  q: string
+  tags: string[]
+  type: ProblemType | ''
+}
+
+// ---------- 域 / 空间（管理 API） ----------
+
+/** 域管理员账号视图（GET /api/admin/domains/:id/admins）。 */
+export interface DomainAdminUser {
+  id: number
+  username: string
+  role?: Role
+  domainId?: number | null
+}
+
+/** 普通成员账号视图（GET /api/admin/users）。 */
+export interface MemberUser {
+  id: number
+  username: string
+}
+
+export interface Domain {
+  id: number
+  name: string
+  createdAt: string
+}
+
+export interface Space {
+  id: number
+  domainId: number
+  name: string
+  createdAt: string
+}
+
+export interface SpaceMember {
+  userId: number
+  username: string
+}
+
+// ---------- 空间内容（管理端结构管理） ----------
+
+export interface SpaceTraining {
+  id: number
+  spaceId: number
+  title: string
+  description: string
+  tags: string[]
+  maxAttempts: number
+  problemCount: number
+}
+
+export interface SpaceChapterItem {
+  id: number
+  chapterId: number
+  problemId: number
+  orderNo: number
+  problemTitle?: string
+  problemType?: string
+  problemUuid?: string
+}
+
+export interface SpaceChapter {
+  id: number
+  trainingId: number
+  title: string
+  orderNo: number
+  items: SpaceChapterItem[]
+}
+
+export interface SpacePractice {
+  id: number
+  spaceId: number
+  title: string
+  description: string
+  tags: string[]
+  problemCount: number
+}
+
+export interface SpacePracticeItem {
+  id: number
+  practiceId: number
+  problemId: number
+  orderNo: number
+  problemTitle?: string
+  problemType?: string
+  problemUuid?: string
+}
+
+export interface SpaceQuiz {
+  id: number
+  spaceId: number
+  title: string
+  tags: string[]
+  sourceType: string
+  repoKind?: string
+  repoId?: number
+  problemCount: number
+}
+
 // ---------- 题目做题（/api/oj/problem/:id 保留） ----------
 
 export type CodeLang = 'cpp' | 'python'

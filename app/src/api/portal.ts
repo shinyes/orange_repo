@@ -1,9 +1,8 @@
 // 门户 API 命名空间（src/api/portal.ts）：
 // 对应后端合并后单进程 internal/app 的 /api/portal/*、/api/oj/problem/:id 保留路由。
-// 方法名沿用迁移前 web-quiz/src/lib/api.ts 的 api.portal* / api.oj* 命名，功能等价、零调用点改动；
-// 后续若需收敛为 portalApi.xxx 短名可整体重构（第二阶段与 admin 并入时统一）。
+// 方法名沿用迁移前门户前端 api 的 portal* / oj* 命名，功能等价、零调用点改动；
+// 后续若需收敛为 portalApi.xxx 短名可整体重构（与 admin 并入时统一）。
 // 类型契约见 ./types（与后端合服前的 OrangeOJ quizserver 一致）。
-// 未来管理 API 并入 src/api/admin.ts（预留：本阶段仅占位，勿在门户逻辑中引用）。
 import { req, json } from './client'
 import type {
   CodeLang,

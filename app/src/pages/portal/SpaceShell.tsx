@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { NavLink, Outlet, useNavigate, useOutletContext, useParams } from 'react-router-dom'
+import { Link, NavLink, Outlet, useNavigate, useOutletContext, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { LayoutGridIcon, UserRoundIcon, FolderKanbanIcon, ClipboardListIcon, BookOpenIcon, TrophyIcon, ArrowLeftIcon } from 'lucide-react'
 
@@ -131,16 +131,17 @@ function ShellError({ msg, onBack }: { msg: string; onBack: () => void }) {
   )
 }
 
-// 域管理员的空间管理入口：内容管理在主站仓库页（不做跨站跳转，仅轻提示）。
+// 管理员的空间管理入口：本应用内导航至 /admin（域/空间/题目内容统一在管理区维护）。
 function SpaceAdminEntry({ user }: { user: User }) {
   if (user.role !== 'domain_admin' && user.role !== 'global_admin') return null
   return (
-    <span
-      title="空间内容（训练/练习/刷题与成员）在主站仓库页管理"
-      className="hidden shrink-0 rounded-lg border border-dashed px-2.5 py-1 text-[11px] text-muted-foreground md:inline-flex md:items-center"
+    <Link
+      to="/admin/spaces"
+      title="空间内容（训练/练习/刷题与成员）在管理区维护"
+      className="hidden shrink-0 rounded-lg border border-dashed px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground md:inline-flex md:items-center"
     >
-      空间管理 → 主站
-    </span>
+      空间管理 →
+    </Link>
   )
 }
 

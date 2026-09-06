@@ -79,7 +79,7 @@ function roleNote(role: Role): string {
     case 'member':
       return '选择空间进入做题：'
     case 'domain_admin':
-      return '域管理员：可进入本域空间做题（内容在主站仓库页管理）：'
+      return '域管理员：可进入本域空间做题（内容在管理区维护）：'
     case 'global_admin':
       return '系统管理员：可查看并进入全部域空间：'
   }

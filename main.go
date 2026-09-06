@@ -1,8 +1,8 @@
 // OrangeOJ — 后端合服后的单一服务进程。
 //
 // 单进程：管理端仓库 API + 门户/刷题 API + 判题队列共用同一 fiber.App 与
-// 同一 orangeoj.db（单库）。可选托管 门户 dist（"/"）与管理端 dist（"/admin"，
-// 尽力而为，见 internal/app）。
+// 同一 orangeoj.db（单库）。前端已合为单应用（app/，管理区走前端路由 /admin），
+// 构建产物由 -web 指向并挂载 "/"（SPA fallback，见 internal/app）。
 package main
 
 import (
@@ -22,8 +22,7 @@ import (
 func main() {
 	addr := flag.String("addr", ":8080", "监听地址")
 	dataDir := flag.String("data", "./data", "数据目录（SQLite 与上传图片）")
-	webDist := flag.String("web", "./web-quiz/dist", "学生门户前端构建产物目录（挂载 /）")
-	webAdminDist := flag.String("web-admin", "", "管理端前端构建产物目录（可选；存在 index.html 时尽力而为挂载 /admin）")
+	webDist := flag.String("web", "./app/dist", "单前端构建产物目录（门户 / + 管理区 /admin 均走前端路由，挂载 /）")
 	judgeEndpoint := flag.String("judge-endpoint", "", "judge-runtime 地址（默认 http://judge-runtime:9090；留空则禁用判题入队）")
 	judgeToken := flag.String("judge-token", "", "与 judge-runtime 共享的评测 token（留空则禁用判题入队）")
 	judgeWorkers := flag.Int("judge-workers", 2, "判题队列 worker 数")
@@ -50,7 +49,6 @@ func main() {
 	a, err := app.Open(app.Config{
 		DataDir:      *dataDir,
 		WebDist:      *webDist,
-		WebAdminDist: *webAdminDist,
 		JudgeRunner:  runner,
 		JudgeWorkers: *judgeWorkers,
 	})

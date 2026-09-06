@@ -2,10 +2,8 @@
 .github
 data
 docs
-web/node_modules
-web/dist
-web-quiz/node_modules
-web-quiz/dist
+app/node_modules
+app/dist
 *.exe
 *.zip
 *.tar.gz
