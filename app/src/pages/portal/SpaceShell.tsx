@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { Link, NavLink, Outlet, useNavigate, useOutletContext, useParams } from 'react-router-dom'
+import { NavLink, Outlet, useNavigate, useOutletContext, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { LayoutGridIcon, UserRoundIcon, FolderKanbanIcon, ClipboardListIcon, BookOpenIcon, TrophyIcon, ArrowLeftIcon } from 'lucide-react'
 
@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils'
 
 export type PortalContext = { user: User; space: PortalSpace; onLogout: () => void }
 
-// 空间壳：/s/:spaceId/* 布局——顶栏（返回空间列表/空间名/我的）+ 顶部 Tab 导航（训练/练习/刷题/排行榜）。
+// 空间壳：/s/:spaceId/* 布局——单行顶栏：返回空间列表/空间名 + 训练/练习/刷题/排行榜导航 + 我的。
 export function SpaceShell({ user, onLogout }: { user: User; onLogout: () => void }) {
   const { spaceId } = useParams()
   const sid = Number(spaceId)
@@ -47,26 +47,42 @@ export function SpaceShell({ user, onLogout }: { user: User; onLogout: () => voi
 
   return (
     <div className="flex h-dvh flex-col overflow-hidden">
-      {/* 顶栏 */}
+      {/* 顶栏（单行）：返回 + 空间名 + 训练/练习/刷题/排行榜 + 我的 */}
       <header className="shrink-0 border-b bg-background">
-        <div className="mx-auto flex h-13 w-full max-w-5xl items-center gap-2 px-3 lg:px-5">
+        <div className="mx-auto flex h-13 w-full max-w-5xl items-center gap-1 px-2 lg:px-3">
           <NavLink
             to="/"
-            className="-ml-2 flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            className="-ml-1 flex shrink-0 items-center gap-1.5 rounded-lg px-1.5 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             title="切换空间"
           >
             <ArrowLeftIcon className="size-4" />
           </NavLink>
-          <div className="flex min-w-0 flex-1 items-center gap-2">
+          <div className="flex min-w-0 items-center gap-1.5">
             <LayoutGridIcon className="size-4 shrink-0 text-primary" />
-            <span className="truncate text-sm font-semibold">{space.name}</span>
-            {user.role !== 'member' && (
-              <span className="hidden shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground sm:inline">
-                {user.role === 'domain_admin' ? '域管理' : '系统管理'}
-              </span>
-            )}
+            <span className="max-w-28 truncate text-sm font-semibold lg:max-w-40">{space.name}</span>
           </div>
-          <SpaceAdminEntry user={user} />
+
+          {/* 空间内导航（并入顶栏单行） */}
+          <nav className="ml-1 flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto">
+            {tabs.map((t) => (
+              <NavLink
+                key={t.to}
+                to={t.to}
+                className={({ isActive }) =>
+                  cn(
+                    'flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm transition-colors',
+                    isActive
+                      ? 'bg-primary/10 font-medium text-primary'
+                      : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                  )
+                }
+              >
+                <t.icon className="size-4" />
+                <span className="hidden sm:inline">{t.label}</span>
+              </NavLink>
+            ))}
+          </nav>
+
           <NavLink
             to="/mine"
             className={({ isActive }) =>
@@ -85,27 +101,6 @@ export function SpaceShell({ user, onLogout }: { user: User; onLogout: () => voi
             <UserRoundIcon className="size-3.5 lg:hidden" />
           </NavLink>
         </div>
-
-        {/* 顶部 Tab 导航（PC/移动通用） */}
-        <nav className="mx-auto flex w-full max-w-5xl gap-1 overflow-x-auto px-2 pb-1 lg:px-4">
-          {tabs.map((t) => (
-            <NavLink
-              key={t.to}
-              to={t.to}
-              className={({ isActive }) =>
-                cn(
-                  'flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm transition-colors',
-                  isActive
-                    ? 'bg-primary/10 font-medium text-primary'
-                    : 'text-muted-foreground hover:bg-muted hover:text-foreground',
-                )
-              }
-            >
-              <t.icon className="size-4" />
-              {t.label}
-            </NavLink>
-          ))}
-        </nav>
       </header>
 
       {/* 内容区 */}
@@ -128,20 +123,6 @@ function ShellError({ msg, onBack }: { msg: string; onBack: () => void }) {
         返回空间列表
       </button>
     </div>
-  )
-}
-
-// 管理员的空间管理入口：本应用内导航至 /admin（域/空间/题目内容统一在管理区维护）。
-function SpaceAdminEntry({ user }: { user: User }) {
-  if (user.role !== 'domain_admin' && user.role !== 'global_admin') return null
-  return (
-    <Link
-      to="/admin/spaces"
-      title="空间内容（训练/练习/刷题与成员）在管理区维护"
-      className="hidden shrink-0 rounded-lg border border-dashed px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground md:inline-flex md:items-center"
-    >
-      空间管理 →
-    </Link>
   )
 }
 
