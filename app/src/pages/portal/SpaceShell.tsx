@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { NavLink, Outlet, useNavigate, useOutletContext, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { LayoutGridIcon, UserRoundIcon, FolderKanbanIcon, ClipboardListIcon, BookOpenIcon, TrophyIcon, ArrowLeftIcon } from 'lucide-react'
+import { UserRoundIcon, FolderKanbanIcon, ClipboardListIcon, BookOpenIcon, TrophyIcon, ArrowLeftIcon } from 'lucide-react'
 
 import { api } from '@/api'
 import { saveSpaceId } from '@/api/space'
@@ -52,15 +52,12 @@ export function SpaceShell({ user, onLogout }: { user: User; onLogout: () => voi
         <div className="mx-auto flex h-14 w-full max-w-5xl items-center gap-1 px-2 lg:px-3">
           <NavLink
             to="/"
-            className="-ml-1 flex shrink-0 items-center gap-1.5 rounded-lg px-1.5 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            className="-ml-1.5 flex min-w-0 shrink items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             title="切换空间"
           >
-            <ArrowLeftIcon className="size-4" />
+            <ArrowLeftIcon className="size-4 shrink-0" />
+            <span className="min-w-0 max-w-36 truncate font-semibold lg:max-w-48">{space.name}</span>
           </NavLink>
-          <div className="flex min-w-0 items-center gap-1.5">
-            <LayoutGridIcon className="size-4 shrink-0 text-primary" />
-            <span className="max-w-28 truncate text-sm font-semibold lg:max-w-40">{space.name}</span>
-          </div>
 
           {/* 空间内导航（并入顶栏单行） */}
           <nav className="ml-1 flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto">
