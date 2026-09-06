@@ -194,6 +194,74 @@ func (s *Store) RemoveSpaceChapterItem(itemID int64) error {
 	return nil
 }
 
+// SpaceIDOfTrainingItem 训练条目所属空间（越权删除防护；条目→章节→训练→空间）。
+func (s *Store) SpaceIDOfTrainingItem(itemID int64) (int64, error) {
+	var spaceID int64
+	err := s.DB.QueryRow(`SELECT t.space_id FROM space_training_items i
+		JOIN space_training_chapters c ON i.chapter_id=c.id
+		JOIN space_trainings t ON c.training_id=t.id
+		WHERE i.id=?`, itemID).Scan(&spaceID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, ErrNotFound
+	}
+	if err != nil {
+		return 0, err
+	}
+	return spaceID, nil
+}
+
+// SpaceIDOfTraining 训练所属空间。
+func (s *Store) SpaceIDOfTraining(trainingID int64) (int64, error) {
+	var spaceID int64
+	err := s.DB.QueryRow(`SELECT space_id FROM space_trainings WHERE id=?`, trainingID).Scan(&spaceID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, ErrNotFound
+	}
+	return spaceID, err
+}
+
+// SpaceIDOfChapter 训练章节所属空间。
+func (s *Store) SpaceIDOfChapter(chapterID int64) (int64, error) {
+	var spaceID int64
+	err := s.DB.QueryRow(`SELECT t.space_id FROM space_training_chapters c
+		JOIN space_trainings t ON c.training_id=t.id WHERE c.id=?`, chapterID).Scan(&spaceID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, ErrNotFound
+	}
+	return spaceID, err
+}
+
+// SpaceIDOfPractice 练习所属空间。
+func (s *Store) SpaceIDOfPractice(practiceID int64) (int64, error) {
+	var spaceID int64
+	err := s.DB.QueryRow(`SELECT space_id FROM space_practices WHERE id=?`, practiceID).Scan(&spaceID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, ErrNotFound
+	}
+	return spaceID, err
+}
+
+// SpaceIDOfQuiz 刷题项目所属空间。
+func (s *Store) SpaceIDOfQuiz(quizID int64) (int64, error) {
+	var spaceID int64
+	err := s.DB.QueryRow(`SELECT space_id FROM space_quizzes WHERE id=?`, quizID).Scan(&spaceID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, ErrNotFound
+	}
+	return spaceID, err
+}
+
+// SpaceIDOfPracticeItem 练习条目所属空间（练习条目删除校验用）。
+func (s *Store) SpaceIDOfPracticeItem(itemID int64) (int64, error) {
+	var spaceID int64
+	err := s.DB.QueryRow(`SELECT p.space_id FROM space_practice_items i
+		JOIN space_practices p ON i.practice_id=p.id WHERE i.id=?`, itemID).Scan(&spaceID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, ErrNotFound
+	}
+	return spaceID, err
+}
+
 // ListSpaceChapters 训练全部章节（含条目题目信息，LEFT JOIN problems 读 title/type/uuid）。
 func (s *Store) ListSpaceChapters(trainingID int64) ([]SpaceChapter, error) {
 	rows, err := s.DB.Query(`SELECT id,title,order_no FROM space_training_chapters

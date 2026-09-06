@@ -177,21 +177,7 @@ func TestPortalMemberFlow(t *testing.T) {
 		t.Fatalf("answer tf = %v", ans3)
 	}
 
-	// 练习交卷：p1 答对 + p2 答对 → 2/2；再交一次记录两次
-	prID := ids["practice"]
-	_, sub := doJSON(t, app, "POST", fmt.Sprintf("/api/portal/space/%d/practice/%d/submit", spaceID, prID), stuCookie,
-		map[string]any{"answers": []map[string]any{
-			{"problemId": p1, "answer": 1}, {"problemId": p2, "answer": true},
-		}})
-	if sub["objectiveCorrect"].(float64) != 2 || sub["objectiveTotal"].(float64) != 2 {
-		t.Fatalf("submit = %v", sub)
-	}
-	_, subs := doJSON(t, app, "GET", fmt.Sprintf("/api/portal/space/%d/practice/%d/submissions", spaceID, prID), stuCookie, nil)
-	if len(subs["submissions"].([]any)) != 1 {
-		t.Fatalf("subs = %v", subs)
-	}
-
-	// 刷题：抽题 → 答对 → done 后全过
+	// 刷题：训练后 p2 已通过 → 抽题必为 p1；答对记通过
 	qID := ids["quiz"]
 	_, qp := doJSON(t, app, "GET", fmt.Sprintf("/api/portal/quiz/%d/problem", qID), stuCookie, nil)
 	if qp["done"] == true || qp["problem"] == nil {
@@ -211,7 +197,21 @@ func TestPortalMemberFlow(t *testing.T) {
 		t.Fatalf("quiz answer = %v", qa)
 	}
 
-	// 排行榜（域内成员；stu1 通过：p2(训练)+p1,p2(练习)+刷题一题 → 去重后 2 题）
+	// 练习交卷：p1 答对 + p2 答对 → 2/2；交卷快照含 correct → 通过记录写入（去重）
+	prID := ids["practice"]
+	_, sub := doJSON(t, app, "POST", fmt.Sprintf("/api/portal/space/%d/practice/%d/submit", spaceID, prID), stuCookie,
+		map[string]any{"answers": []map[string]any{
+			{"problemId": p1, "answer": 1}, {"problemId": p2, "answer": true},
+		}})
+	if sub["objectiveCorrect"].(float64) != 2 || sub["objectiveTotal"].(float64) != 2 {
+		t.Fatalf("submit = %v", sub)
+	}
+	_, subs := doJSON(t, app, "GET", fmt.Sprintf("/api/portal/space/%d/practice/%d/submissions", spaceID, prID), stuCookie, nil)
+	if len(subs["submissions"].([]any)) != 1 {
+		t.Fatalf("subs = %v", subs)
+	}
+
+	// 排行榜（域内成员：p1+p2 两题 uuid 去重 = 2）
 	_, rank := doJSON(t, app, "GET", fmt.Sprintf("/api/portal/rank?domainId=%d", ids["domain"]), stuCookie, nil)
 	rows := rank["rank"].([]any)
 	if len(rows) != 1 || rows[0].(map[string]any)["username"] != "stu1" {

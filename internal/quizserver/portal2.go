@@ -75,12 +75,19 @@ func (s *Server) handlePortalPracticeSubmit(c *fiber.Ctx) error {
 		}{it.ProblemType, it.ProblemUUID}
 	}
 	type result struct {
-		ProblemID int64           `json:"problemId"`
-		Correct   bool            `json:"correct"`
-		Type      string          `json:"type"`
+		ProblemID     int64           `json:"problemId"`
+		Correct       bool            `json:"correct"`
+		Type          string          `json:"type"`
 		CorrectAnswer json.RawMessage `json:"correctAnswer,omitempty"`
 	}
+	// 快照元素：逐题含 correct（交卷记录据此写 student_solved 通过记录）
+	type snapshotItem struct {
+		ProblemID int64  `json:"problemId"`
+		Correct   bool   `json:"correct"`
+		UUID      string `json:"uuid,omitempty"`
+	}
 	results := make([]result, 0, len(req.Answers))
+	snapItems := make([]snapshotItem, 0, len(req.Answers))
 	correctCount := 0
 	objectiveTotal := 0
 	for _, a := range req.Answers {
@@ -109,12 +116,12 @@ func (s *Server) handlePortalPracticeSubmit(c *fiber.Ctx) error {
 			}
 		}
 		results = append(results, r)
+		snapItems = append(snapItems, snapshotItem{ProblemID: a.ProblemID, Correct: ok2, UUID: info.uuid})
 		if ok2 {
 			correctCount++
 		}
 	}
-	// 快照 JSON（含 uuid 供交卷记录写通过）
-	snapshot, _ := json.Marshal(req.Answers)
+	snapshot, _ := json.Marshal(snapItems)
 	submissionID, err := s.QS.SavePracticeSubmission(pid, user.ID, string(snapshot), correctCount)
 	if err != nil {
 		return respondError(c, fiber.StatusInternalServerError, err.Error())

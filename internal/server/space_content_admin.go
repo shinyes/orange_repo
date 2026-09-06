@@ -16,6 +16,15 @@ func (s *Server) spaceParam(c *fiber.Ctx) (int64, error) {
 	return paramID(c, "id")
 }
 
+// requireResourceInSpace 校验空间子资源确属 URL :id 空间（防跨空间越权写；
+// 资源 id 由调用方自选，须与 URL 空间一致，不一致视为不存在）。
+func (s *Server) requireResourceInSpace(c *fiber.Ctx, urlSpaceID, actualSpaceID int64) error {
+	if actualSpaceID != urlSpaceID {
+		return respondError(c, fiber.StatusNotFound, "资源不存在或不属于该空间")
+	}
+	return nil
+}
+
 // ---------- 空间训练管理 ----------
 
 // handleListSpaceTrainings GET /api/space/:id/trainings
@@ -82,11 +91,15 @@ func (s *Server) handleCreateSpaceTraining(c *fiber.Ctx) error {
 }
 
 // copyRepoIntoSpaceTraining 从仓库（域模板库）训练/练习拷贝章节结构到空间训练。
-// 注：题目 domain 隔离全面落地前，模板仅校验存在性；后续收紧为同域校验。
+// 模板须属于目标域（模板条目题目域判定）。
 func (s *Server) copyRepoIntoSpaceTraining(spaceTrainingID, domainID int64, kind string, repoID int64) error {
 	if kind == "training" {
-		if _, err := s.Store.GetTraining(repoID); err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, "仓库训练不存在")
+		ok, err := s.Store.TrainingInDomain(repoID, domainID)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return fiber.NewError(fiber.StatusBadRequest, "仓库训练不存在或不属于该域")
 		}
 		chapters, err := s.Store.ListChapters(repoID)
 		if err != nil {
@@ -110,8 +123,12 @@ func (s *Server) copyRepoIntoSpaceTraining(spaceTrainingID, domainID int64, kind
 		return nil
 	}
 	// practice 模板：平铺条目 → 单章「练习题目」
-	if _, err := s.Store.GetPractice(repoID); err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, "仓库练习不存在")
+	ok, err := s.Store.PracticeInDomain(repoID, domainID)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return fiber.NewError(fiber.StatusBadRequest, "仓库练习不存在或不属于该域")
 	}
 	items, err := s.Store.ListPracticeItems(repoID)
 	if err != nil {
@@ -170,6 +187,17 @@ func (s *Server) handleUpdateSpaceTrainingMeta(c *fiber.Ctx) error {
 	if err := s.requireSpaceAccess(c, user, spaceID); err != nil {
 		return err
 	}
+	// 资源归属校验（防跨空间改写）
+	as, err := s.Store.SpaceIDOfTraining(tid)
+	if err != nil {
+		if err == store.ErrNotFound {
+			return respondError(c, fiber.StatusNotFound, "训练不存在")
+		}
+		return err
+	}
+	if err := s.requireResourceInSpace(c, spaceID, as); err != nil {
+		return err
+	}
 	var req struct {
 		Title       string   `json:"title"`
 		Description string   `json:"description"`
@@ -202,6 +230,16 @@ func (s *Server) handleDeleteSpaceTraining(c *fiber.Ctx) error {
 	if err := s.requireSpaceAccess(c, user, spaceID); err != nil {
 		return err
 	}
+	as, err := s.Store.SpaceIDOfTraining(tid)
+	if err != nil {
+		if err == store.ErrNotFound {
+			return respondError(c, fiber.StatusNotFound, "训练不存在")
+		}
+		return err
+	}
+	if err := s.requireResourceInSpace(c, spaceID, as); err != nil {
+		return err
+	}
 	if err := s.Store.DeleteSpaceTraining(tid); err != nil {
 		if err == store.ErrNotFound {
 			return respondError(c, fiber.StatusNotFound, "训练不存在")
@@ -223,6 +261,16 @@ func (s *Server) handleCreateSpaceChapter(c *fiber.Ctx) error {
 	}
 	user := currentUser(c)
 	if err := s.requireSpaceAccess(c, user, spaceID); err != nil {
+		return err
+	}
+	as, err := s.Store.SpaceIDOfTraining(tid)
+	if err != nil {
+		if err == store.ErrNotFound {
+			return respondError(c, fiber.StatusNotFound, "训练不存在")
+		}
+		return err
+	}
+	if err := s.requireResourceInSpace(c, spaceID, as); err != nil {
 		return err
 	}
 	var req struct {
@@ -252,6 +300,16 @@ func (s *Server) handleAddSpaceChapterItems(c *fiber.Ctx) error {
 	if err := s.requireSpaceAccess(c, user, spaceID); err != nil {
 		return err
 	}
+	as, err := s.Store.SpaceIDOfChapter(cid)
+	if err != nil {
+		if err == store.ErrNotFound {
+			return respondError(c, fiber.StatusNotFound, "章节不存在")
+		}
+		return err
+	}
+	if err := s.requireResourceInSpace(c, spaceID, as); err != nil {
+		return err
+	}
 	var req struct {
 		ProblemIDs []int64 `json:"problemIds"`
 	}
@@ -265,11 +323,23 @@ func (s *Server) handleAddSpaceChapterItems(c *fiber.Ctx) error {
 	return respondData(c, fiber.StatusCreated, fiber.Map{"itemIds": ids})
 }
 
-// handleDeleteSpaceItem DELETE /api/space/items/:itemId（条目删除：训练章节或练习共用）
+// handleDeleteSpaceItem DELETE /api/space/space-items/:itemId（空间训练章节条目删除）
 func (s *Server) handleDeleteSpaceItem(c *fiber.Ctx) error {
 	itemID, err := paramID(c, "itemId")
 	if err != nil {
 		return respondError(c, fiber.StatusBadRequest, "invalid item id")
+	}
+	// 归属校验：条目 → 章节 → 训练 → 空间（防跨空间越权删除）
+	spaceID, err := s.Store.SpaceIDOfTrainingItem(itemID)
+	if err != nil {
+		if err == store.ErrNotFound {
+			return respondError(c, fiber.StatusNotFound, "条目不存在")
+		}
+		return err
+	}
+	user := currentUser(c)
+	if err := s.requireSpaceAccess(c, user, spaceID); err != nil {
+		return err
 	}
 	if err := s.Store.RemoveSpaceChapterItem(itemID); err != nil {
 		if err == store.ErrNotFound {
@@ -330,11 +400,22 @@ func (s *Server) handleCreateSpacePractice(c *fiber.Ctx) error {
 		return err
 	}
 	if req.FromRepo != nil && req.FromRepo.ID > 0 {
+		// 模板须同域
+		domainID, err := s.Store.SpaceDomain(spaceID)
+		if err != nil {
+			_ = s.Store.DeleteSpacePractice(id)
+			return err
+		}
 		var pids []int64
 		if req.FromRepo.Kind == "training" {
-			if _, err := s.Store.GetTraining(req.FromRepo.ID); err != nil {
+			ok, err := s.Store.TrainingInDomain(req.FromRepo.ID, domainID)
+			if err != nil {
 				_ = s.Store.DeleteSpacePractice(id)
-				return respondError(c, fiber.StatusBadRequest, "仓库训练不存在")
+				return err
+			}
+			if !ok {
+				_ = s.Store.DeleteSpacePractice(id)
+				return respondError(c, fiber.StatusBadRequest, "仓库训练不存在或不属于该域")
 			}
 			chapters, err := s.Store.ListChapters(req.FromRepo.ID)
 			if err != nil {
@@ -346,9 +427,14 @@ func (s *Server) handleCreateSpacePractice(c *fiber.Ctx) error {
 				}
 			}
 		} else {
-			if _, err := s.Store.GetPractice(req.FromRepo.ID); err != nil {
+			ok, err := s.Store.PracticeInDomain(req.FromRepo.ID, domainID)
+			if err != nil {
 				_ = s.Store.DeleteSpacePractice(id)
-				return respondError(c, fiber.StatusBadRequest, "仓库练习不存在")
+				return err
+			}
+			if !ok {
+				_ = s.Store.DeleteSpacePractice(id)
+				return respondError(c, fiber.StatusBadRequest, "仓库练习不存在或不属于该域")
 			}
 			items, err := s.Store.ListPracticeItems(req.FromRepo.ID)
 			if err != nil {
@@ -405,6 +491,16 @@ func (s *Server) handleAddSpacePracticeItems(c *fiber.Ctx) error {
 	if err := s.requireSpaceAccess(c, user, spaceID); err != nil {
 		return err
 	}
+	as, err := s.Store.SpaceIDOfPractice(pid)
+	if err != nil {
+		if err == store.ErrNotFound {
+			return respondError(c, fiber.StatusNotFound, "练习不存在")
+		}
+		return err
+	}
+	if err := s.requireResourceInSpace(c, spaceID, as); err != nil {
+		return err
+	}
 	var req struct {
 		ProblemIDs []int64 `json:"problemIds"`
 	}
@@ -429,6 +525,16 @@ func (s *Server) handleUpdateSpacePractice(c *fiber.Ctx) error {
 	}
 	user := currentUser(c)
 	if err := s.requireSpaceAccess(c, user, spaceID); err != nil {
+		return err
+	}
+	as, err := s.Store.SpaceIDOfPractice(pid)
+	if err != nil {
+		if err == store.ErrNotFound {
+			return respondError(c, fiber.StatusNotFound, "练习不存在")
+		}
+		return err
+	}
+	if err := s.requireResourceInSpace(c, spaceID, as); err != nil {
 		return err
 	}
 	var req struct {
@@ -460,6 +566,16 @@ func (s *Server) handleDeleteSpacePractice(c *fiber.Ctx) error {
 	}
 	user := currentUser(c)
 	if err := s.requireSpaceAccess(c, user, spaceID); err != nil {
+		return err
+	}
+	as, err := s.Store.SpaceIDOfPractice(pid)
+	if err != nil {
+		if err == store.ErrNotFound {
+			return respondError(c, fiber.StatusNotFound, "练习不存在")
+		}
+		return err
+	}
+	if err := s.requireResourceInSpace(c, spaceID, as); err != nil {
 		return err
 	}
 	if err := s.Store.DeleteSpacePractice(pid); err != nil {
@@ -536,6 +652,16 @@ func (s *Server) handleDeleteSpaceQuiz(c *fiber.Ctx) error {
 	}
 	user := currentUser(c)
 	if err := s.requireSpaceAccess(c, user, spaceID); err != nil {
+		return err
+	}
+	as, err := s.Store.SpaceIDOfQuiz(qid)
+	if err != nil {
+		if err == store.ErrNotFound {
+			return respondError(c, fiber.StatusNotFound, "刷题项目不存在")
+		}
+		return err
+	}
+	if err := s.requireResourceInSpace(c, spaceID, as); err != nil {
 		return err
 	}
 	if err := s.Store.DeleteSpaceQuiz(qid); err != nil {

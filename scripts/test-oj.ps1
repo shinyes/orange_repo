@@ -186,7 +186,7 @@ New-Item -ItemType Directory -Force -Path $binDir | Out-Null
 
 Push-Location $root
 try {
-  go build -o (Join-Path $binDir 'orangerepo.exe') . 2>&1 | Out-Null
+  go build -o (Join-Path $binDir 'orangeoj.exe') . 2>&1 | Out-Null
   go build -o (Join-Path $binDir 'quiz.exe') ./cmd/quiz 2>&1 | Out-Null
   go build -o (Join-Path $binDir 'judge-runtime.exe') ./cmd/judge-runtime 2>&1 | Out-Null
 } finally { Pop-Location }
@@ -199,7 +199,7 @@ try {
   $judgeLog = Join-Path $env:TEMP 'orangeoj-test-judge.log'
 
   # main repo server first (bootstraps shared admin into quiz.db)
-  $script:procList += Start-Process -FilePath (Join-Path $binDir 'orangerepo.exe') `
+  $script:procList += Start-Process -FilePath (Join-Path $binDir 'orangeoj.exe') `
     -ArgumentList '-addr', ":$MainPort", '-data', $dataDir, '-web', (Join-Path $root 'web\dist') `
     -WorkingDirectory $binDir -WindowStyle Hidden -RedirectStandardOutput $mainLog -RedirectStandardError "$mainLog.err" -PassThru
   if (-not (Wait-Health "http://127.0.0.1:$MainPort/api/health" "main repo :$MainPort")) { throw 'main repo did not start' }

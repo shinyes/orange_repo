@@ -11,6 +11,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 
 	"orangeoj/internal/accounts"
+	"orangeoj/internal/store"
 )
 
 // resolveSpaceCtx 供无 :id 路径参数端点使用：校验 user 是 spaceID 成员或管理员并注入。
@@ -70,7 +71,7 @@ func (s *Server) quizProblemIDs(qid int64) ([]int64, error) {
 	if sourceType == "tags" {
 		var tags []string
 		_ = jsonUnmarshalTags(tagsJSON, &tags)
-		rows, err := s.QS.Repo.DB.Query(`SELECT id FROM problems
+		rows, err := s.QS.Repo.DB.Query(`SELECT id,tags_json FROM problems
 			WHERE domain_id=? AND type IN ('single_choice','true_false') ORDER BY id`, domainID)
 		if err != nil {
 			return nil, err
@@ -79,34 +80,30 @@ func (s *Server) quizProblemIDs(qid int64) ([]int64, error) {
 		var ids []int64
 		for rows.Next() {
 			var id int64
-			if err := rows.Scan(&id); err != nil {
+			var tagsJSONRow string
+			if err := rows.Scan(&id, &tagsJSONRow); err != nil {
 				return nil, err
 			}
 			if len(tags) == 0 {
 				ids = append(ids, id)
 				continue
 			}
-			// tags_json 内包含任一选中标签（前缀粗匹配）
-			matched := false
-			for _, t := range tags {
-				if strings.Contains(tagsJSON, "\""+t+"\"") {
-					matched = true
-					break
-				}
-			}
-			if matched {
+			// 标签语义与主站一致：前缀 AND（题目至少命中每个选中标签或其前缀子孙）
+			var problemTags []string
+			_ = jsonUnmarshalTags(tagsJSONRow, &problemTags)
+			if store.TagMatchesSelected(problemTags, tags) {
 				ids = append(ids, id)
 			}
 		}
 		return ids, nil
 	}
-	// repo 源：模板（仓库训练/练习）条目 → 客观题
+	// repo 源：模板（仓库训练/练习）条目 → 客观题（仅取本域题目）
 	if repoKind == "training" {
 		rows, err := s.QS.Repo.DB.Query(`SELECT i.problem_id FROM training_items i
 			JOIN training_chapters c ON i.chapter_id=c.id
 			JOIN problems p ON p.id=i.problem_id
-			WHERE c.training_id=? AND p.type IN ('single_choice','true_false')
-			ORDER BY i.id`, repoID)
+			WHERE c.training_id=? AND p.type IN ('single_choice','true_false') AND p.domain_id=?
+			ORDER BY i.id`, repoID, domainID)
 		if err != nil {
 			return nil, err
 		}
@@ -123,8 +120,8 @@ func (s *Server) quizProblemIDs(qid int64) ([]int64, error) {
 	}
 	rows, err := s.QS.Repo.DB.Query(`SELECT i.problem_id FROM practice_items i
 		JOIN problems p ON p.id=i.problem_id
-		WHERE i.practice_id=? AND p.type IN ('single_choice','true_false')
-		ORDER BY i.id`, repoID)
+		WHERE i.practice_id=? AND p.type IN ('single_choice','true_false') AND p.domain_id=?
+		ORDER BY i.id`, repoID, domainID)
 	if err != nil {
 		return nil, err
 	}

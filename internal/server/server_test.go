@@ -1283,9 +1283,9 @@ func TestSpaceContentAPI(t *testing.T) {
 		map[string]string{"name": "空间X"})
 	spaceID := int64(spOut["id"].(float64))
 
-	// 造仓库模板：题目(默认域) + 训练 2 章
-	_, p1 := doJSON(t, app, "POST", "/api/problems", gc, map[string]any{"type": "single_choice", "title": "T1", "bodyJson": map[string]any{"options": []string{"a", "b"}}, "answerJson": map[string]any{"answerIndex": 0}})
-	_, p2 := doJSON(t, app, "POST", "/api/problems", gc, map[string]any{"type": "true_false", "title": "T2", "bodyJson": map[string]any{}, "answerJson": map[string]any{"answer": true}})
+	// 造仓库模板：题目(域X) + 训练
+	_, p1 := doJSON(t, app, "POST", "/api/problems?domainId="+strconv.FormatInt(domainID, 10), gc, map[string]any{"type": "single_choice", "title": "T1", "bodyJson": map[string]any{"options": []string{"a", "b"}}, "answerJson": map[string]any{"answerIndex": 0}})
+	_, p2 := doJSON(t, app, "POST", "/api/problems?domainId="+strconv.FormatInt(domainID, 10), gc, map[string]any{"type": "true_false", "title": "T2", "bodyJson": map[string]any{}, "answerJson": map[string]any{"answer": true}})
 	p1ID := int64(p1["problem"].(map[string]any)["id"].(float64))
 	p2ID := int64(p2["problem"].(map[string]any)["id"].(float64))
 	// 模板训练

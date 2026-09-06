@@ -268,16 +268,14 @@ func (s *Server) importBackup(manifest *backupManifest, problems []zipio.ExportP
 			TimeLimitMS:    payload.TimeLimitMS,
 			MemoryLimitMiB: payload.MemoryLimitMiB,
 		}
-		if prob.UUID != "" {
-			if exists, err := s.Store.ProblemUUIDExists(prob.UUID); err != nil {
-				return err
-			} else if exists {
-				id, err := s.Store.ProblemIDByUUID(prob.UUID)
-				if err != nil {
-					return err
-				}
+		if prob.UUID != "" && domainID != nil {
+			id, err := s.Store.ProblemIDByUUIDInDomain(prob.UUID, domainID)
+			if err == nil {
 				createdIDs[i] = id
 				continue
+			}
+			if err != store.ErrNotFound {
+				return err
 			}
 		}
 		id, err := s.Store.CreateProblem(prob)

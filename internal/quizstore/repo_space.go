@@ -36,11 +36,12 @@ type SpaceTrainingChapter struct {
 
 // SpaceTrainingItem 空间训练条目（题目 id + 类型，作答判定用）。
 type SpaceTrainingItem struct {
-	ID          int64  `json:"id"`
-	ProblemID   int64  `json:"problemId"`
-	OrderNo     int    `json:"orderNo"`
-	ProblemType string `json:"problemType,omitempty"`
-	ProblemUUID string `json:"problemUuid,omitempty"`
+	ID           int64  `json:"id"`
+	ProblemID    int64  `json:"problemId"`
+	OrderNo      int    `json:"orderNo"`
+	ProblemTitle string `json:"problemTitle,omitempty"`
+	ProblemType  string `json:"problemType,omitempty"`
+	ProblemUUID  string `json:"problemUuid,omitempty"`
 }
 
 // SpacePracticeBrief 空间练习列表项。
@@ -55,11 +56,12 @@ type SpacePracticeBrief struct {
 
 // SpacePracticeItem 空间练习条目。
 type SpacePracticeItem struct {
-	ID          int64  `json:"id"`
-	ProblemID   int64  `json:"problemId"`
-	OrderNo     int    `json:"orderNo"`
-	ProblemType string `json:"problemType,omitempty"`
-	ProblemUUID string `json:"problemUuid,omitempty"`
+	ID           int64  `json:"id"`
+	ProblemID    int64  `json:"problemId"`
+	OrderNo      int    `json:"orderNo"`
+	ProblemTitle string `json:"problemTitle,omitempty"`
+	ProblemType  string `json:"problemType,omitempty"`
+	ProblemUUID  string `json:"problemUuid,omitempty"`
 }
 
 // SpaceQuizBrief 空间刷题项目。
@@ -199,7 +201,7 @@ func (r *RepoReader) GetSpaceTrainingBrief(trainingID int64) (*SpaceTrainingBrie
 }
 
 func (r *RepoReader) spaceTrainingItems(chapterID int64) ([]SpaceTrainingItem, error) {
-	rows, err := r.DB.Query(`SELECT i.id,i.problem_id,i.order_no,p.type,p.uuid
+	rows, err := r.DB.Query(`SELECT i.id,i.problem_id,i.order_no,p.title,p.type,p.uuid
 		FROM space_training_items i LEFT JOIN problems p ON p.id=i.problem_id
 		WHERE i.chapter_id=? ORDER BY i.order_no,i.id`, chapterID)
 	if err != nil {
@@ -209,9 +211,12 @@ func (r *RepoReader) spaceTrainingItems(chapterID int64) ([]SpaceTrainingItem, e
 	var out []SpaceTrainingItem
 	for rows.Next() {
 		var it SpaceTrainingItem
-		var tN, uN sql.NullString
-		if err := rows.Scan(&it.ID, &it.ProblemID, &it.OrderNo, &tN, &uN); err != nil {
+		var titleN, tN, uN sql.NullString
+		if err := rows.Scan(&it.ID, &it.ProblemID, &it.OrderNo, &titleN, &tN, &uN); err != nil {
 			return nil, err
+		}
+		if titleN.Valid {
+			it.ProblemTitle = titleN.String
 		}
 		if tN.Valid {
 			it.ProblemType = tN.String
@@ -261,7 +266,7 @@ func (r *RepoReader) GetSpacePracticeBrief(practiceID int64) (*SpacePracticeBrie
 		return nil, nil, err
 	}
 	b.Tags = decodeRepoTags(tags)
-	rows, err := r.DB.Query(`SELECT i.id,i.problem_id,i.order_no,p.type,p.uuid
+	rows, err := r.DB.Query(`SELECT i.id,i.problem_id,i.order_no,p.title,p.type,p.uuid
 		FROM space_practice_items i LEFT JOIN problems p ON p.id=i.problem_id
 		WHERE i.practice_id=? ORDER BY i.order_no,i.id`, practiceID)
 	if err != nil {
@@ -271,9 +276,12 @@ func (r *RepoReader) GetSpacePracticeBrief(practiceID int64) (*SpacePracticeBrie
 	var items []SpacePracticeItem
 	for rows.Next() {
 		var it SpacePracticeItem
-		var tN, uN sql.NullString
-		if err := rows.Scan(&it.ID, &it.ProblemID, &it.OrderNo, &tN, &uN); err != nil {
+		var titleN, tN, uN sql.NullString
+		if err := rows.Scan(&it.ID, &it.ProblemID, &it.OrderNo, &titleN, &tN, &uN); err != nil {
 			return nil, nil, err
+		}
+		if titleN.Valid {
+			it.ProblemTitle = titleN.String
 		}
 		if tN.Valid {
 			it.ProblemType = tN.String

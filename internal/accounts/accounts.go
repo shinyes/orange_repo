@@ -552,7 +552,10 @@ func (s *Store) GetUserByToken(token string) (*User, bool) {
 	u, err := s.scanUser(`SELECT u.id,u.username,u.role,u.domain_id FROM sessions se
 		JOIN users u ON u.id=se.user_id WHERE se.token=?`, token)
 	if err != nil {
-		_, _ = s.DB.Exec(`DELETE FROM sessions WHERE token=?`, token)
+		// 仅当会话确实不存在时清理（DB 瞬时错误不得误删合法会话）
+		if errors.Is(err, ErrNotFound) {
+			_, _ = s.DB.Exec(`DELETE FROM sessions WHERE token=?`, token)
+		}
 		return nil, false
 	}
 	return u, true

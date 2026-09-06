@@ -170,17 +170,15 @@ func (s *Server) ImportZipData(data []byte, mode, nameHint string, folderID, dom
 			TimeLimitMS:    payload.TimeLimitMS,
 			MemoryLimitMiB: payload.MemoryLimitMiB,
 		}
-		// uuid 去重：若已存在，直接引用旧题
-		if prob.UUID != "" {
-			if exists, err := s.Store.ProblemUUIDExists(prob.UUID); err != nil {
-				return nil, err
-			} else if exists {
-				id, err := s.Store.ProblemIDByUUID(prob.UUID)
-				if err != nil {
-					return nil, err
-				}
+		// uuid 去重：同 uuid 且同域已存在则引用旧题；跨域同 uuid 视为新题（各域独立副本）
+		if prob.UUID != "" && domainID != nil {
+			id, err := s.Store.ProblemIDByUUIDInDomain(prob.UUID, domainID)
+			if err == nil {
 				createdIDs[i] = id
 				continue
+			}
+			if err != store.ErrNotFound {
+				return nil, err
 			}
 		}
 		id, err := s.Store.CreateProblem(prob)

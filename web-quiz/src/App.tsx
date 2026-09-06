@@ -48,8 +48,10 @@ export default function App() {
       setUser(d.user ?? null)
     }).catch(() => setAuthed(false))
     const on401 = () => {
+      queryClient.clear() // 会话失效：清空缓存，防换账号残留上一账号的空间/排行数据
       setAuthed(false)
       setUser(null)
+      window.location.href = '/login'
     }
     window.addEventListener('quiz:unauthorized', on401)
     return () => window.removeEventListener('quiz:unauthorized', on401)
@@ -59,7 +61,12 @@ export default function App() {
     return <div className="flex h-dvh items-center justify-center text-sm text-muted-foreground">正在连接刷题服务…</div>
   }
 
-  const onLogout = () => void api.logout().finally(() => setAuthed(false))
+  const onLogout = () =>
+    void api.logout().finally(() => {
+      queryClient.clear()
+      setAuthed(false)
+      window.location.href = '/login'
+    })
 
   return (
     <QueryClientProvider client={queryClient}>

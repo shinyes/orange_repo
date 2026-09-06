@@ -390,6 +390,23 @@ func (s *Store) ProblemIDByUUID(u string) (int64, error) {
 	return id, nil
 }
 
+// ProblemIDByUUIDInDomain 按 uuid+归属域取题目 id：同 uuid 跨域视为不存在（各域独立副本），
+// 避免导入去重把 A 域题目引用进 B 域空间（跨域污染）。
+func (s *Store) ProblemIDByUUIDInDomain(u string, domainID *int64) (int64, error) {
+	if u == "" || domainID == nil {
+		return 0, ErrNotFound
+	}
+	var id int64
+	err := s.DB.QueryRow(`SELECT id FROM problems WHERE uuid=? AND domain_id=?`, u, *domainID).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, ErrNotFound
+	}
+	if err != nil {
+		return 0, err
+	}
+	return id, nil
+}
+
 // ---------- 题目 ----------
 
 func encodeTags(tags []string) string {
