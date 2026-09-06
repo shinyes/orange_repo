@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeftIcon, CircleCheckBigIcon, FolderKanbanIcon, LockIcon, Loader2Icon, Code2Icon } from 'lucide-react'
+import { CircleCheckBigIcon, FolderKanbanIcon, LockIcon, Loader2Icon, Code2Icon } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { api } from '@/api'
@@ -38,14 +38,8 @@ export function TrainingDetail() {
   const solvedCount = objective.filter((i) => i.solved).length
 
   return (
-    <SpacePageShell spaceId={sid} backTo="/" backLabel={space.name}>
+    <SpacePageShell spaceId={sid} backTo={`/s/${sid}/training`} backLabel="返回训练列表">
     <PageContainer>
-      <Link
-        to={`/s/${sid}/training`}
-        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
-      >
-        <ArrowLeftIcon className="size-4" /> 返回训练列表
-      </Link>
 
       <div className="mt-2 rounded-2xl border bg-card p-5">
         <div className="flex items-start justify-between gap-3">

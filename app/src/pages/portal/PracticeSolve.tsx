@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeftIcon, ClipboardListIcon, Code2Icon, Loader2Icon, SendIcon } from 'lucide-react'
+import { ClipboardListIcon, Code2Icon, Loader2Icon, SendIcon } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { api } from '@/api'
@@ -36,7 +36,7 @@ export function PracticeSolve() {
   if (space === null || q.isError || !data) return <Center text="练习不存在或无权访问" />
 
   return (
-    <SpacePageShell spaceId={sid} backTo="/" backLabel={space.name}>
+    <SpacePageShell spaceId={sid} backTo={`/s/${sid}/practice`} backLabel="返回练习列表">
       <PracticePaper key={pid} sid={sid} pid={pid} data={data} />
     </SpacePageShell>
   )
@@ -92,13 +92,6 @@ function PracticePaper({ sid, pid, data }: {
 
   return (
     <PageContainer>
-      <Link
-        to={`/s/${sid}/practice`}
-        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
-      >
-        <ArrowLeftIcon className="size-4" /> 返回练习列表
-      </Link>
-
       <div className="mt-2 rounded-2xl border bg-card p-5">
         <h1 className="flex items-center gap-2 text-lg font-semibold">
           <ClipboardListIcon className="size-5 text-primary" />

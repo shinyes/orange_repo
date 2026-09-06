@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowLeftIcon, BookOpenIcon, CheckCircle2Icon, Loader2Icon, PartyPopperIcon, RefreshCwIcon, SkipForwardIcon } from 'lucide-react'
+import { BookOpenIcon, CheckCircle2Icon, Loader2Icon, PartyPopperIcon, RefreshCwIcon, SkipForwardIcon } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { api } from '@/api'
@@ -26,8 +26,8 @@ export function QuizSolve() {
   if (space === null) return <Center text="空间不存在或无权访问" />
 
   return (
-    <SpacePageShell spaceId={sid} backTo="/" backLabel={space.name}>
-      <QuizRound key={qid} sid={sid} qid={qid} quizName={quizName} spaceName={space.name} />
+    <SpacePageShell spaceId={sid} backTo={`/s/${sid}/quiz`} backLabel="返回刷题列表">
+      <QuizRound key={qid} qid={qid} quizName={quizName} spaceName={space.name} />
     </SpacePageShell>
   )
 }
@@ -36,7 +36,7 @@ function Center({ text }: { text: string }) {
   return <div className="flex h-dvh items-center justify-center text-sm text-muted-foreground">{text}</div>
 }
 
-function QuizRound({ sid, qid, quizName, spaceName }: { sid: number; qid: number; quizName: string; spaceName: string }) {
+function QuizRound({ qid, quizName, spaceName }: { qid: number; quizName: string; spaceName: string }) {
   const [problem, setProblem] = useState<QuizProblemResponse['problem'] | null>(null)
   const [fetchError, setFetchError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -99,13 +99,6 @@ function QuizRound({ sid, qid, quizName, spaceName }: { sid: number; qid: number
 
   return (
     <PageContainer className="max-w-2xl lg:px-6">
-      <Link
-        to={`/s/${sid}/quiz`}
-        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
-      >
-        <ArrowLeftIcon className="size-4" /> 返回刷题列表
-      </Link>
-
       <div className="mt-3 rounded-2xl border bg-card p-5">
         {done ? (
           <DonePanel spaceName={spaceName} quizName={quizName} onRefresh={() => void fetchProblem()} />
