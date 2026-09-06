@@ -443,7 +443,7 @@ func (s *Server) handleSetSpaceMembers(c *fiber.Ctx) error {
 	// 成员须为 member 角色账号
 	for _, uid := range req.UserIDs {
 		u, err := s.Accounts.GetUserByID(uid)
-		if err != nil || (u.Role != accounts.RoleMember && u.Role != "student") {
+		if err != nil || u.Role != accounts.RoleMember {
 			return respondError(c, fiber.StatusBadRequest, "成员须为普通用户账号")
 		}
 	}

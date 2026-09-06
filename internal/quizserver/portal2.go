@@ -324,8 +324,8 @@ func (s *Server) handlePortalRank(c *fiber.Ctx) error {
 		if err != nil {
 			continue
 		}
-		// 管理员不参与
-		if u.Role != "member" && u.Role != "student" {
+		// 管理员不参与排名（仅空间成员计）
+		if !u.Role.ValidNew() || isAdminRole(u.Role) {
 			continue
 		}
 		var n int

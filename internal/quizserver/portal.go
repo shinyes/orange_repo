@@ -8,45 +8,21 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
+	"orangeoj/internal/accounts"
 	"orangeoj/internal/quizstore"
 )
 
 // spaceLocals key。
 const spaceLocals = "portal_space"
 
-// resolveSpace 解析空间并校验当前用户成员/管理员身份，注入 Locals。
-// domain_admin/global_admin 视为任意空间可读（内容管理在别处，这里仅成员作答侧校验：
-// 管理员以「可读」通过，实际作答权限由端点细分）。
+// resolveSpace 解析 URL :id 空间并校验当前用户成员/管理员身份，注入 Locals。
+// domain_admin 限本域空间；global_admin 任意；member 须为空间成员。
 func (s *Server) resolveSpace(c *fiber.Ctx) (int64, error) {
 	id, err := paramID(c, "id")
 	if err != nil {
 		return 0, respondError(c, fiber.StatusBadRequest, "invalid space id")
 	}
-	user := currentUser(c)
-	// 管理员（域管理员本域/全局）→ 通过（后续端点按角色细控）
-	if isAdminRole(user.Role) {
-		if user.Role == "domain_admin" && user.DomainID != nil {
-			ok, err := s.QS.Repo.SpaceOfDomain(id, *user.DomainID)
-			if err != nil {
-				return 0, err
-			}
-			if !ok {
-				return 0, respondError(c, fiber.StatusForbidden, "无权访问该空间")
-			}
-		}
-		c.Locals(spaceLocals, id)
-		return id, nil
-	}
-	// 成员
-	ok, err := s.QS.Repo.SpaceMember(id, user.ID)
-	if err != nil {
-		return 0, err
-	}
-	if !ok {
-		return 0, respondError(c, fiber.StatusForbidden, "你不是该空间成员")
-	}
-	c.Locals(spaceLocals, id)
-	return id, nil
+	return s.resolveSpaceCtx(c, id)
 }
 
 // handlePortalSpaces GET /api/portal/spaces → 我的空间（member 多空间；管理员列出其域空间）。
@@ -58,12 +34,12 @@ func (s *Server) handlePortalSpaces(c *fiber.Ctx) error {
 		if err != nil {
 			return err
 		}
-		if user.Role == "domain_admin" && user.DomainID != nil {
+		if user.Role == accounts.RoleDomainAdmin && user.DomainID != nil {
 			spaces, err = s.spacesOfDomain(*user.DomainID)
 			if err != nil {
 				return err
 			}
-		} else if user.Role == "global_admin" {
+		} else if user.Role == accounts.RoleGlobalAdmin {
 			spaces, err = s.spacesOfAllDomains()
 			if err != nil {
 				return err
