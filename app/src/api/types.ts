@@ -340,6 +340,15 @@ export interface MemberUser {
   username: string
 }
 
+/** 全账号视图（GET /api/admin/all-users：含角色/归属域与域名）。 */
+export interface AllUser {
+  id: number
+  username: string
+  role: Role
+  domainId?: number | null
+  domainName?: string
+}
+
 export interface Domain {
   id: number
   name: string

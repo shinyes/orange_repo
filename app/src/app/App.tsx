@@ -30,6 +30,7 @@ const ProblemSolvePage = lazy(() => import('@/pages/oj/ProblemSolvePage').then((
 const AdminProblemsWorkspace = lazy(() => import('@/pages/admin/ProblemsWorkspace').then((m) => ({ default: m.ProblemsWorkspace })))
 const AdminDomainAdmin = lazy(() => import('@/pages/admin/DomainAdmin').then((m) => ({ default: m.DomainAdmin })))
 const AdminSpaceAdmin = lazy(() => import('@/pages/admin/SpaceAdmin').then((m) => ({ default: m.SpaceAdmin })))
+const AdminUsers = lazy(() => import('@/pages/admin/UsersAdmin').then((m) => ({ default: m.UsersAdmin })))
 
 function PageFallback() {
   return (
@@ -106,8 +107,9 @@ export default function App() {
               <Route path="/admin" element={<RequireAdmin user={user}><AdminLayout user={user} onLogout={onLogout} /></RequireAdmin>}>
                 <Route index element={<Navigate to="problems" replace />} />
                 <Route path="problems" element={<AdminProblemsWorkspace />} />
-                <Route path="domains" element={<AdminDomainAdmin />} />
+                <Route path="users" element={<AdminUsers />} />
                 <Route path="spaces" element={<AdminSpaceAdmin />} />
+                <Route path="domains" element={<AdminDomainAdmin />} />
               </Route>
 
               <Route path="*" element={<Navigate to="/" replace />} />

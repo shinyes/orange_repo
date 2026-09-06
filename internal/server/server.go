@@ -151,6 +151,8 @@ func (s *Server) registerManagement(app *fiber.App) {
 	ga("GET", "/admin/users", s.handleListUsers)
 	ga("DELETE", "/admin/users/:id", s.handleDeleteUser)
 	ga("PUT", "/admin/users/:id/password", s.handleResetUserPassword)
+	// 集中用户管理（仅系统管理员）：全账号列表（含角色/归属域）
+	gag("GET", "/admin/all-users", s.handleListAllUsers)
 
 	// 空间内容管理（系统/域管理员）：空间训练/练习/刷题 结构 CRUD
 	ga("GET", "/space/:id/trainings", s.handleListSpaceTrainings)

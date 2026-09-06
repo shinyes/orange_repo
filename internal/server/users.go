@@ -10,6 +10,41 @@ import (
 	"orangeoj/internal/accounts"
 )
 
+// handleListAllUsers GET /api/admin/all-users → 全账号列表（系统管理员专用；
+// 含角色/归属域与域名，供集中用户管理页）。
+func (s *Server) handleListAllUsers(c *fiber.Ctx) error {
+	users, err := s.Accounts.ListAllUsers()
+	if err != nil {
+		return err
+	}
+	// 域名映射（按需取用）
+	domainName := map[int64]string{}
+	domains, err := s.Store.ListDomains()
+	if err == nil {
+		for _, d := range domains {
+			domainName[d.ID] = d.Name
+		}
+	}
+	type view struct {
+		ID         int64   `json:"id"`
+		Username   string  `json:"username"`
+		Role       string  `json:"role"`
+		DomainID   *int64  `json:"domainId,omitempty"`
+		DomainName *string `json:"domainName,omitempty"`
+	}
+	out := make([]view, 0, len(users))
+	for _, u := range users {
+		v := view{ID: u.ID, Username: u.Username, Role: string(u.Role), DomainID: u.DomainID}
+		if u.DomainID != nil {
+			if n, ok := domainName[*u.DomainID]; ok {
+				v.DomainName = &n
+			}
+		}
+		out = append(out, v)
+	}
+	return respondData(c, fiber.StatusOK, fiber.Map{"users": out})
+}
+
 // handleCreateUser POST /api/admin/users {username, password} → 新建空间成员（member）。
 // 系统管理员或域管理员可用；域管理员只能建 member（不能建管理员）。
 func (s *Server) handleCreateUser(c *fiber.Ctx) error {

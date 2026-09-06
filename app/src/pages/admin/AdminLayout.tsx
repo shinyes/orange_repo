@@ -14,6 +14,7 @@ import {
   SettingsIcon,
   ShieldIcon,
   UserRoundIcon,
+  UsersRoundIcon,
 } from 'lucide-react'
 
 import type { User } from '@/api/types'
@@ -66,6 +67,7 @@ function AdminTop({ user, onLogout }: { user: User; onLogout: () => void }) {
   const navItems = [
     { to: '/admin/problems', label: '题目管理', icon: ShieldIcon, show: true },
     { to: '/admin/spaces', label: '空间管理', icon: LayoutGridIcon, show: canManageSpaces },
+    { to: '/admin/users', label: '用户管理', icon: UsersRoundIcon, show: isGlobal },
     { to: '/admin/domains', label: '域管理', icon: Building2Icon, show: isGlobal },
   ].filter((n) => n.show)
 

@@ -6,6 +6,7 @@
 // 所有带域数据的请求 URL 经 dq() 附加 domainId=；不带域的（题目详情/训练详情/域管理/账号池）不附加。
 import { req, json } from './client'
 import type {
+  AllUser,
   BookletDirectory,
   Chapter,
   Domain,
@@ -174,6 +175,8 @@ export const adminApi = {
   /** 设域管理员：username + 可选 password（用户不存在且缺密码时报错）。 */
   setDomainAdmin: (id: number, username: string, password?: string) =>
     req<void>(`/api/admin/domains/${id}/admin`, json({ method: 'PUT', body: JSON.stringify({ username, password }) })),
+  /** 移除域管理员（账号保留为普通成员）。 */
+  removeDomainAdmin: (id: number, uid: number) => req<void>(`/api/admin/domains/${id}/admins/${uid}`, { method: 'DELETE' }),
 
   // ---- 空间管理（global_admin 带 domainId / domain_admin 自动本域） ----
   spaces: () => req<{ spaces: Space[] }>(dq('/api/admin/spaces')),
@@ -186,6 +189,8 @@ export const adminApi = {
     req<void>(`/api/admin/spaces/${id}/members`, json({ method: 'PUT', body: JSON.stringify({ userIds }) })),
 
   // ---- 空间成员账号（member 账号维护；账号池全局共享，不带域） ----
+  /** 全账号列表（仅系统管理员：含角色/归属域/域名） */
+  allUsers: () => req<{ users: AllUser[] }>('/api/admin/all-users'),
   users: () => req<{ users: MemberUser[] }>('/api/admin/users'),
   createUser: (username: string, password: string) =>
     req<{ id: number }>('/api/admin/users', json({ method: 'POST', body: JSON.stringify({ username, password }) })),

@@ -337,6 +337,30 @@ func (s *Store) HasAdmin() (bool, error) {
 	return n > 0, err
 }
 
+// ListAllUsers 全账号统一列表（含角色与归属域；供集中用户管理页展示）。
+func (s *Store) ListAllUsers() ([]User, error) {
+	rows, err := s.DB.Query(`SELECT id,username,role,domain_id FROM users ORDER BY id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []User
+	for rows.Next() {
+		var u User
+		var d sql.NullInt64
+		if err := rows.Scan(&u.ID, &u.Username, &u.Role, &d); err != nil {
+			return nil, err
+		}
+		u.Role = migrateRole(u.Role)
+		if d.Valid {
+			id := d.Int64
+			u.DomainID = &id
+		}
+		out = append(out, u)
+	}
+	return out, rows.Err()
+}
+
 // ListStudents 空间成员账号列表（role=member；含各自错题数——错题数属刷题服务数据，
 // 由调用方补充或保持 0）。
 func (s *Store) ListStudents() ([]Student, error) {

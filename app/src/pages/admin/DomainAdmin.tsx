@@ -284,6 +284,7 @@ function DomainAdminsDialog(props: { domain: Domain | null; onOpenChange: (v: bo
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
+  const [removing, setRemoving] = useState<number | null>(null)
 
   const adminsQ = useQuery({
     queryKey: ['admin', 'domains', d?.id, 'admins'],
@@ -312,6 +313,20 @@ function DomainAdminsDialog(props: { domain: Domain | null; onOpenChange: (v: bo
     }
   }
 
+  async function remove(uid: number, uname: string) {
+    if (!d) return
+    setRemoving(uid)
+    try {
+      await api.removeDomainAdmin(d.id, uid)
+      toast.success(`已将 ${uname} 移出域管理员（账号保留为普通成员）`)
+      await qc.invalidateQueries({ queryKey: ['admin', 'domains', d.id, 'admins'] })
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : '移除失败')
+    } finally {
+      setRemoving(null)
+    }
+  }
+
   return (
     <Dialog open={d !== null} onOpenChange={props.onOpenChange}>
       <DialogContent className="sm:max-w-sm">
@@ -319,7 +334,7 @@ function DomainAdminsDialog(props: { domain: Domain | null; onOpenChange: (v: bo
           <DialogTitle className="flex items-center gap-2">
             <ShieldCheckIcon className="size-4" /> 域管理员{d && ` · ${d.name}`}
           </DialogTitle>
-          <DialogDescription>域管理员登录后自动管理该域仓库与空间，无需选域。</DialogDescription>
+          <DialogDescription>域管理员登录后自动管理该域仓库与空间，无需选域；移除后账号保留为普通成员。</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-2">
@@ -333,12 +348,22 @@ function DomainAdminsDialog(props: { domain: Domain | null; onOpenChange: (v: bo
                   <UsersIcon className="size-3.5 shrink-0 text-muted-foreground" />
                   <span className="min-w-0 flex-1 truncate">{a.username}</span>
                   <span className="text-[10px] text-muted-foreground">#{a.id}</span>
+                  <Button
+                    size="icon-xs"
+                    variant="ghost"
+                    className="text-destructive"
+                    title="移除域管理员（账号保留为普通成员）"
+                    disabled={removing === a.id}
+                    onClick={() => void remove(a.id, a.username)}
+                  >
+                    {removing === a.id ? <LoaderCircleIcon className="size-3.5 animate-spin" /> : <Trash2Icon className="size-3.5" />}
+                  </Button>
                 </li>
               ))}
             </ul>
           )}
           <p className="text-xs text-muted-foreground">
-            没有「移除」操作：如需更换，直接用新账号「设为域管理员」（已是其他域/系统管理员的账号会提示冲突）。
+            提示：已是其他域/系统管理员的账号无法直接设为域管理员（后端会拒绝并提示）；如需更换请先移除或改用其他普通成员账号。
           </p>
         </div>
 
