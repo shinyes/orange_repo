@@ -169,7 +169,7 @@ func (s *Store) ListPracticeSubmissions(practiceID, userID int64) ([]PracticeSub
 		}
 		out = append(out, sub)
 	}
-	return out, rows.Err()
+	return nonNilSlice(out), rows.Err()
 }
 
 // GetPracticeSubmission 取交卷快照（不存在返回 ErrNotFound）。

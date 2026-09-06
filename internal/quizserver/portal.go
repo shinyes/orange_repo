@@ -165,7 +165,7 @@ func (s *Server) handlePortalTraining(c *fiber.Ctx) error {
 	}
 	out := make([]chapterView, 0, len(chapters))
 	for _, ch := range chapters {
-		cv := chapterView{ID: ch.ID, Title: ch.Title}
+		cv := chapterView{ID: ch.ID, Title: ch.Title, Items: []itemView{}}
 		for _, it := range ch.Items {
 			iv := itemView{SpaceTrainingItem: it}
 			if it.ProblemType != "" && it.ProblemType != "programming" {

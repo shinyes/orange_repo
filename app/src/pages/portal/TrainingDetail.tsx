@@ -30,7 +30,7 @@ export function TrainingDetail() {
   if (q.isError || !data) return <Center text="训练不存在或无权访问" />
 
   const { training, chapters } = data
-  const all = chapters.flatMap((c) => c.items)
+  const all = (chapters ?? []).flatMap((c) => c.items ?? [])
   const objective = all.filter((i) => i.problemType === 'single_choice' || i.problemType === 'true_false')
   const solvedCount = objective.filter((i) => i.solved).length
 

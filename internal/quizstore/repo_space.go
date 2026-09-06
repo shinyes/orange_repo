@@ -8,6 +8,15 @@ import (
 	"errors"
 )
 
+// nonNilSlice 空结果返回空切片而非 nil——nil 切片 JSON 序列化为 null，
+// 前端对数组字段做 flatMap/map/filter 时会崩溃（如训练无条目时 chapters[].items=null）。
+func nonNilSlice[T any](s []T) []T {
+	if s == nil {
+		return []T{}
+	}
+	return s
+}
+
 // SpaceBrief 门户空间视图。
 type SpaceBrief struct {
 	ID         int64  `json:"id"`
@@ -116,7 +125,7 @@ func (r *RepoReader) UserDomainSpaceIDs(userID int64) ([]SpaceBrief, error) {
 		}
 		out = append(out, b)
 	}
-	return out, rows.Err()
+	return nonNilSlice(out), rows.Err()
 }
 
 // SpaceMember 是否空间成员（成员访问校验）。
@@ -141,7 +150,7 @@ func (r *RepoReader) DomainSpaceIDs(domainID int64) ([]int64, error) {
 		}
 		out = append(out, id)
 	}
-	return out, rows.Err()
+	return nonNilSlice(out), rows.Err()
 }
 
 // ---------- 空间训练/练习/刷题结构（门户只读） ----------
@@ -165,7 +174,7 @@ func (r *RepoReader) ListSpaceTrainingsBrief(spaceID int64) ([]SpaceTrainingBrie
 		b.Tags = decodeRepoTags(tags)
 		out = append(out, b)
 	}
-	return out, rows.Err()
+	return nonNilSlice(out), rows.Err()
 }
 
 // GetSpaceTrainingBrief 单训练（含章节+条目题目类型/uuid——作答限次判定）。
@@ -204,7 +213,7 @@ func (r *RepoReader) GetSpaceTrainingBrief(trainingID int64) (*SpaceTrainingBrie
 		}
 		chapters[i].Items = items
 	}
-	return &b, chapters, nil
+	return &b, nonNilSlice(chapters), nil
 }
 
 func (r *RepoReader) spaceTrainingItems(chapterID int64) ([]SpaceTrainingItem, error) {
@@ -233,7 +242,14 @@ func (r *RepoReader) spaceTrainingItems(chapterID int64) ([]SpaceTrainingItem, e
 		}
 		out = append(out, it)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	// 空结果返回空数组而非 nil（nil 经 JSON 序列化为 null，前端 flatMap/filter 会崩）
+	if out == nil {
+		out = []SpaceTrainingItem{}
+	}
+	return out, nil
 }
 
 // ListSpacePracticesBrief 空间练习列表。
@@ -255,7 +271,7 @@ func (r *RepoReader) ListSpacePracticesBrief(spaceID int64) ([]SpacePracticeBrie
 		b.Tags = decodeRepoTags(tags)
 		out = append(out, b)
 	}
-	return out, rows.Err()
+	return nonNilSlice(out), rows.Err()
 }
 
 // GetSpacePracticeBrief 单练习（含条目）。
@@ -298,6 +314,13 @@ func (r *RepoReader) GetSpacePracticeBrief(practiceID int64) (*SpacePracticeBrie
 		}
 		items = append(items, it)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, nil, err
+	}
+	// 空结果返回空数组而非 nil（JSON null 会让前端 flatMap/filter 崩溃）
+	if items == nil {
+		items = []SpacePracticeItem{}
+	}
 	return &b, items, nil
 }
 
@@ -319,7 +342,7 @@ func (r *RepoReader) ListSpaceQuizzesBrief(spaceID int64) ([]SpaceQuizBrief, err
 		b.Tags = decodeRepoTags(tags)
 		out = append(out, b)
 	}
-	return out, rows.Err()
+	return nonNilSlice(out), rows.Err()
 }
 
 // decodeRepoTags 解析主库 tags_json（与 store.decodeTags 等价，避免跨包私有依赖）。

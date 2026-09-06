@@ -40,7 +40,8 @@ function PracticePaper({ sid, pid, data }: {
   pid: number
   data: PracticeDetail
 }) {
-  const { practice, items } = data
+  const { practice, items: rawItems } = data
+  const items = rawItems ?? []
   const objectiveItems = items.filter((i) => i.problemType === 'single_choice' || i.problemType === 'true_false')
   const programmingItems = items.filter((i) => i.problemType === 'programming')
   const qc = useQueryClient()
