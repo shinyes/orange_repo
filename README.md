@@ -1,37 +1,102 @@
-# 🍊 OrangeOJ 题库与判题
+# 🍊 OrangeOJ
 
-兼容 [OrangeOJ](https://github.com/shinyes/OrangeOJ) 的题库管理与**判题** Web 应用，由「OrangeOJ 题库 + Orange 刷题」扩展而来：
+面向学校/机构的轻量 **在线判题与练习系统**：域级题库仓库 + 空间化训练/练习/刷题 + Python/C++ 沙箱判题。
 
-- **主站**（:8080）：题库管理 —— 斜杠嵌套标签树、题面+答案同屏编辑、训练/练习编制、ZIP 双向导入导出；
-- **刷题服务 / OJ**（:8081）：空间化做题门户（训练/练习/刷题/排行榜）+ 编程题判题；
-- **判题沙箱 judge-runtime**（:9090）：真正执行学生代码的独立服务，**仅支持 Python 与 C++**（nsjail 隔离）。
+- **管理端（域仓库）**：域管理、题库（题目/标签/题册模板）、空间与成员管理
+- **学生门户**：空间切换、训练（限次作答）、练习（整卷交卷）、刷题、排行榜
+- **判题内核**：独立沙箱进程（Linux: nsjail + cgroup v2），支持 Python 3 / C++
 
-实现方式模仿上游 OrangeOJ（判题队列/评测运行器以其源码为基线，差异仅保留 Python+C++）。
+---
 
-## 技术栈
+## 目录
 
-| 层 | 技术 |
+- [概念模型](#概念模型)
+- [功能一览](#功能一览)
+- [快速开始（Docker Compose）](#快速开始docker-compose)
+- [本地开发](#本地开发)
+- [测试](#测试)
+- [项目结构](#项目结构)
+- [技术栈](#技术栈)
+
+---
+
+## 概念模型
+
+```
+系统管理员（域管理）
+ └─ 域 Domain（题库逻辑隔离：题目/标签按域独立）
+     ├─ 仓库 Repo = 该域题目管理页（域管理员维护：题目/标签/题册模板/导入导出）
+     └─ 空间 Space（做题组织单位，域内多个，互相隔离）
+         ├─ 空间成员（由管理员拉入）
+         ├─ 空间训练：章节化题单；客观题选择次数上限（答对标绿、达限标红）
+         ├─ 空间练习：整卷试卷；一次性作答后交卷才见结果（可重做、逐次记录）
+         ├─ 空间刷题：按标签或仓库题单生成的客观题刷题项目
+         └─ 排行榜：域级总榜，按题目 UUID 去重计通过数（管理员不参与）
+```
+
+角色：
+
+| 角色 | 权限 |
 |---|---|
-| 后端 | Go + Fiber v2 + SQLite（modernc.org/sqlite，无 CGO） |
-| 前端 | React 19 + Vite + TypeScript + Tailwind CSS v4 + shadcn/ui |
-| 渲染 | marked + DOMPurify + KaTeX（与 OrangeOJ 一致） |
-| 判题 | judge-runtime 独立进程（Linux: nsjail + cgroup v2 沙箱；Windows 开发机: 进程级受限运行，无安全承诺） |
+| `global_admin` 系统管理员 | 建域/改名/删除、设域管理员、进任意域仓库与空间 |
+| `domain_admin` 域管理员 | 管理所属域仓库（题目/模板）与该域全部空间（空间/成员/内容） |
+| `member` 空间成员（学生） | 进入被加入的空间做题；多空间可切换 |
 
-## 快速开始（Docker Compose 部署）
+> 题目带有 **UUIDv7 稳定标识**：跨库迁移/备份导入按 UUID 去重，空间通过记录按 UUID 统计，ID 变化不影响连续性。
+
+---
+
+## 功能一览
+
+### 管理端（主站 · 域仓库）
+
+- **题库**：三栏管理（标签树前缀筛选 / 题目列表 / 题面·答案·题解同屏编辑）
+  - 三种题型：编程（样例/测试点/时限内存）、单选、判断
+  - 标签支持斜杠层级（`数学/几何`），前缀多选 AND
+  - 图片上传、孤儿图片清理
+- **域管理**（系统管理员）：域 CRUD、题目/空间计数、设置/移除域管理员
+- **空间管理**（域管理员 / 系统管理员）：
+  - 空间 CRUD、成员拉入/移除、成员账号创建
+  - 空间内容编排：训练（章节+条目）、练习（题单）、刷题项目（标签/仓库题单两种来源）
+  - 从**仓库题册模板**一键拷贝，或从域题库逐题勾选
+- **导入导出**：
+  - 单题册 / 筛选导出（OrangeOJ 兼容 ZIP）
+  - **全库备份 / 恢复**（单文件整库迁移；导入时题目无 UUID 自动补、有 UUID 去重）
+
+### 学生门户
+
+- 登录后进入空间（单空间直达 / 多空间选择切换），空间内四页签：**训练 / 练习 / 刷题 / 排行榜**
+- **训练**：章节化题单；客观题**限次作答**（训练级统一上限）——答对即绿锁定、答错计数、达上限标红禁选；
+  编程题不限次
+- **练习**：整卷作答（客观题可改选、编程题跳转做题页），**交卷后统一判定展示**；可重做且每次作答留档
+- **刷题**：随机抽题即时反馈；答对记一次通过（UUID 去重），答错不限重答
+- **排行榜**：所在域总榜（通过题数降序），高亮自己；管理员不参与
+- **做题页**：编程题 = Monaco 编辑器（Python/C++，本地草稿）+ **运行**（自定义输入）/ **测试**（样例与测试点）/ **提交**（评测）+ 逐条测评记录；客观题即点即判并提示正确答案
+- 判题结论：AC / WA / CE / RE / TLE / MLE，逐测试点明细与耗时
+
+### 判题沙箱
+
+- 独立 `judge-runtime` 进程，评测 Python 3 / C++（nsjail 隔离）
+- 队列化评测（judge_jobs），按用例独立进程运行
+
+---
+
+## 快速开始（Docker Compose）
 
 ### 前置要求
-- 安装 Docker Engine（含 Compose v2）
-- Linux 宿主机需支持 **cgroup v2**（判题沙箱 nsjail 需要，容器会以 privileged 运行）
-- 数据保存在 compose 文件所在目录的 `./data`（删除即可重置）
+
+- Docker Engine（含 Compose v2）
+- Linux 宿主机支持 **cgroup v2**（判题沙箱 nsjail 需要；容器以 privileged 运行）
+- 判题沙箱仅支持 **Linux**（Windows/macOS 仅适合开发，判题为受限模式）
 
 ### 部署步骤
 
 ```bash
-# 1. 准备 compose 文件（可来自仓库 deploy/ 目录或直接下载）
+# 1. 克隆
 git clone https://github.com/shinyes/orange_repo.git
 cd orange_repo
 
-# 2. 设置判题共享 token（生产务必用随机长字符串；主站/刷题/判题三容器共用同一份 compose 自动注入）
+# 2. 设置判题共享 token（生产务必随机长字符串；三容器自动注入同一份）
 export ORANGEOJ_JUDGE_SHARED_TOKEN='换成你的随机token'
 
 # 3. 一键启动（自动从 GHCR 拉取主镜像与判题沙箱镜像）
@@ -39,138 +104,103 @@ docker compose -f deploy/docker-compose.yml up -d
 ```
 
 访问：
-- 主站（题库管理）：http://localhost:8080
-- 刷题 / OJ（学生做题、判题）：http://localhost:8081
-- 判题沙箱 :9090 仅容器内网使用，不对外
 
-首次启动自动创建管理员 `admin / 123456`（主站与刷题服务共享账号库，改密两端联动），请登录后修改。
+- 管理端（域仓库）：http://localhost:8080
+- 学生门户：http://localhost:8081
+- judge-runtime :9090 仅供容器内网，不对外
+
+首次启动自动创建管理员 `admin / 123456`（两端同一账号库），登录后请立即修改；随后：
+
+1. 系统管理员在管理端「域管理」新建域（可同时创建域管理员账号）；
+2. 域管理员进入仓库页维护题目（或 **导入 ZIP / 全量备份**，新库导入后即可用）；
+3. 在「空间管理」新建空间、拉入成员账号；
+4. 在空间内编排训练/练习/刷题项目（自建或从仓库题册拷贝）；
+5. 学生登录门户进入空间做题。
 
 ### 说明
-- 主镜像 `ghcr.io/shinyes/orangeoj:<版本>` 由 GitHub Actions 随每个版本自动发布；判题沙箱镜像
-  `ghcr.io/shinyes/orangeoj-judge` **仅当版本含 judge 相关变更时构建**（并刷新 `:latest`——nsjail 编译耗时，
-  避免无谓重建），compose 默认引用 `:latest` 自动沿用最新判题镜像；如需固定其他版本可设 `ORANGEOJ_JUDGE_IMAGE` 环境变量
-- 升级：拉取新版本后重新 `docker compose up -d`（题库与判题数据都在 `./data` 卷内原样保留）
-- 判题功能要求 `ORANGEOJ_JUDGE_SHARED_TOKEN` 非默认值且三容器配置一致，否则刷题页面的运行/测试/提交返回 503
 
-### 本地开发（可选）
+- **数据**：全部保存在 compose 文件同目录的 `./data`（唯一数据库 `orangeoj.db` + 上传图片）。删除目录即重置。
+- **镜像**：主镜像 `ghcr.io/shinyes/orangeoj:<版本>` 由 GitHub Actions 随版本发布；判题镜像 `ghcr.io/shinyes/orangeoj-judge` 仅在含判题相关变更的版本构建并刷新 `:latest`（可用 `ORANGEOJ_JUDGE_IMAGE` 覆盖版本）。
+- **升级**：`docker compose pull && docker compose up -d`；数据在卷内保留。需要跨大版本迁移时用管理端「全量备份/恢复」。
+- 判题要求 `ORANGEOJ_JUDGE_SHARED_TOKEN` 非默认值且三容器一致，否则做题页的运行/测试/提交返回 503。
 
-仅面向开发者，普通部署请用上方 Compose 方式：
+---
+
+## 本地开发
+
+三个可执行组件（Go 1.25+，无需 CGO）：
+
+| 组件 | 入口 | 默认端口 | 前端 |
+|---|---|---|---|
+| 管理端（主站） | `go run . -data ./data -web ./web/dist` | 8080 | `web/`（Vite，代理 /api → :8080） |
+| 学生门户（刷题服务） | `go run ./cmd/quiz -data ./data -web ./web-quiz/dist` | 8081 | `web-quiz/`（Vite，代理 /api → :8081） |
+| 判题沙箱 | `go run ./cmd/judge-runtime`（见环境变量） | 9090 | — |
+
+开发机直接运行：
 
 ```powershell
-.\scripts\dev.ps1        # 仅主站开发（:8080 + :5173 热更新）
-.\scripts\dev-quiz.ps1   # 主站 + 刷题/OJ + 判题沙箱全部开发（:8080/:5173、:8081/:5174、:9090）
-.\scripts\test-oj.ps1    # 全量测试（静态检查 + 真实 Python/C++ 评测 E2E）
+# Windows 一键脚本（后端 + 前端 + 判题 dev 模式）
+scripts/dev.ps1          # 管理端
+scripts/dev-quiz.ps1     # 门户 + 判题（dev token，无 nsjail 受限评测）
+
+# 或手动：先起后端，再起各自前端
+go run . -data ./data -seed          # 空库时 -seed 灌入示例题册
+go run ./cmd/quiz -data ./data -judge-token dev-token -judge-endpoint http://127.0.0.1:9090
 ```
 
-## 功能
+> 单库说明：所有数据（题库/账号/判题/作答）同处 `./data/orangeoj.db`；两个后端进程各自连接该文件（WAL 并发），需共享同一 `-data` 目录。
 
-### 域与仓库（主站，OrangeOJ 管理端）
-- **域**：题库逻辑隔离单位（系统管理员建域/改名/删除/设域管理员，域间题目完全隔离）
-- **仓库** = 每个域一页题目管理：三栏布局（标签树前缀筛选 / 题目列表 / 题面·答案·题解同屏编辑）
-- 三种题型：编程（输入/输出格式、样例、测试点、时限内存）、单选、判断
-- 题目带 **UUIDv7 稳定标识**（导入包缺 uuid 自动补、有 uuid 去重）
-- 仓库题册（训练章节化/练习题单）保留作**域级模板**；OrangeOJ 兼容 ZIP 导入导出与**全量备份/恢复**
-  （problems.json + orangerepo-backup.json，全库单包迁移）
+---
 
-### 空间（域内做题组织）
-- 每域多个**空间**：成员由管理员拉入；空间内训练/练习/刷题互相隔离
-- 空间内容由域管理员管理：自建或**从仓库模板拷贝**、从域题库选题编制
+## 测试
 
-### 学生做题（门户）
-- 登录后按加入的空间进入；多空间可切换；空间内 训练 / 练习 / 刷题 / 排行榜
-- **训练**：章节结构；客观题**选择次数上限**（训练级配置，达限标红锁定禁选、答对标绿）；
-  编程题不限次（Monaco 编辑器 + 运行/测试/提交评测）
-- **练习**：整份试卷作答（客观题可改选 + 编程题跳转做题），**统一交卷后才见结果**，可重做且每次记录
-- **刷题**：管理员按标签筛选题库或绑定仓库题单生成；客观题答对记一次通过、答错不限重答
-- **排行榜**：按域总榜——学生按题目 uuid 去重计通过数，管理员不参与
-- 客观题 = 单选/判断即点即判并高亮正确答案；判题内核照搬上游（队列/提交/进度/逐用例独立进程评测）
-- 评测结论：AC / WA / CE / RE / TLE / MLE / OK（run），逐测试点明细与耗时
+```powershell
+# 全量静态检查 + 单测
+go vet ./...
+go test ./...
 
-## API 概览
+# 前端
+cd web && npm run build          # 或 node node_modules/typescript/bin/tsc -b
+cd web-quiz && npm run build
 
-主站（管理员会话，完整契约见 `docs/aegis/specs/2026-08-22-OrangeOJ-design.md` §5 与 `docs/api-reference.md`）：
-
-```
-POST /api/auth/login|logout   GET /api/auth/me      PUT /api/auth/password
-GET/POST /api/problems        GET/PUT/DELETE /api/problems/:id
-PUT  /api/problems/:id/solutions
-GET  /api/tags[?q&tags&type]  PATCH/DELETE /api/tags   GET/PUT /api/tag-order
-GET/POST /api/booklet-directories   PUT /api/booklet-directories/layout   PATCH/DELETE /api/booklet-directories/:id
-POST /api/images              GET /api/uploads/*
-POST /api/import?mode=…       GET  /api/export/problems | trainings/:id | practices/:id
-CRUD /api/trainings · chapters · items · /folder ； CRUD /api/practices · practice-items · /folder
+# 端到端（真实判题，需本地 g++ / Python）
+scripts/test-oj.ps1
 ```
 
-刷题服务（门户 + 判题，契约见 `docs/aegis/specs/2026-09-04-orangerepo-oj-refactor-design.md`）：
+`scripts/test-oj.ps1` 使用独立端口（18090/18091/19090）与 `%TEMP%` 临时数据，结束后自动清理；无本地工具链的机器对应断言自动 SKIP。
 
-```
-POST /api/auth/login|logout   GET /api/auth/me      PUT /api/auth/password
-GET  /api/portal/spaces                                    我的空间（多空间切换）
-GET  /api/portal/space/:id/home                            空间首页三区概览
-GET  /api/portal/space/:id/training/:tid                   训练详情（客观题限次/锁定态）
-POST /api/portal/space/:id/training/:tid/answer            训练客观题作答（限次）
-GET  /api/portal/space/:id/practice/:pid                   练习详情
-POST /api/portal/space/:id/practice/:pid/submit            练习整卷交卷
-GET  /api/portal/space/:id/practice/:pid/submissions       交卷历史
-GET  /api/portal/space/:id/quizzes                         空间刷题项目列表
-GET  /api/portal/quiz/:qid/problem    POST /api/portal/quiz/:qid/answer   刷题抽题/作答
-GET  /api/portal/rank?domainId=                           域排行榜（uuid 去重通过数）
-GET  /api/oj/problem/:id                题目正文（测试点/答案/题解永不下发；可见性=空间域）
-POST /api/oj/problem/:id/run|test|submit      {language, sourceCode[, inputData]} → submissionId
-POST /api/oj/problem/:id/objective-submit     {answer} → 同步判定（客观题）
-GET  /api/oj/submission/:id/poll             轮询结果     GET /api/oj/problem/:id/submissions 历史
-judge-runtime：POST /internal/judge/execute（X-Judge-Token）  GET /healthz
-```
-
-题目可见性统一为**空间模型**：用户加入的空间所在域包含该题即可见（空间训练/练习/刷题引用域内题目）。
-管理端（域管理员/空间管理、成员维护、训练/练习/刷题项目编制）位于主站 `internal/server`（`/api/admin/domains|spaces|users` 等）。
+---
 
 ## 项目结构
 
 ```
-main.go                  入口（-addr / -data / -seed）—— 主站
-cmd/quiz/                刷题/OJ 服务入口（-addr / -judge-endpoint / -judge-token / -judge-workers）
-cmd/judge-runtime/       judge-runtime 入口（环境变量配置，:9090）
-internal/model           数据模型与 JSON 形状
-internal/store           SQLite 迁移与查询（主库 orangeoj.db）
-internal/accounts        共享账号库（users/sessions，主站与刷题服务统一账号唯一 owner）
-internal/quizstore       刷题数据层：orangeoj.db（判题 submissions/judge_jobs/progress + 空间作答三表，单库） reader
-internal/quizserver      刷题 Fiber 路由（/api/auth /api/portal /api/oj）
-internal/judge           判题编排（队列/HTTPRunner/类型），迁移自上游 queue.go/runner.go
-internal/judgeserver     评测执行器（Python/C++）+ 沙箱后端（Linux nsjail / 开发受限运行）+ HTTP 服务
-internal/zipio           OrangeOJ ZIP 兼容层
-internal/server          主站 Fiber 路由
-web/                     React 前端（主站）
-web-quiz/                React 前端（刷题/OJ）
-samples/                 示例题包
-Dockerfile               主镜像（OrangeOJ + quiz 双二进制，distroless）
-Dockerfile.judge         判题沙箱镜像（ubuntu + nsjail + g++ + python3）
-deploy/docker-compose.yml  三服务部署
-docs/aegis/              设计规格、实施计划与治理文档
+cmd/
+  quiz/            学生门户服务（:8081，托管 web-quiz）
+  judge-runtime/   判题沙箱（:9090）
+internal/
+  accounts/        users/sessions（单库内账号权威）
+  store/           orangeoj.db：题目/标签/域/空间/空间内容 + 迁移
+  server/          管理端 HTTP API（域/空间/题库/导入导出/备份）
+  quizstore/       判题与作答数据层（submissions/judge_jobs/空间作答）
+  quizserver/      门户 HTTP API（/api/portal/*、/api/oj/*）
+  judge/           判题队列编排
+  judgeserver/     nsjail 沙箱执行器
+  model/           共享类型
+  zipio/           OrangeOJ ZIP 导入导出格式
+web/               管理端前端（React + TS）
+web-quiz/          学生门户前端（React Router + TS）
+deploy/            Docker Compose 部署示例
+scripts/           dev / 端到端测试脚本
+samples/           示例题册（-seed）
+docs/              设计文档
 ```
 
-## 开发验证
+## 技术栈
 
-```powershell
-go vet ./... ; go test ./...        # 后端全量（含 judge 真实 Python/C++ 评测冒烟）
-GOOS=linux CGO_ENABLED=0 go build ./...   # 容器侧交叉编译（含 judge-runtime）
-cd web ; npm run build              # 主站前端
-cd web-quiz ; npm run build         # 刷题/OJ 前端
-```
-
-### 一键测试（含真实评测端到端）
-
-```powershell
-.\scripts\test-oj.ps1                # 全量：静态检查 + 双前端构建 + 三进程真实 Python/C++ 评测 E2E
-.\scripts\test-oj.ps1 -StaticOnly    # 仅 go vet/test + linux 交叉编译（+前端构建）
-.\scripts\test-oj.ps1 -SkipFrontends # 跳过 npm build
-# E2E 使用独立端口（默认 18090/18091/19090）与 %TEMP%\orangeoj-test-* 临时数据，
-# 结束自动清理；无本地 g++/python 的机器对应断言自动 SKIP。
-```
-
-### 判题安全须知
-- 学生代码只在 **judge-runtime** 内执行：Linux 生产为 nsjail（无网络、无 proc、降权 nobody、cgroup 内存/PID 限制）；
-  Windows/本地开发为进程级受限运行（限时/隔离目录/精简环境），**无安全隔离承诺**，仅用于联调
-- judge-runtime 与刷题服务之间以共享 token（`ORANGEOJ_JUDGE_SHARED_TOKEN`）认证；生产务必更换默认值
-- 评测结果仅记录：逐测试点 verdict/耗时/输出/错误与提交历史；题面测试点与答案永不下发学生
-- 判题队列空闲轮询 400ms/认领失败退避 800ms，worker 数由 `-judge-workers` 控制（默认 2）
+| 层 | 技术 |
+|---|---|
+| 后端 | Go + Fiber v2 + SQLite（modernc.org/sqlite，无 CGO，单库文件） |
+| 前端 | React 19 + Vite + TypeScript + Tailwind CSS v4 + base-ui |
+| 编辑器 | Monaco（本地资源，无 CDN） |
+| 渲染 | marked + DOMPurify + KaTeX + Shiki |
+| 判题 | 独立 judge-runtime（Linux: nsjail + cgroup v2；Python 3 / C++） |
