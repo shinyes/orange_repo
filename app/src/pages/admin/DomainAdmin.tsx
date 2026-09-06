@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { api, ApiError } from '@/api'
 import { useDomain } from '@/pages/admin/domain-context'
 import type { Domain } from '@/api/types'
@@ -276,13 +277,12 @@ function RenameDomainDialog(props: { domain: Domain | null; onOpenChange: (v: bo
   )
 }
 
-// ---------- 域管理员列表 / 设管理员 ----------
+// ---------- 域管理员菜单（从现有账号中设置；注册账号请到「用户管理」） ----------
 
 function DomainAdminsDialog(props: { domain: Domain | null; onOpenChange: (v: boolean) => void }) {
   const d = props.domain
   const qc = useQueryClient()
-  const [username, setUsername] = useState('')
-  const [password, setPassword] = useState('')
+  const [selectedId, setSelectedId] = useState<number | null>(null)
   const [busy, setBusy] = useState(false)
   const [removing, setRemoving] = useState<number | null>(null)
 
@@ -292,19 +292,28 @@ function DomainAdminsDialog(props: { domain: Domain | null; onOpenChange: (v: bo
     enabled: d != null,
   })
   const admins = adminsQ.data?.admins ?? []
+  const adminIds = new Set(admins.map((a) => a.id))
+
+  // 候选：现有普通成员账号（注册请到用户管理页）
+  const allQ = useQuery({
+    queryKey: ['admin', 'all-users'],
+    queryFn: () => api.allUsers(),
+    enabled: d != null,
+  })
+  const candidates = (allQ.data?.users ?? []).filter((u) => u.role === 'member' && !adminIds.has(u.id))
 
   async function add() {
     if (!d) return
-    if (!username.trim()) {
-      toast.error('请输入用户名')
+    const user = (allQ.data?.users ?? []).find((u) => u.id === selectedId)
+    if (!user) {
+      toast.error('请选择要设为域管理员的账号')
       return
     }
     setBusy(true)
     try {
-      await api.setDomainAdmin(d.id, username.trim(), password || undefined)
-      toast.success('域管理员已设置')
-      setUsername('')
-      setPassword('')
+      await api.setDomainAdmin(d.id, user.username)
+      toast.success(`${user.username} 已是该域管理员`)
+      setSelectedId(null)
       await qc.invalidateQueries({ queryKey: ['admin', 'domains', d.id, 'admins'] })
     } catch (e) {
       toast.error(e instanceof Error ? e.message : '设置失败')
@@ -334,13 +343,13 @@ function DomainAdminsDialog(props: { domain: Domain | null; onOpenChange: (v: bo
           <DialogTitle className="flex items-center gap-2">
             <ShieldCheckIcon className="size-4" /> 域管理员{d && ` · ${d.name}`}
           </DialogTitle>
-          <DialogDescription>域管理员登录后自动管理该域仓库与空间，无需选域；移除后账号保留为普通成员。</DialogDescription>
+          <DialogDescription>管理该域的域管理员；移除后账号保留为普通成员。</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-2">
           <Label>现有域管理员</Label>
           {admins.length === 0 ? (
-            <div className="rounded-lg border border-dashed px-3 py-2 text-xs text-muted-foreground">暂无域管理员</div>
+            <div className="rounded-lg border border-dashed px-3 py-2 text-xs text-muted-foreground">暂无域管理员，请从下方成员中设置</div>
           ) : (
             <ul className="divide-y rounded-lg border">
               {admins.map((a) => (
@@ -362,29 +371,42 @@ function DomainAdminsDialog(props: { domain: Domain | null; onOpenChange: (v: bo
               ))}
             </ul>
           )}
-          <p className="text-xs text-muted-foreground">
-            提示：已是其他域/系统管理员的账号无法直接设为域管理员（后端会拒绝并提示）；如需更换请先移除或改用其他普通成员账号。
-          </p>
         </div>
 
         <div className="space-y-1.5 border-t pt-3">
-          <Label>添加 / 更换</Label>
-          <div className="space-y-2">
-            <Input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="用户名（已存在的普通用户将升级）" />
-            <Input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="密码（用户不存在时用于新建账号）"
-            />
+          <Label>设为域管理员（从现有成员中选择）</Label>
+          <div className="flex gap-2">
+            <Select
+              value={selectedId != null ? String(selectedId) : ''}
+              onValueChange={(v) => setSelectedId(Number(v))}
+            >
+              <SelectTrigger className="flex-1">
+                <SelectValue placeholder={candidates.length === 0 ? '暂无可选的成员账号' : '选择成员账号'} />
+              </SelectTrigger>
+              <SelectContent>
+                {candidates.map((u) => (
+                  <SelectItem key={u.id} value={String(u.id)}>
+                    {u.username}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button onClick={() => void add()} disabled={busy || selectedId == null} className="shrink-0">
+              {busy ? '提交中…' : '设置'}
+            </Button>
           </div>
+          {candidates.length === 0 && (
+            <p className="text-xs text-muted-foreground">
+              没有可选的普通成员账号——请先到「用户管理」页新建成员账号。
+            </p>
+          )}
+          <p className="text-xs text-muted-foreground">
+            已是系统管理员/其他域管理员的账号不在此列出；如需更换请先移除现任者。
+          </p>
         </div>
 
         <DialogFooter>
           <Button variant="outline" onClick={() => props.onOpenChange(false)}>关闭</Button>
-          <Button onClick={() => void add()} disabled={busy || !username.trim()}>
-            {busy ? '提交中…' : '设为域管理员'}
-          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
