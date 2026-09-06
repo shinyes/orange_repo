@@ -19,9 +19,31 @@ orangeoj-judge (:9090)  ── 判题沙箱（唯一独立进程）
 ```
 
 ## 执行顺序
-1. 后端合服：main.go 单入口挂全部路由（server 包管理 handler + quizserver 门户 handler 同一 app）；
+1. ✅ 后端合服：main.go 单入口挂全部路由（server 包管理 handler + quizserver 门户 handler 同一 app）；
    cmd/quiz 删除；会话统一（同一 cookie/中间件/账号）
-2. 前端合并：以 web-quiz（router）为基座并入 web 管理页；统一登录/api/域名；
-   删除 web 独立入口与重复基建
-3. 清理：双 dist 部署/scripts/compose 单服务化；无用代码删除
-4. 验证：全测试绿 + 单进程真实 E2E
+2. ✅ 部署清理：compose 两容器、dev/test 脚本单进程化、Dockerfile 二进制 orangeoj、README 更新
+3. ✅ 前端合并：新开 app/ 单前端——门户 / 全量迁入 + 管理 /admin 全量并入（api 统一层、AdminLayout、
+   域切换/角色守卫、路由化）；web/ 与 web-quiz/ 删除；后端/部署/脚本单 dist
+4. ✅ 清理：web/ 与 web-quiz/ 退役；构建/部署指向单 dist
+5. ✅ 验证：全测试绿 + 单进程真实 E2E（test-oj.ps1 PASS=13）
+
+## 最终形态（已达成）
+```
+app/                 单前端（React+TS+Vite）：/ 门户 + /admin 管理（单 dist）
+main.go              单 Go 进程：管理 API + 门户 API + 静态托管（-web ./app/dist）
+cmd/judge-runtime    判题沙箱（唯一独立进程 :9090）
+orangeoj.db          唯一数据库（题库/域/空间/账号/判题/作答）
+```
+
+## 前端合并布局（新目录 app/ 或 web-app/，待定）
+```
+<新前端>/src/
+  api/          统一 API 层（管理 + 门户；两套 api.ts/types.ts 合并）
+  components/   共享（ui/*、markdown、code-highlight、monaco、登录）
+    admin/      管理组件（Sidebar/DomainAdmin/SpaceAdmin/ProblemPane/…）
+    portal/     门户组件（objective 等）
+  pages/
+    portal/     SpacePicker/SpaceShell/Training*/Practice*/Quiz*/Rank/MyPage/ProblemSolve
+    admin/      DomainAdminPage/SpaceAdminPage/ProblemList 等
+  App.tsx       路由：/ 门户区 + /admin 管理区；登录态统一
+```
