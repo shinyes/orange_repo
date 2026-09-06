@@ -1,39 +1,22 @@
 import { useQuery } from '@tanstack/react-query'
-import { useParams } from 'react-router-dom'
 import { CrownIcon, Loader2Icon, MedalIcon, TrophyIcon } from 'lucide-react'
 
 import { api } from '@/api'
-import { usePortalSession, useSpaceById } from './portal-context'
-import { PageContainer, SpacePageShell } from './SpacePageShell'
+import { usePortalCtx } from './SpaceShell'
 import { cn } from '@/lib/utils'
 
-// 排行榜（按域总榜，uuid 去重通过数）：名次 / 用户名 / 通过数；高亮自己。独立全屏页。
+// 排行榜（空间壳内 tab 页；按域总榜，uuid 去重通过数）：名次 / 用户名 / 通过数；高亮自己。
 export function RankPage() {
-  const { spaceId } = useParams()
-  const sid = Number(spaceId)
-  const space = useSpaceById(sid)
-  const { user } = usePortalSession()
-
-  if (space === 'loading') return <FullCenter text="加载中…" />
-  if (space === null) return <FullCenter text="空间不存在或无权访问" />
-
-  return (
-    <SpacePageShell spaceId={sid} backTo="/" backLabel={space.name}>
-      <RankBody domainId={space.domainId} userId={user.id} />
-    </SpacePageShell>
-  )
-}
-
-function RankBody({ domainId, userId }: { domainId: number; userId: number }) {
+  const { space, user } = usePortalCtx()
   const q = useQuery({
-    queryKey: ['portal-rank', domainId],
-    queryFn: () => api.portalRank(domainId),
+    queryKey: ['portal-rank', space.domainId],
+    queryFn: () => api.portalRank(space.domainId),
   })
 
   return (
-    <PageContainer className="max-w-2xl lg:px-6">
-      <h1 className="mb-1 mt-2 text-lg font-semibold">排行榜</h1>
-      <p className="mb-4 text-xs text-muted-foreground">本空间所属域的总榜（按题目通过数排序）</p>
+    <div className="mx-auto w-full max-w-2xl px-4 py-6 lg:px-6">
+      <h1 className="mb-1 text-lg font-semibold">排行榜</h1>
+      <p className="mb-4 text-xs text-muted-foreground">空间「{space.name}」所属域的总榜（按题目通过数排序）</p>
 
       {q.isLoading && (
         <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
@@ -52,7 +35,7 @@ function RankBody({ domainId, userId }: { domainId: number; userId: number }) {
             <div className="p-10 text-center text-sm text-muted-foreground">暂无排名数据</div>
           ) : (
             q.data.rank.map((row, i) => {
-              const me = row.userId === userId
+              const me = row.userId === user.id
               const medal = i < 3 ? <MedalIcon className={cn('size-4', i === 0 ? 'text-amber-400' : i === 1 ? 'text-slate-400' : 'text-orange-400')} /> : null
               return (
                 <div
@@ -79,10 +62,6 @@ function RankBody({ domainId, userId }: { domainId: number; userId: number }) {
           )}
         </div>
       )}
-    </PageContainer>
+    </div>
   )
-}
-
-function FullCenter({ text }: { text: string }) {
-  return <div className="flex h-dvh items-center justify-center text-sm text-muted-foreground">{text}</div>
 }

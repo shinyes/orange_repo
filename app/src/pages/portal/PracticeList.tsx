@@ -1,44 +1,29 @@
-import { Link, useParams } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { ClipboardListIcon } from 'lucide-react'
 
 import type { PracticeBrief } from '@/api/types'
-import { useSpaceById } from './portal-context'
-import { PageContainer, SpacePageShell } from './SpacePageShell'
 import { useSpaceHome } from './useSpaceHome'
+import { usePortalCtx } from './SpaceShell'
 
-// 练习列表：整卷交卷式练习卡片。独立全屏页。
+// 练习列表（空间壳内 tab 页）：整卷交卷式练习卡片，点击进入独立作答页。
 export function PracticeList() {
-  const { spaceId } = useParams()
-  const sid = Number(spaceId)
-  const space = useSpaceById(sid)
-
-  if (space === 'loading') return <FullCenter text="加载中…" />
-  if (space === null) return <FullCenter text="空间不存在或无权访问" />
-
-  return (
-    <SpacePageShell spaceId={sid} backTo="/" backLabel={space.name}>
-      <PracticeListBody spaceId={sid} />
-    </SpacePageShell>
-  )
-}
-
-function PracticeListBody({ spaceId }: { spaceId: number }) {
-  const home = useSpaceHome({ id: spaceId })
+  const { space } = usePortalCtx()
+  const home = useSpaceHome(space)
   const list = home.data?.practices ?? []
   return (
-    <PageContainer>
-      <h1 className="mb-1 mt-2 text-lg font-semibold">练习</h1>
+    <div className="mx-auto w-full max-w-3xl px-4 py-6 lg:px-8">
+      <h1 className="mb-1 text-lg font-semibold">练习</h1>
       <p className="mb-4 text-xs text-muted-foreground">整卷作答后统一交卷评分，可重复交卷（每次记录）</p>
       {home.isLoading && <p className="py-10 text-center text-sm text-muted-foreground">加载中…</p>}
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-        {list.map((p) => <PracticeCard key={p.id} p={p} spaceId={spaceId} />)}
+        {list.map((p) => <PracticeCard key={p.id} p={p} spaceId={space.id} />)}
       </div>
       {!home.isLoading && list.length === 0 && (
         <div className="rounded-xl border border-dashed p-12 text-center text-sm text-muted-foreground">
           本空间暂无练习
         </div>
       )}
-    </PageContainer>
+    </div>
   )
 }
 
@@ -59,8 +44,4 @@ function PracticeCard({ p, spaceId }: { p: PracticeBrief; spaceId: number }) {
       </span>
     </Link>
   )
-}
-
-function FullCenter({ text }: { text: string }) {
-  return <div className="flex h-dvh items-center justify-center text-sm text-muted-foreground">{text}</div>
 }

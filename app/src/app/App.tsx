@@ -15,7 +15,6 @@ import { Toaster } from '@/components/ui/sonner'
 import { Login } from '@/components/Login'
 import { MyPage } from '@/pages/portal/MyPage'
 import { SpacePicker } from '@/pages/portal/SpacePicker'
-import { SpaceHome } from '@/pages/portal/SpaceHome'
 import { SpaceShell } from '@/pages/portal/SpaceShell'
 import { PortalSessionProvider } from '@/pages/portal/portal-context'
 import { TrainingList } from '@/pages/portal/TrainingList'
@@ -94,19 +93,19 @@ export default function App() {
                 <Route path="problem/:problemId" element={<ProblemSolvePage />} />
               </Route>
 
-              {/* 空间菜单首页（壳内含 ←空间名 + 快捷 tab） */}
+              {/* 空间壳：列表页在壳内（顶栏 tab 切换）；详情/作答为独立全屏页 */}
               <Route path="/s/:spaceId" element={<SpaceShell user={user} onLogout={onLogout} />}>
-                <Route index element={<SpaceHome />} />
+                <Route index element={<Navigate to="training" replace />} />
+                <Route path="training" element={<TrainingList />} />
+                <Route path="practice" element={<PracticeList />} />
+                <Route path="quiz" element={<QuizList />} />
+                <Route path="rank" element={<RankPage />} />
               </Route>
 
-              {/* 独立全屏页：训练/练习/刷题/排行榜（点卡片后进入，脱离空间壳，自带左上返回） */}
-              <Route path="/s/:spaceId/training" element={<TrainingList />} />
+              {/* 独立全屏页（点击具体训练/练习/刷题后进入）：顶栏左上返回列表 */}
               <Route path="/s/:spaceId/training/:trainingId" element={<TrainingDetail />} />
-              <Route path="/s/:spaceId/practice" element={<PracticeList />} />
               <Route path="/s/:spaceId/practice/:practiceId" element={<PracticeSolve />} />
-              <Route path="/s/:spaceId/quiz" element={<QuizList />} />
               <Route path="/s/:spaceId/quiz/:quizId" element={<QuizSolve />} />
-              <Route path="/s/:spaceId/rank" element={<RankPage />} />
 
               {/* 管理区：仅管理员（global_admin/domain_admin），member 重定向回门户 */}
               <Route path="/admin" element={<RequireAdmin user={user}><AdminLayout user={user} onLogout={onLogout} /></RequireAdmin>}>
