@@ -49,7 +49,7 @@ export function SpaceShell({ user, onLogout }: { user: User; onLogout: () => voi
     <div className="flex h-dvh flex-col overflow-hidden">
       {/* 顶栏（单行）：返回 + 空间名 + 训练/练习/刷题/排行榜 + 我的 */}
       <header className="shrink-0 border-b bg-background">
-        <div className="mx-auto flex h-13 w-full max-w-5xl items-center gap-1 px-2 lg:px-3">
+        <div className="mx-auto flex h-14 w-full max-w-5xl items-center gap-1 px-2 lg:px-3">
           <NavLink
             to="/"
             className="-ml-1 flex shrink-0 items-center gap-1.5 rounded-lg px-1.5 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
