@@ -7,6 +7,7 @@ package quizserver
 import (
 	"encoding/json"
 	"errors"
+	"strconv"
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
@@ -341,6 +342,25 @@ func (s *Server) handleOJSubmissionPoll(c *fiber.Ctx) error {
 	verdict := sub.Verdict
 	if sub.Status == "failed" {
 		verdict = judge.VerdictRE
+	}
+	// 训练内编程题：AC 落定时标记该训练条目 solved（幂等；trainingId 由训练内嵌提交轮询携带）
+	if isFinal && verdict == judge.VerdictAC && sub.SubmitType == judge.SubmitTypeSubmit {
+		if tidRaw := strings.TrimSpace(c.Query("trainingId")); tidRaw != "" {
+			if tid, perr := strconv.ParseInt(tidRaw, 10, 64); perr == nil && tid > 0 {
+				// 校验该题确属该训练（防乱标）
+				var ok bool
+				_ = s.QS.Repo.DB.QueryRow(`SELECT COUNT(1)>0 FROM space_training_items i
+					JOIN space_training_chapters c ON i.chapter_id=c.id
+					WHERE c.training_id=? AND i.problem_id=?`, tid, sub.ProblemID).Scan(&ok)
+				if ok {
+					var uuid string
+					_ = s.QS.Repo.DB.QueryRow(`SELECT uuid FROM problems WHERE id=?`, sub.ProblemID).Scan(&uuid)
+					if err := s.QS.MarkTrainingProgrammingSolved(tid, user.ID, sub.ProblemID, uuid); err != nil {
+						return respondError(c, fiber.StatusInternalServerError, err.Error())
+					}
+				}
+			}
+		}
 	}
 	return respondData(c, fiber.StatusOK, fiber.Map{
 		"submissionId": sub.ID,

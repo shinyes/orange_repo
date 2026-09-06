@@ -1,11 +1,9 @@
-// 训练做题页（模仿上游 OrangeOJ 训练页布局）：
-// 全屏三区 —— 紧凑顶栏（返回训练列表 × + 训练标题 + 进度）
-// 　内容行：左侧训练导航（章节可折叠，每格一题：绿=通过/红=达上限/圈=当前）
-// 　　　　　+ 中央题目卡（客观题内嵌作答即判；编程题跳做题页可返回）
-// 　底部条：上一题 / 下一题 + x/y
-// 移动端：隐藏左侧导航，顶栏「题目」按钮弹浮窗导航。
+// 训练做题页（模仿上游布局 + 内嵌编程答题）：
+// 空间壳顶栏（返回训练列表/我的）下，三区——左训练导航（章节分组，每格一题常显不折叠）、
+// 中央题目区（客观题先选后提交即判；编程题页内编辑器 运行/测试/提交/控制台）、
+// 底部上一题/下一题。移动端顶栏「题目」按钮 → 浮窗导航。
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   ChevronLeftIcon,
@@ -14,17 +12,17 @@ import {
   Code2Icon,
   Grid3X3Icon,
   Loader2Icon,
-  XIcon,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { api } from '@/api'
 import type { CorrectAnswer, ObjectiveAnswer, TrainingItemView } from '@/api/types'
+import { TrainingProgrammingCard } from '@/components/portal/TrainingProgrammingCard'
 import { ObjectiveQuestion } from '@/components/portal/objective'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { useSpaceById } from '@/pages/portal/portal-context'
+import { PageContainer, SpacePageShell } from '@/pages/portal/SpacePageShell'
 import { cn } from '@/lib/utils'
 
 type FlatItem = TrainingItemView & { chapterId: number; chapterTitle: string; chapterOrder: number }
@@ -68,8 +66,6 @@ function TrainingFlow({ sid, tid, data }: {
   const objective = all.filter((i) => i.problemType !== 'programming')
   const [activeIdx, setActiveIdx] = useState(0)
   const [navOpen, setNavOpen] = useState(false) // 移动端导航浮窗
-  // 章节折叠（导航）：记录每章手动开关；当前章强制展开（模仿上游）
-  const [collapsed, setCollapsed] = useState<Record<number, boolean>>({})
   const item = all[activeIdx] ?? null
   const solvedCount = objective.filter((i) => i.solved).length
 
@@ -84,77 +80,52 @@ function TrainingFlow({ sid, tid, data }: {
     setActiveIdx(i)
     setNavOpen(false)
   }
-  const currentGroup = item?.chapterOrder ?? 0
-
-  const isGroupCollapsed = (g: { order: number; items: FlatItem[] }): boolean => {
-    if (g.order === currentGroup) return false // 当前章始终展开
-    if (collapsed[g.order] !== undefined) return collapsed[g.order]
-    const allDone = g.items.length > 0 && g.items.every((it) => it.solved)
-    return allDone // 默认：全通过的章折叠
-  }
 
   if (all.length === 0) {
     return (
-      <div className="flex h-dvh flex-col bg-background">
-        <CompactTop title={training.title} backTo={`/s/${sid}/training`} />
-        <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">本训练暂无题目</div>
-      </div>
+      <SpacePageShell spaceId={sid} backTo={`/s/${sid}/training`} backLabel="返回训练列表">
+        <PageContainer>
+          <div className="rounded-xl border border-dashed p-12 text-center text-sm text-muted-foreground">本训练暂无题目</div>
+        </PageContainer>
+      </SpacePageShell>
     )
   }
 
   const itemObjective = item && item.problemType !== 'programming'
+  const itemSolved = item?.solved ?? false
 
   return (
-    <div className="flex h-dvh flex-col overflow-hidden bg-background">
-      {/* 紧凑顶栏：训练标题 + 进度 + 返回列表 ×（模仿上游） */}
-      <header className="sticky top-0 z-40 shrink-0 border-b bg-background shadow-sm">
-        <div className="flex min-h-10 items-center justify-between gap-2 px-2 md:px-4">
-          <div className="flex min-w-0 items-center gap-2">
-            <span className="truncate text-xs font-semibold md:text-sm">{training.title}</span>
-            {training.maxAttempts > 0 && (
-              <Badge variant="secondary" className="hidden text-[10px] sm:inline-flex">限答 {training.maxAttempts} 次</Badge>
-            )}
-            <span className="hidden text-[11px] text-muted-foreground md:inline">
-              {activeIdx + 1} / {all.length} · 已通过 {solvedCount}
-            </span>
-          </div>
-          <div className="flex shrink-0 items-center gap-1">
-            {/* 移动端题目导航按钮 */}
-            <Button size="sm" variant="outline" className="h-7 px-2 text-xs md:hidden" onClick={() => setNavOpen(true)}>
-              <Grid3X3Icon className="size-3.5" /> 题目
-            </Button>
-            <Link to={`/s/${sid}/training`} title="返回训练列表">
-              <Button size="icon" variant="ghost" className="h-7 w-7 md:h-8 md:w-8">
-                <XIcon className="size-4" />
-              </Button>
-            </Link>
-          </div>
+    <SpacePageShell spaceId={sid} backTo={`/s/${sid}/training`} backLabel="返回训练列表">
+      <div className="flex h-full min-h-0 flex-col">
+        {/* 移动端顶部：训练名 + 题目导航按钮 */}
+        <div className="flex items-center justify-between gap-2 border-b bg-background px-3 py-1.5 lg:hidden">
+          <span className="min-w-0 truncate text-xs font-medium text-muted-foreground">
+            {training.title} · {activeIdx + 1}/{all.length}
+          </span>
+          <Button size="sm" variant="outline" onClick={() => setNavOpen(true)}>
+            <Grid3X3Icon className="size-4" /> 题目
+          </Button>
         </div>
-      </header>
 
-      {/* 内容行：左导航（PC）+ 中央题目 */}
-      <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-hidden p-1.5 md:flex-row md:gap-3 md:p-3">
-        {/* 左侧训练导航（PC） */}
-        <aside className="hidden w-44 shrink-0 overflow-y-auto rounded-lg border-r bg-muted/20 p-2 md:block">
-          <div className="space-y-2.5">
-            {groups.map((g) => {
-              if (g.items.length === 0) return null
-              const collapsedG = isGroupCollapsed(g)
-              const allDone = g.items.length > 0 && g.items.every((it) => it.solved)
-              return (
-                <div key={g.chapterId}>
-                  <button
-                    type="button"
-                    className="flex w-full items-center gap-1 text-left"
-                    onClick={() => setCollapsed((p) => ({ ...p, [g.order]: !isGroupCollapsed(g) }))}
-                  >
-                    <span className={cn('min-w-0 flex-1 truncate text-[11px] font-semibold tracking-wide', allDone ? 'text-emerald-600' : 'text-muted-foreground')}>
-                      {g.chapterTitle}
-                    </span>
-                    <span className="shrink-0 text-[9px] text-muted-foreground">{collapsedG ? '▶' : '▼'}</span>
-                  </button>
-                  {!collapsedG && (
-                    <div className="mt-1 grid grid-cols-5 gap-1">
+        {/* 内容行：左导航 + 题目区 */}
+        <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+          {/* 左训练导航（PC 常显；章节不折叠） */}
+          <aside className="hidden w-48 shrink-0 overflow-y-auto border-r bg-muted/20 p-2.5 md:block">
+            <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+              <Code2Icon className="size-3.5 text-primary/60" />
+              <span className="truncate">{training.title}</span>
+            </div>
+            <div className="space-y-3">
+              {groups.map((g) => {
+                if (g.items.length === 0) return null
+                const allDone = g.items.every((it) => it.solved)
+                return (
+                  <div key={g.chapterId}>
+                    <div className={cn('mb-1 flex items-center justify-between text-[11px] font-semibold', allDone ? 'text-emerald-600' : 'text-muted-foreground')}>
+                      <span className="truncate">{g.chapterTitle}</span>
+                      <span className="shrink-0 text-[9px] font-normal">{g.items.length}</span>
+                    </div>
+                    <div className="grid grid-cols-5 gap-1">
                       {g.items.map((it, j) => {
                         const idx = g.base + j
                         const isCurrent = idx === activeIdx
@@ -175,40 +146,41 @@ function TrainingFlow({ sid, tid, data }: {
                               isCurrent && 'ring-2 ring-primary ring-offset-1',
                             )}
                           >
-                            {g.base + j + 1}
+                            {idx + 1}
                           </button>
                         )
                       })}
                     </div>
-                  )}
-                </div>
-              )
-            })}
-            <p className="pt-1 text-[10px] leading-relaxed text-muted-foreground">
-              绿=已通过 · 红=达上限 · 点击格子跳题
+                  </div>
+                )
+              })}
+            </div>
+            <p className="mt-3 border-t pt-2 text-[10px] leading-relaxed text-muted-foreground">
+              绿=已通过 · 红=达上限
             </p>
-          </div>
-        </aside>
+          </aside>
 
-        {/* 中央：题目卡 */}
-        <div className="min-h-0 flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-3xl">
-            {item && (
-              <div className="rounded-xl border bg-card">
-                <div className="p-3 md:p-4">
-                  {/* 题目头（章节 + 题号 + 状态） */}
-                  <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+          {/* 中央题目区 */}
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <PageContainer className="py-4">
+              {item && (
+                <div className="rounded-2xl border bg-card p-4 md:p-5">
+                  {/* 题目头 */}
+                  <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 border-b pb-2 text-xs text-muted-foreground">
                     <span className="rounded bg-muted px-1.5 py-0.5 font-medium">{item.chapterTitle}</span>
                     <span>第 {activeIdx + 1} / {all.length} 题</span>
-                    {item.solved && itemObjective && (
-                      <span className="inline-flex items-center gap-1 text-emerald-600">
-                        <CircleCheckBigIcon className="size-3.5" /> 已通过
-                      </span>
-                    )}
-                    {!item.solved && item.locked && itemObjective && (
-                      <span className="inline-flex items-center gap-1 text-red-600">
-                        已达上限，可回顾
-                      </span>
+                    {itemObjective && (
+                      <>
+                        <span>{training.maxAttempts > 0 ? `限答 ${training.maxAttempts} 次` : '不限次'}</span>
+                        {item.solved && (
+                          <span className="inline-flex items-center gap-1 text-emerald-600">
+                            <CircleCheckBigIcon className="size-3.5" /> 已通过
+                          </span>
+                        )}
+                        {!item.solved && item.locked && (
+                          <span className="inline-flex items-center gap-1 text-red-600">已达上限，可回顾</span>
+                        )}
+                      </>
                     )}
                   </div>
 
@@ -219,55 +191,61 @@ function TrainingFlow({ sid, tid, data }: {
                       onAnswered={invalidate}
                     />
                   ) : (
-                    // 编程题：前往做题页（原路返回本训练）
-                    <div className="flex flex-col items-center gap-3 py-12 text-center">
-                      <Code2Icon className="size-12 text-muted-foreground/40" />
-                      <div>
-                        <p className="text-lg font-medium">{item.problemTitle || `题目 #${item.problemId}`}</p>
-                        <p className="mt-1 text-xs text-muted-foreground">编程题请进入代码编辑器作答并评测（通过后自动标记）</p>
+                    // 编程题：页内直接答题（编辑器 + 运行/测试/提交 + 控制台）
+                    <div>
+                      <div className="mb-3 rounded-xl bg-muted/40 p-3">
+                        <span className="mb-1 inline-flex items-center gap-1 text-sm font-medium">
+                          <Code2Icon className="size-4 text-primary" /> 编程题
+                          {itemSolved && (
+                            <span className="ml-1 inline-flex items-center gap-1 text-emerald-600">
+                              <CircleCheckBigIcon className="size-3.5" /> 已通过
+                            </span>
+                          )}
+                        </span>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          在下方编辑器作答（草稿自动保存）：「运行」自定义输入、「测试」样例用例、「提交」正式评测，通过后本题自动标记完成。
+                        </p>
                       </div>
-                      <Link
-                        to={`/problem/${item.problemId}?back=${encodeURIComponent(`/s/${sid}/training/${tid}`)}`}
-                        className="mt-2"
-                      >
-                        <Button size="lg" className="min-w-44">前往做题 →</Button>
-                      </Link>
+                      <TrainingProgrammingCard
+                        problemId={item.problemId}
+                        trainingId={tid}
+                        solved={itemSolved}
+                        onSolved={invalidate}
+                      />
                     </div>
                   )}
                 </div>
-              </div>
-            )}
+              )}
 
-            {/* 最后一题完成提示 */}
-            {activeIdx === all.length - 1 && all.length > 0 && (
-              <p className="mt-3 text-center text-xs text-muted-foreground">
-                {objective.length > 0 && solvedCount < objective.length
-                  ? `已是最后一题（客观题已通过 ${solvedCount}/${objective.length}）`
-                  : '训练全部完成 🎉 可在左侧回顾任意题目'}
-              </p>
-            )}
+              {/* 最后一题完成提示 */}
+              {activeIdx === all.length - 1 && (
+                <p className="mt-3 text-center text-xs text-muted-foreground">
+                  {objective.length > 0 && solvedCount < objective.length
+                    ? `已是最后一题（客观题已通过 ${solvedCount}/${objective.length}）`
+                    : '训练全部完成 🎉 可在左侧回顾任意题目'}
+                </p>
+              )}
+            </PageContainer>
           </div>
         </div>
+
+        {/* 底部导航条 */}
+        {all.length > 1 && (
+          <footer className="shrink-0 border-t bg-background">
+            <div className="flex items-center justify-center gap-4 px-4 py-2">
+              <Button variant="outline" size="sm" disabled={activeIdx === 0} onClick={() => go(activeIdx - 1)}>
+                <ChevronLeftIcon className="mr-1 size-3.5" /> 上一题
+              </Button>
+              <span className="text-xs text-muted-foreground">{activeIdx + 1} / {all.length}</span>
+              <Button variant="outline" size="sm" disabled={activeIdx >= all.length - 1} onClick={() => go(activeIdx + 1)}>
+                下一题 <ChevronRightIcon className="ml-1 size-3.5" />
+              </Button>
+            </div>
+          </footer>
+        )}
       </div>
 
-      {/* 底部导航条（上一题/下一题） */}
-      {all.length > 1 && (
-        <footer className="shrink-0 border-t bg-background">
-          <div className="flex items-center justify-center gap-4 px-4 py-2">
-            <Button variant="outline" size="sm" disabled={activeIdx === 0} onClick={() => go(activeIdx - 1)}>
-              <ChevronLeftIcon className="mr-1 size-3.5" /> 上一题
-            </Button>
-            <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              {activeIdx + 1} / {all.length}
-            </span>
-            <Button variant="outline" size="sm" disabled={activeIdx >= all.length - 1} onClick={() => go(activeIdx + 1)}>
-              下一题 <ChevronRightIcon className="ml-1 size-3.5" />
-            </Button>
-          </div>
-        </footer>
-      )}
-
-      {/* 移动端导航浮窗 */}
+      {/* 移动端导航浮窗（章节分组常显） */}
       <Dialog open={navOpen} onOpenChange={setNavOpen}>
         <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-md">
           <DialogHeader>
@@ -314,28 +292,11 @@ function TrainingFlow({ sid, tid, data }: {
           </div>
         </DialogContent>
       </Dialog>
-    </div>
+    </SpacePageShell>
   )
 }
 
-// ---------- 紧凑顶栏 ----------
-
-function CompactTop({ title, backTo }: { title: string; backTo: string }) {
-  return (
-    <header className="shrink-0 border-b bg-background">
-      <div className="flex min-h-10 items-center justify-between px-3">
-        <span className="truncate text-sm font-semibold">{title}</span>
-        <Link to={backTo} title="返回训练列表">
-          <Button size="icon" variant="ghost" className="h-7 w-7">
-            <XIcon className="size-4" />
-          </Button>
-        </Link>
-      </div>
-    </header>
-  )
-}
-
-// ---------- 客观题内嵌作答卡（先选答案 → 提交即判，保留回顾） ----------
+// ---------- 客观题内嵌作答卡（先选答案 → 提交即判） ----------
 
 function ObjectiveCard({ sid, tid, item, maxAttempts, onAnswered }: {
   sid: number

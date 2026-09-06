@@ -80,6 +80,34 @@ func b2i(b bool) int {
 
 // ---------- 通过记录（uuid 去重，排行榜） ----------
 
+// MarkTrainingProgrammingSolved 训练内编程题通过标记（提交判 AC 后由 poll 落定调用）：
+// 置 space_training_attempts.solved=1（attempts 不计数——编程题不限次），并写 uuid 通过记录。
+// 幂等：已 solved 直接返回。
+func (s *Store) MarkTrainingProgrammingSolved(trainingID, userID, problemID int64, problemUUID string) error {
+	var curSolved bool
+	err := s.DB.QueryRow(`SELECT solved FROM space_training_attempts
+		WHERE training_id=? AND user_id=? AND problem_id=?`, trainingID, userID, problemID).Scan(&curSolved)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	if curSolved {
+		return nil
+	}
+	_, err = s.DB.Exec(`INSERT INTO space_training_attempts(training_id,user_id,problem_id,attempts,solved)
+		VALUES(?,?,?,0,1)
+		ON CONFLICT(training_id,user_id,problem_id) DO UPDATE SET solved=1, updated_at=CURRENT_TIMESTAMP`,
+		trainingID, userID, problemID)
+	if err != nil {
+		return err
+	}
+	if problemUUID != "" {
+		if err := s.RecordSolved(userID, problemUUID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // RecordSolved 直接按 uuid 记录用户通过（去重；uuid 校验在调用方）。
 func (s *Store) RecordSolved(userID int64, problemUUID string) error {
 	if problemUUID == "" {

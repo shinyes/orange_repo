@@ -74,6 +74,7 @@ export const portalApi = {
   ojObjectiveSubmit: (id: number, answer: ObjectiveAnswer) =>
     req<{ submissionId: number; verdict: Verdict; score: number; correct: boolean; correctAnswer: { answerIndex?: number; answer?: boolean } }>(
       `/api/oj/problem/${id}/objective-submit`, json({ method: 'POST', body: JSON.stringify({ answer }) })),
-  ojPoll: (submissionId: number) => req<SubmissionPoll>(`/api/oj/submission/${submissionId}/poll`),
+  ojPoll: (submissionId: number, trainingId?: number) =>
+    req<SubmissionPoll>(`/api/oj/submission/${submissionId}/poll${trainingId ? `?trainingId=${trainingId}` : ''}`),
   ojSubmissions: (id: number) => req<{ submissions: Submission[] }>(`/api/oj/problem/${id}/submissions`),
 }
