@@ -103,7 +103,7 @@ function SpaceCard({ space, isSaved, showDomain }: { space: PortalSpace; isSaved
       {showDomain && (
         <span className="flex items-center gap-1 text-xs text-muted-foreground">
           <Globe2Icon className="size-3.5" />
-          域 #{space.domainId}
+          {space.domainName ? `${space.domainName} #${space.domainId}` : `域 #${space.domainId}`}
         </span>
       )}
       <span className="mt-2 inline-flex h-7 w-fit items-center gap-1 rounded-lg border border-border bg-background px-2.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">

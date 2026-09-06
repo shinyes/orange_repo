@@ -4,6 +4,7 @@
 package quizserver
 
 import (
+	"database/sql"
 	"encoding/json"
 
 	"github.com/gofiber/fiber/v2"
@@ -72,20 +73,23 @@ func (s *Server) spacesOfDomain(domainID int64) ([]quizstore.SpaceBrief, error) 
 }
 
 func (s *Server) spaceBrief(id int64) (quizstore.SpaceBrief, error) {
-	domainID, err := s.QS.Repo.SpaceDomain(id)
-	if err != nil {
+	// 空间 + 域名一次查询
+	var b quizstore.SpaceBrief
+	var dName sql.NullString
+	if err := s.QS.Repo.DB.QueryRow(`SELECT sp.id,sp.domain_id,d.name,sp.name FROM spaces sp
+		LEFT JOIN domains d ON d.id=sp.domain_id WHERE sp.id=?`, id).
+		Scan(&b.ID, &b.DomainID, &dName, &b.Name); err != nil {
 		return quizstore.SpaceBrief{}, err
 	}
-	// 名称经简单查询
-	var name string
-	if err := s.QS.Repo.DB.QueryRow(`SELECT name FROM spaces WHERE id=?`, id).Scan(&name); err != nil {
-		return quizstore.SpaceBrief{}, err
+	if dName.Valid {
+		b.DomainName = dName.String
 	}
-	return quizstore.SpaceBrief{ID: id, DomainID: domainID, Name: name}, nil
+	return b, nil
 }
 
 func (s *Server) spacesOfAllDomains() ([]quizstore.SpaceBrief, error) {
-	rows, err := s.QS.Repo.DB.Query(`SELECT id,domain_id,name FROM spaces ORDER BY domain_id,id`)
+	rows, err := s.QS.Repo.DB.Query(`SELECT sp.id,sp.domain_id,d.name,sp.name FROM spaces sp
+		LEFT JOIN domains d ON d.id=sp.domain_id ORDER BY sp.domain_id,sp.id`)
 	if err != nil {
 		return nil, err
 	}
@@ -93,8 +97,12 @@ func (s *Server) spacesOfAllDomains() ([]quizstore.SpaceBrief, error) {
 	var out []quizstore.SpaceBrief
 	for rows.Next() {
 		var b quizstore.SpaceBrief
-		if err := rows.Scan(&b.ID, &b.DomainID, &b.Name); err != nil {
+		var dName sql.NullString
+		if err := rows.Scan(&b.ID, &b.DomainID, &dName, &b.Name); err != nil {
 			return nil, err
+		}
+		if dName.Valid {
+			b.DomainName = dName.String
 		}
 		out = append(out, b)
 	}

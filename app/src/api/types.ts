@@ -20,6 +20,7 @@ export type ObjectiveType = 'single_choice' | 'true_false'
 export interface PortalSpace {
   id: number
   domainId: number
+  domainName?: string
   name: string
 }
 

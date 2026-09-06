@@ -10,9 +10,10 @@ import (
 
 // SpaceBrief 门户空间视图。
 type SpaceBrief struct {
-	ID       int64  `json:"id"`
-	DomainID int64  `json:"domainId"`
-	Name     string `json:"name"`
+	ID         int64  `json:"id"`
+	DomainID   int64  `json:"domainId"`
+	DomainName string `json:"domainName,omitempty"`
+	Name       string `json:"name"`
 }
 
 // SpaceTrainingBrief 空间训练列表项。
@@ -95,8 +96,10 @@ func (r *RepoReader) SpaceDomain(spaceID int64) (int64, error) {
 
 // UserDomainSpaceIDs 用户加入的全部空间（门户切换；space_members 在主库）。
 func (r *RepoReader) UserDomainSpaceIDs(userID int64) ([]SpaceBrief, error) {
-	rows, err := r.DB.Query(`SELECT sp.id,sp.domain_id,sp.name FROM space_members m
-		JOIN spaces sp ON sp.id=m.space_id WHERE m.user_id=? ORDER BY sp.id`, userID)
+	rows, err := r.DB.Query(`SELECT sp.id,sp.domain_id,d.name,sp.name FROM space_members m
+		JOIN spaces sp ON sp.id=m.space_id
+		LEFT JOIN domains d ON d.id=sp.domain_id
+		WHERE m.user_id=? ORDER BY sp.id`, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -104,8 +107,12 @@ func (r *RepoReader) UserDomainSpaceIDs(userID int64) ([]SpaceBrief, error) {
 	var out []SpaceBrief
 	for rows.Next() {
 		var b SpaceBrief
-		if err := rows.Scan(&b.ID, &b.DomainID, &b.Name); err != nil {
+		var dName sql.NullString
+		if err := rows.Scan(&b.ID, &b.DomainID, &dName, &b.Name); err != nil {
 			return nil, err
+		}
+		if dName.Valid {
+			b.DomainName = dName.String
 		}
 		out = append(out, b)
 	}
