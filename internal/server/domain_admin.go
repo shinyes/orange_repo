@@ -75,9 +75,24 @@ func (s *Server) domainOrDefault(c *fiber.Ctx, user *accounts.User) (*int64, err
 
 // ---------- 域管理（global_admin） ----------
 
-// handleListDomains GET /api/admin/domains → 全部域（含空间数/题目数概览）。
+// handleListDomains GET /api/admin/domains → 域列表（global_admin 全部；
+// domain_admin 仅返回其归属域——供管理页显示当前域名）。
 func (s *Server) handleListDomains(c *fiber.Ctx) error {
-	domains, err := s.Store.ListDomains()
+	var domains []model.Domain
+	var err error
+	user := currentUser(c)
+	if user.Role == accounts.RoleDomainAdmin {
+		if user.DomainID == nil {
+			return respondError(c, fiber.StatusForbidden, "域管理员未关联域")
+		}
+		var d *model.Domain
+		d, err = s.Store.GetDomain(*user.DomainID)
+		if err == nil {
+			domains = []model.Domain{*d}
+		}
+	} else {
+		domains, err = s.Store.ListDomains()
+	}
 	if err != nil {
 		return err
 	}

@@ -42,6 +42,14 @@ export function SpaceAdmin() {
   })
   const spaces = spacesQ.data?.spaces ?? []
 
+  // 当前域名（global_admin 全部 / domain_admin 仅其域——见后端 handleListDomains）
+  const domainsQ = useQuery({
+    queryKey: ['admin', 'domains'],
+    queryFn: () => api.domains(),
+    enabled: domainId != null,
+  })
+  const domainName = domainsQ.data?.domains.find((d) => d.id === domainId)?.name
+
   const [creating, setCreating] = useState(false)
   const [renaming, setRenaming] = useState<Space | null>(null)
   const [deleting, setDeleting] = useState<Space | null>(null)
@@ -55,7 +63,7 @@ export function SpaceAdmin() {
           <ArrowLeftIcon />
         </Button>
         <h1 className="text-xl font-semibold">空间管理</h1>
-        <Badge variant="secondary" className="text-xs">域 #{domainId ?? '—'}</Badge>
+        <Badge variant="secondary" className="text-xs">{domainName ? `${domainName} #${domainId}` : `域 #${domainId ?? '—'}`}</Badge>
         <div className="ml-auto">
           {domainId != null && (
             <Button size="sm" onClick={() => setCreating(true)}>

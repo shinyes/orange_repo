@@ -126,11 +126,11 @@ func (s *Server) registerManagement(app *fiber.App) {
 	ga("GET", "/export/backup", s.handleExportBackup)
 	ga("POST", "/import/backup", s.handleImportBackup)
 
-	// 域管理（系统管理员）：域 CRUD + 域管理员
+	// 域管理：列表查询允许两类管理员（domain_admin 仅见其域，用于显示域名）；其余域管理仅系统管理员
 	gag := func(method, path string, h fiber.Handler) {
 		api.Add(method, path, s.requireAdmin, s.requireGlobalAdmin, h)
 	}
-	gag("GET", "/admin/domains", s.handleListDomains)
+	ga("GET", "/admin/domains", s.handleListDomains)
 	gag("POST", "/admin/domains", s.handleCreateDomain)
 	gag("PATCH", "/admin/domains/:id", s.handleRenameDomain)
 	gag("DELETE", "/admin/domains/:id", s.handleDeleteDomain)

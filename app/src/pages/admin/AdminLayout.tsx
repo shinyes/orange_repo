@@ -4,6 +4,7 @@
 // 结构：h-dvh 纵向 = 顶栏（固定） + Outlet 内容区（滚动由子页各自管理）。
 import { Suspense, useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import {
   ArrowLeftIcon,
   Building2Icon,
@@ -16,6 +17,7 @@ import {
 } from 'lucide-react'
 
 import type { User } from '@/api/types'
+import { adminApi } from '@/api/admin'
 import { cn } from '@/lib/utils'
 import { AdminDomainProvider, useDomain } from '@/pages/admin/domain-context'
 import { AppStateProvider } from '@/pages/admin/app-context'
@@ -52,6 +54,15 @@ function AdminTop({ user, onLogout }: { user: User; onLogout: () => void }) {
   const canManageSpaces = user.role === 'domain_admin' || (isGlobal && !noDomain)
   const roleLabel = isGlobal ? '系统管理员' : '域管理员'
 
+  // 当前域名（域名列表：global_admin 全部 / domain_admin 仅其域——见后端 handleListDomains）
+  const domainsQ = useQuery({
+    queryKey: ['admin', 'domains'],
+    queryFn: () => adminApi.domains(),
+    enabled: domainId != null,
+  })
+  const domainName =
+    domainsQ.data?.domains.find((d) => d.id === domainId)?.name ?? (noDomain ? null : `域 ${domainId}`)
+
   const navItems = [
     { to: '/admin/problems', label: '题目管理', icon: ShieldIcon, show: true },
     { to: '/admin/spaces', label: '空间管理', icon: LayoutGridIcon, show: canManageSpaces },
@@ -76,9 +87,9 @@ function AdminTop({ user, onLogout }: { user: User; onLogout: () => void }) {
             <span className="hidden rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground md:inline">
               {roleLabel}
             </span>
-            {!noDomain && domainId != null && (
+            {!noDomain && domainId != null && domainName != null && (
               <span className="hidden items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground lg:inline-flex">
-                <GlobeIcon className="size-3" /> 域 #{domainId}
+                <GlobeIcon className="size-3" /> {domainName} #{domainId}
               </span>
             )}
           </div>
