@@ -615,7 +615,7 @@ func (s *Store) UpdateProblemSolutions(id int64, solutions json.RawMessage) erro
 	return nil
 }
 
-// DeleteProblem 删除题目并清理训练/练习条目引用。
+// DeleteProblem 删除题目并清理训练/练习条目与空间条目引用。
 func (s *Store) DeleteProblem(id int64) error {
 	tx, err := s.DB.Begin()
 	if err != nil {
@@ -625,6 +625,8 @@ func (s *Store) DeleteProblem(id int64) error {
 	for _, q := range []string{
 		`DELETE FROM training_items WHERE problem_id=?`,
 		`DELETE FROM practice_items WHERE problem_id=?`,
+		`DELETE FROM space_training_items WHERE problem_id=?`, // 空间条目无 FK，防悬挂
+		`DELETE FROM space_practice_items WHERE problem_id=?`,
 		`DELETE FROM problems WHERE id=?`,
 	} {
 		if _, err := tx.Exec(q, id); err != nil {

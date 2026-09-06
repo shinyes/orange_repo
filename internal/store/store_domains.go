@@ -363,6 +363,13 @@ func (s *Store) DeleteDomainProblems(domainID int64) error {
 		if _, err := tx.Exec(`DELETE FROM practice_items WHERE problem_id=?`, id); err != nil {
 			return err
 		}
+		// 空间条目引用（空间训练/练习条目无 FK，防悬挂指向已删题）
+		if _, err := tx.Exec(`DELETE FROM space_training_items WHERE problem_id=?`, id); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`DELETE FROM space_practice_items WHERE problem_id=?`, id); err != nil {
+			return err
+		}
 		if _, err := tx.Exec(`DELETE FROM problems WHERE id=?`, id); err != nil {
 			return err
 		}
