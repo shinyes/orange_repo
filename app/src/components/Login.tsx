@@ -32,10 +32,9 @@ export function Login({ onSuccess }: { onSuccess: (user: User) => void }) {
   return (
     <div className="flex min-h-dvh items-center justify-center bg-muted/30 px-4">
       <div className="w-full max-w-sm rounded-2xl border bg-background p-8 shadow-sm">
-        <div className="mb-2 text-center">
-          <img src="/favicon.png" alt="Orange 刷题" className="mx-auto mb-2 size-16 rounded-2xl" />
-          <h1 className="text-xl font-semibold">Orange 刷题</h1>
-          <p className="mt-1 text-xs text-muted-foreground">登录后开始刷题</p>
+        <div className="mb-4 text-center">
+          <img src="/favicon.png" alt="OrangeOJ" className="mx-auto mb-2 size-16 rounded-2xl" />
+          <h1 className="text-xl font-semibold">OrangeOJ</h1>
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1.5">
