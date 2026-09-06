@@ -11,17 +11,39 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
+	"orangeoj/internal/accounts"
 	"orangeoj/internal/judge"
 	"orangeoj/internal/quizstore"
 )
 
 // ---------- 可见性辅助 ----------
 
-// problemVisibleToUser 题目是否对该用户可见（空间模型：用户加入的空间所在域包含该题）。
-func (s *Server) problemVisibleToUser(userID, problemID int64) (bool, error) {
-	// 空间模型可见性：用户加入的空间（域内做题），题目属于任一加入空间的域即可见
-	// （空间训练/练习/刷题引用域内题目）
-	return s.problemVisibleViaSpaces(userID, problemID)
+// problemVisibleToUser 题目是否对该用户可见。
+// 管理员：domain_admin 其归属域内全部题可见；global_admin 全部可见（做题/预览/管理）。
+// 成员：用户加入的空间所在域包含该题即可见（空间训练/练习/刷题引用域内题目）。
+func (s *Server) problemVisibleToUser(user *accounts.User, problemID int64) (bool, error) {
+	if isAdminRole(user.Role) {
+		if user.Role == accounts.RoleGlobalAdmin {
+			// 任意域题目（练习/预览）
+			var n int
+			err := s.QS.Repo.DB.QueryRow(`SELECT COUNT(1) FROM problems WHERE id=?`, problemID).Scan(&n)
+			if err != nil {
+				return false, err
+			}
+			return n > 0, nil
+		}
+		// domain_admin：其域题目可见
+		if user.DomainID != nil {
+			var n int
+			err := s.QS.Repo.DB.QueryRow(`SELECT COUNT(1) FROM problems WHERE id=? AND domain_id=?`, problemID, *user.DomainID).Scan(&n)
+			if err != nil {
+				return false, err
+			}
+			return n > 0, nil
+		}
+		return false, nil
+	}
+	return s.problemVisibleViaSpaces(user.ID, problemID)
 }
 
 // problemVisibleViaSpaces 用户加入的空间所在域是否包含该题目。
@@ -74,7 +96,7 @@ func sanitizeOJBody(p *quizstore.OJProblem) json.RawMessage {
 // requireVisibleProgramming 题目可见性校验 + 取编程题正文。
 func (s *Server) requireVisibleProgramming(c *fiber.Ctx, problemID int64) (*quizstore.OJProblem, error) {
 	user := currentUser(c)
-	visible, err := s.problemVisibleToUser(user.ID, problemID)
+	visible, err := s.problemVisibleToUser(user, problemID)
 	if err != nil {
 		return nil, fiber.NewError(fiber.StatusInternalServerError, err.Error())
 	}
@@ -98,7 +120,7 @@ func (s *Server) handleOJProblem(c *fiber.Ctx) error {
 	if err != nil {
 		return respondError(c, fiber.StatusBadRequest, "invalid id")
 	}
-	visible, err := s.problemVisibleToUser(user.ID, problemID)
+	visible, err := s.problemVisibleToUser(user, problemID)
 	if err != nil {
 		return respondError(c, fiber.StatusInternalServerError, err.Error())
 	}
@@ -200,7 +222,7 @@ func (s *Server) handleOJObjectiveSubmit(c *fiber.Ctx) error {
 	if err != nil {
 		return respondError(c, fiber.StatusNotFound, "题目不存在或不可见")
 	}
-	visible, err := s.problemVisibleToUser(user.ID, problemID)
+	visible, err := s.problemVisibleToUser(user, problemID)
 	if err != nil {
 		return respondError(c, fiber.StatusInternalServerError, err.Error())
 	}
@@ -283,7 +305,7 @@ func (s *Server) handleOJSubmissions(c *fiber.Ctx) error {
 	if err != nil {
 		return respondError(c, fiber.StatusBadRequest, "invalid id")
 	}
-	visible, err := s.problemVisibleToUser(user.ID, problemID)
+	visible, err := s.problemVisibleToUser(user, problemID)
 	if err != nil {
 		return respondError(c, fiber.StatusInternalServerError, err.Error())
 	}
