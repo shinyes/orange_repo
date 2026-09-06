@@ -33,7 +33,7 @@ func main() {
 	}
 	defer st.Close()
 
-	// 共享账号库（与刷题服务统一：users/sessions 位于 quiz.db）
+	// 共享账号库（与刷题服务统一：users/sessions 位于 orangeoj.db）
 	accDB, err := accounts.OpenDB(*dataDir)
 	if err != nil {
 		log.Fatalf("[FATAL] 打开账号库失败: %v", err)

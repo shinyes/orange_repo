@@ -2,7 +2,6 @@ package quizstore_test
 
 import (
 	"encoding/json"
-	"path/filepath"
 	"testing"
 
 	"orangeoj/internal/model"
@@ -50,7 +49,7 @@ func newTestEnvironment(t *testing.T) *quizstore.Store {
 	if err := main.Close(); err != nil {
 		t.Fatalf("close main store: %v", err)
 	}
-	qs, err := quizstore.Open(dir, filepath.Join(dir, "orangeoj.db"))
+	qs, err := quizstore.Open(dir)
 	if err != nil {
 		t.Fatalf("open quiz store: %v", err)
 	}

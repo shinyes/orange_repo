@@ -1,6 +1,6 @@
 // OrangeOJ 门户 API（空间化做题）：空间切换、空间训练（客观题限次作答标色）、
 // 空间练习（整卷交卷）、空间刷题、排行榜。
-// 结构只读自主库（RepoReader）；作答/进度/通过记录在 quiz.db（quizstore）。
+// 结构只读自主库（RepoReader）；作答/进度/通过记录在 orangeoj.db（quizstore）。
 package quizserver
 
 import (

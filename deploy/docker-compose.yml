@@ -19,7 +19,7 @@ services:
     restart: unless-stopped
 
   # 刷题服务：与主站共用同一镜像与数据卷（只读主库 orangeoj.db，
-  # 自有数据写入同一卷内的 quiz.db）；主库表结构变化时请与主站同版本部署。
+  # 全部数据写入同一卷内的 orangeoj.db）；主库表结构变化时请与主站同版本部署。
   # 判题：连接 orangejudge（-judge-endpoint / -judge-token 必填否则判题 503）。
   orangeoj-quiz:
     image: ghcr.io/shinyes/orangeoj:1.12.8

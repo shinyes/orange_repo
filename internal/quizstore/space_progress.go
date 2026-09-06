@@ -1,4 +1,4 @@
-// 空间训练/练习学生作答数据层（quiz.db，与 users 同库、FK 级联、判题管线同侧）。
+// 空间训练/练习学生作答数据层（orangeoj.db，与 users 同库、FK 级联、判题管线同侧）。
 // 空间/训练/练习/条目的结构定义在主库 internal/store（store_space_content.go），
 // 此处只存学生作答：训练尝试限次/标色、练习整卷交卷、通过记录（uuid 去重，排行榜）。
 // training_id/practice_id 指主库空间训练/练习 id，无跨库外键；problem_uuid 直接由调用方传入，

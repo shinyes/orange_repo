@@ -134,7 +134,7 @@ cmd/judge-runtime/       judge-runtime 入口（环境变量配置，:9090）
 internal/model           数据模型与 JSON 形状
 internal/store           SQLite 迁移与查询（主库 orangeoj.db）
 internal/accounts        共享账号库（users/sessions，主站与刷题服务统一账号唯一 owner）
-internal/quizstore       刷题数据层：quiz.db（判题 submissions/judge_jobs/progress + 空间作答三表）+ 主库只读 reader
+internal/quizstore       刷题数据层：orangeoj.db（判题 submissions/judge_jobs/progress + 空间作答三表，单库） reader
 internal/quizserver      刷题 Fiber 路由（/api/auth /api/portal /api/oj）
 internal/judge           判题编排（队列/HTTPRunner/类型），迁移自上游 queue.go/runner.go
 internal/judgeserver     评测执行器（Python/C++）+ 沙箱后端（Linux nsjail / 开发受限运行）+ HTTP 服务

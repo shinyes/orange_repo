@@ -198,7 +198,7 @@ try {
   $quizLog = Join-Path $env:TEMP 'orangeoj-test-quiz.log'
   $judgeLog = Join-Path $env:TEMP 'orangeoj-test-judge.log'
 
-  # main repo server first (bootstraps shared admin into quiz.db)
+  # main repo server first (bootstraps shared admin into orangeoj.db)
   $script:procList += Start-Process -FilePath (Join-Path $binDir 'orangeoj.exe') `
     -ArgumentList '-addr', ":$MainPort", '-data', $dataDir, '-web', (Join-Path $root 'web\dist') `
     -WorkingDirectory $binDir -WindowStyle Hidden -RedirectStandardOutput $mainLog -RedirectStandardError "$mainLog.err" -PassThru

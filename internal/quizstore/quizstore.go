@@ -1,10 +1,11 @@
-// Package quizstore 封装刷题服务的两级存储：
+// Package quizstore 封装刷题服务存储：唯一数据库 orangeoj.db（单库，与主站共用）。
 //
-//   - quiz.db：刷题服务自有数据（settings 表保留 + 判题 submissions/judge_jobs/progress
-//     + 空间作答 space_training_attempts/space_practice_submissions/student_solved）
-//     + 共享账号表（users/sessions，表结构与账号/会话操作的唯一 owner 是 internal/accounts，
-//     本包经 Accounts 字段访问）；
-//   - orangeoj.db：只读访问主站题库（见 repo_oj.go / repo_space.go 的 RepoReader）。
+//   - 判题 submissions/judge_jobs/progress + 空间作答 space_training_attempts/
+//     space_practice_submissions/student_solved
+//   - 共享账号表（users/sessions，表结构与账号/会话操作的唯一 owner 是 internal/accounts，
+//     本包经 Accounts 字段访问）
+//   - 题库/域/空间结构表（problems/domains/spaces/space_trainings…由 internal/store 的
+//     MigrateSchema 保证；本包 Repo 指向同一连接读取，原跨文件只读 RepoReader 已随单库化移除）
 package quizstore
 
 import (
@@ -18,48 +19,47 @@ import (
 	_ "modernc.org/sqlite"
 
 	"orangeoj/internal/accounts"
+	"orangeoj/internal/store"
 )
 
 // ErrNotFound 统一的未找到错误。
 var ErrNotFound = errors.New("not found")
 
-// Store 刷题服务存储：quiz.db 写 + 主库只读。Accounts 是共享账号库（同一 quiz.db 连接）。
+// Store 刷题服务存储：orangeoj.db（单库读写）。Accounts 为同一连接的账号库；Repo 为同一连接的题库读句柄。
 type Store struct {
 	DB       *sql.DB
 	Repo     *RepoReader
 	Accounts *accounts.Store
 }
 
-// Open 打开（必要时创建）数据目录与 quiz.db 并迁移，同时以只读方式打开主库题库。
-func Open(dataDir, repoPath string) (*Store, error) {
+// Open 打开（必要时创建）数据目录与唯一数据库 orangeoj.db 并迁移全部表。
+// 单库模式：题库/域/空间结构表与账号/判题/作答表同处一个文件；本服务读写同一库，
+// Repo 指向同一连接（原只读 RepoReader 已随单库化移除）。
+func Open(dataDir string) (*Store, error) {
 	if err := os.MkdirAll(dataDir, 0o755); err != nil {
 		return nil, fmt.Errorf("create quiz data dir: %w", err)
 	}
-	dsn := "file:" + filepath.ToSlash(filepath.Join(dataDir, "quiz.db")) +
+	dsn := "file:" + filepath.ToSlash(filepath.Join(dataDir, "orangeoj.db")) +
 		"?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)"
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open quiz sqlite: %w", err)
 	}
 	db.SetMaxOpenConns(1)
-	s := &Store{DB: db, Accounts: accounts.New(db)}
+	s := &Store{DB: db, Accounts: accounts.New(db), Repo: &RepoReader{DB: db}}
 	if err := s.migrate(); err != nil {
 		db.Close()
 		return nil, err
 	}
-	repo, err := OpenRepoReader(repoPath)
-	if err != nil {
+	// 题库/域/空间结构表（与主站同库；若本服务先于主站启动也建齐全表）
+	if err := (&store.Store{DB: db}).MigrateSchema(); err != nil {
 		db.Close()
 		return nil, err
 	}
-	s.Repo = repo
 	return s, nil
 }
 
 func (s *Store) Close() error {
-	if s.Repo != nil {
-		_ = s.Repo.DB.Close()
-	}
 	return s.DB.Close()
 }
 
@@ -69,11 +69,6 @@ func (s *Store) migrate() error {
 		return err
 	}
 	stmts := []string{
-		// settings 保留（无害小表；旧 round_size 键不再使用，后续无写入方）。
-		`CREATE TABLE IF NOT EXISTS settings (
-			key TEXT PRIMARY KEY,
-			value TEXT NOT NULL
-		);`,
 		// ---------- OrangeOJ 判题（v1.12：submissions/judge_jobs/progress，结构照搬上游 db.go） ----------
 		`CREATE TABLE IF NOT EXISTS submissions (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,

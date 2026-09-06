@@ -1,6 +1,6 @@
 // Package accounts 是主站（OrangeOJ）与刷题服务（Orange quiz）共享的账号权威库：
 //
-//   - users/sessions 表物理位于 quiz.db（两个服务共享同一数据目录）；
+//   - users/sessions 表物理位于 orangeoj.db（两个服务共享同一数据目录）；
 //   - 本包是这些表迁移与全部用户/会话操作的唯一 owner；
 //   - 旧版主站的 settings.password_hash 单账号在启动时迁移为 admin 账号（见 CreateAdminFromHash）。
 package accounts
@@ -88,10 +88,10 @@ type Store struct {
 	DB *sql.DB
 }
 
-// OpenDB 打开（必要时创建）quiz.db 并执行账号表迁移；返回连接句柄。
+// OpenDB 打开（必要时创建）orangeoj.db（单库）并执行账号表迁移；返回连接句柄。
 // 同一进程内多个服务可各自持有连接（同文件多连接，WAL + busy_timeout 支持）。
 func OpenDB(dataDir string) (*sql.DB, error) {
-	dsn := "file:" + filepath.ToSlash(filepath.Join(dataDir, "quiz.db")) +
+	dsn := "file:" + filepath.ToSlash(filepath.Join(dataDir, "orangeoj.db")) +
 		"?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)"
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {

@@ -127,7 +127,7 @@ func newTestOJSpaceApp(t *testing.T) (*fiber.App, *Server, map[string]int64, boo
 		t.Fatalf("close main store: %v", err)
 	}
 
-	qs, err := quizstore.Open(dir, filepath.Join(dir, "orangeoj.db"))
+	qs, err := quizstore.Open(dir)
 	if err != nil {
 		t.Fatalf("open quiz store: %v", err)
 	}

@@ -85,8 +85,8 @@ func newPortalEnv(t *testing.T) (*fiber.App, map[string]int64, int64, string) {
 		t.Fatal(err)
 	}
 
-	// ---- 阶段 2：quiz 建学生（users 在 quiz.db） ----
-	qs, err := quizstore.Open(dir, filepath.Join(dir, "orangeoj.db"))
+	// ---- 阶段 2：quiz 建学生（users 在 orangeoj.db） ----
+	qs, err := quizstore.Open(dir)
 	if err != nil {
 		t.Fatalf("open quiz store: %v", err)
 	}

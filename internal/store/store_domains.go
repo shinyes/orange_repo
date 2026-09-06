@@ -1,5 +1,5 @@
 // 域 / 空间 / 空间成员数据层（OJ 重构）。
-// 数据物理位于主库 orangeoj.db；users 账号在 quiz.db（accounts 包），
+// 数据物理位于主库 orangeoj.db；users 账号在 orangeoj.db（accounts 包），
 // space_members.user_id 为逻辑引用（无跨库 FK）。
 package store
 
@@ -272,7 +272,7 @@ func (s *Store) SpaceDomain(spaceID int64) (int64, error) {
 // ---------- 空间内容表（训练/练习/刷题/排行榜，阶段 4） ----------
 
 // migrateSpaceContent 建空间训练/练习/刷题结构表（幂等）。
-// 学生作答表（尝试/交卷/通过记录）已在 quiz.db（quizstore.migrate），此处不再建。
+// 学生作答表（尝试/交卷/通过记录）已在 orangeoj.db（quizstore.migrate），此处不再建。
 func (s *Store) migrateSpaceContent() error {
 	stmts := []string{
 		`CREATE TABLE IF NOT EXISTS space_trainings (

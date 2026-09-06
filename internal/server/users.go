@@ -1,5 +1,5 @@
 // 仓库页用户管理（OJ 重构）：系统/域管理员在此维护空间成员账号
-// （与 quiz.db 统一账号库联动；成员 role=member）。
+// （与 orangeoj.db 统一账号库联动；成员 role=member）。
 package server
 
 import (

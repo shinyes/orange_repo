@@ -1,5 +1,5 @@
 // 空间内容数据层（结构部分）：空间训练（章节+条目）、空间练习（整卷）、
-// 空间刷题项目。学生作答数据（尝试/交卷/通过记录）在 quizstore（quiz.db，
+// 空间刷题项目。学生作答数据（尝试/交卷/通过记录）在 quizstore（orangeoj.db，
 // 与 users 同库），此处仅保留空间内容结构 CRUD。
 package store
 
@@ -115,7 +115,7 @@ func (s *Store) UpdateSpaceTrainingMeta(id int64, title, description string, tag
 	return nil
 }
 
-// DeleteSpaceTraining 删训练（级联章节/条目；学生尝试记录在 quiz.db，由上层清理）。
+// DeleteSpaceTraining 删训练（级联章节/条目；学生尝试记录在 orangeoj.db，由上层清理）。
 func (s *Store) DeleteSpaceTraining(id int64) error {
 	res, err := s.DB.Exec(`DELETE FROM space_trainings WHERE id=?`, id)
 	if err != nil {
@@ -413,7 +413,7 @@ func (s *Store) UpdateSpacePracticeMeta(id int64, title, description string, tag
 	return nil
 }
 
-// DeleteSpacePractice 删练习（级联条目；学生交卷记录在 quiz.db，由上层清理）。
+// DeleteSpacePractice 删练习（级联条目；学生交卷记录在 orangeoj.db，由上层清理）。
 func (s *Store) DeleteSpacePractice(id int64) error {
 	res, err := s.DB.Exec(`DELETE FROM space_practices WHERE id=?`, id)
 	if err != nil {

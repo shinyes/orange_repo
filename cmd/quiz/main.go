@@ -1,7 +1,6 @@
-// OrangeOJ 刷题 — 独立端口刷题服务（与主站 OrangeOJ 共享题库）。
+// OrangeOJ 刷题 — 独立端口刷题服务（与主站共享唯一数据库 orangeoj.db）。
 //
-// 数据边界：只读打开 <data>/orangeoj.db（主站权威题库，绝不写入/迁移）；
-// 自有数据（判题 submissions/judge_jobs/progress、空间作答、settings）写入 <data>/quiz.db。
+// 数据边界：读写 <data>/orangeoj.db（单库：题库/域/空间结构 + 账号 + 判题/作答同文件）。
 package main
 
 import (
@@ -19,9 +18,8 @@ import (
 
 func main() {
 	addr := flag.String("addr", ":8081", "监听地址")
-	dataDir := flag.String("data", "./data", "数据目录（quiz.db 与上传图片）")
+	dataDir := flag.String("data", "./data", "数据目录（orangeoj.db 与上传图片）")
 	webDist := flag.String("web", "./web-quiz/dist", "刷题前端构建产物目录")
-	repoDB := flag.String("repo-db", "", "主站题库数据库路径（默认 <data>/orangeoj.db）")
 	judgeEndpoint := flag.String("judge-endpoint", "", "judge-runtime 地址（默认 http://judge-runtime:9090；留空则禁用判题入队）")
 	judgeToken := flag.String("judge-token", "", "与 judge-runtime 共享的评测 token（留空则禁用判题入队）")
 	judgeWorkers := flag.Int("judge-workers", 2, "判题队列 worker 数")
@@ -32,12 +30,7 @@ func main() {
 		log.Fatalf("[FATAL] 数据目录引导失败: %v", err)
 	}
 
-	repoPath := *repoDB
-	if repoPath == "" {
-		repoPath = filepath.Join(*dataDir, "orangeoj.db")
-	}
-
-	qs, err := quizstore.Open(*dataDir, repoPath)
+	qs, err := quizstore.Open(*dataDir)
 	if err != nil {
 		log.Fatalf("[FATAL] 刷题服务存储初始化失败: %v", err)
 	}
@@ -62,7 +55,7 @@ func main() {
 
 	app := quizserver.New(srv, runner, *judgeWorkers)
 	defer srv.StopQueue()
-	log.Printf("[START] OrangeOJ 刷题服务监听 http://localhost%s （题库: %s，前端: %s）", *addr, repoPath, *webDist)
+	log.Printf("[START] OrangeOJ 刷题服务监听 http://localhost%s （数据: %s/orangeoj.db，前端: %s）", *addr, *dataDir, *webDist)
 	if err := app.Listen(*addr); err != nil {
 		log.Fatalf("[FATAL] 刷题服务退出: %v", err)
 	}

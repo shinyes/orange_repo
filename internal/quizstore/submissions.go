@@ -1,4 +1,4 @@
-// submissions/judge_jobs/progress 数据层（quiz.db）。
+// submissions/judge_jobs/progress 数据层（orangeoj.db）。
 // 表结构与上游 OrangeOJ backend/internal/db/db.go 一致（去 space_id）。
 package quizstore
 
@@ -87,7 +87,7 @@ func (s *Store) UpsertProgress(userID, problemID int64, verdict judge.Verdict, s
 }
 
 // LoadSubmission 实现 judge.SubmissionLoader：装载队列所需运行时数据
-// （quiz.db submissions + 主库 problems 运行时字段）。
+// （orangeoj.db submissions + 主库 problems 运行时字段）。
 func (s *Store) LoadSubmission(ctx context.Context, submissionID int64) (*judge.RuntimeSubmission, error) {
 	var (
 		userID, problemID            int64

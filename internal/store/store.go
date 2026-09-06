@@ -49,6 +49,10 @@ func Open(dataDir string) (*Store, error) {
 
 func (s *Store) Close() error { return s.DB.Close() }
 
+// MigrateSchema 对任意连接执行全量建表/迁移（题库/域/空间结构表）。
+// 单库模式下 quizstore 等与主站共用同一 orangeoj.db 文件，可复用保证题库侧表齐全。
+func (s *Store) MigrateSchema() error { return s.migrate() }
+
 func (s *Store) migrate() error {
 	stmts := []string{
 		`CREATE TABLE IF NOT EXISTS settings (

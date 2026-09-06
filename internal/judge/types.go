@@ -3,7 +3,7 @@
 //
 // 职责边界：
 //   - QueueService：judge_jobs/submissions 的状态机（认领/写回/失败兜底）与进度 upsert，
-//     仅操作调用方传入的 *sql.DB（quiz.db）——表结构见 internal/quizstore 迁移；
+//     仅操作调用方传入的 *sql.DB（orangeoj.db）——表结构见 internal/quizstore 迁移；
 //   - Runner：向独立 judge-runtime 发起评测的 HTTP 客户端（Runner 接口便于测试注入 mock）。
 package judge
 
@@ -95,7 +95,7 @@ type Runner interface {
 }
 
 // RuntimeSubmission 队列处理所需的提交+题目运行时数据。
-// 跨库组装（quiz.db submissions + 主库 problems）由存储层（SubmissionLoader 实现者）负责。
+// 跨库组装（orangeoj.db submissions + 主库 problems）由存储层（SubmissionLoader 实现者）负责。
 type RuntimeSubmission struct {
 	ID             int64
 	UserID         int64
