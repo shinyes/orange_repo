@@ -103,52 +103,52 @@ export ORANGEOJ_JUDGE_SHARED_TOKEN='换成你的随机token'
 docker compose -f deploy/docker-compose.yml up -d
 ```
 
-访问：
+访问（单服务，一个端口承载门户与管理端）：
 
-- 管理端（域仓库）：http://localhost:8080
-- 学生门户：http://localhost:8081
+- 学生门户：http://localhost:8080/
+- 仓库管理（管理员）：http://localhost:8080/admin
 - judge-runtime :9090 仅供容器内网，不对外
 
-首次启动自动创建管理员 `admin / 123456`（两端同一账号库），登录后请立即修改；随后：
+首次启动自动创建管理员 `admin / 123456`，登录后请立即修改；随后：
 
-1. 系统管理员在管理端「域管理」新建域（可同时创建域管理员账号）；
+1. 系统管理员进入 **/admin**「域管理」新建域（可同时创建域管理员账号）；
 2. 域管理员进入仓库页维护题目（或 **导入 ZIP / 全量备份**，新库导入后即可用）；
 3. 在「空间管理」新建空间、拉入成员账号；
 4. 在空间内编排训练/练习/刷题项目（自建或从仓库题册拷贝）；
-5. 学生登录门户进入空间做题。
+5. 学生登录门户（/）进入空间做题。
 
 ### 说明
 
 - **数据**：全部保存在 compose 文件同目录的 `./data`（唯一数据库 `orangeoj.db` + 上传图片）。删除目录即重置。
+- **架构**：单一 Go 进程托管全部前端与 API（管理端 + 门户合服）；仅判题沙箱为独立进程（nsjail 需特权容器）。
 - **镜像**：主镜像 `ghcr.io/shinyes/orangeoj:<版本>` 由 GitHub Actions 随版本发布；判题镜像 `ghcr.io/shinyes/orangeoj-judge` 仅在含判题相关变更的版本构建并刷新 `:latest`（可用 `ORANGEOJ_JUDGE_IMAGE` 覆盖版本）。
 - **升级**：`docker compose pull && docker compose up -d`；数据在卷内保留。需要跨大版本迁移时用管理端「全量备份/恢复」。
-- 判题要求 `ORANGEOJ_JUDGE_SHARED_TOKEN` 非默认值且三容器一致，否则做题页的运行/测试/提交返回 503。
+- 判题要求 `ORANGEOJ_JUDGE_SHARED_TOKEN` 非默认值且两容器一致，否则做题页的运行/测试/提交返回 503。
 
 ---
 
 ## 本地开发
 
-三个可执行组件（Go 1.25+，无需 CGO）：
+两个可执行组件（Go 1.25+，无需 CGO）：
 
 | 组件 | 入口 | 默认端口 | 前端 |
 |---|---|---|---|
-| 管理端（主站） | `go run . -data ./data -web ./web/dist` | 8080 | `web/`（Vite，代理 /api → :8080） |
-| 学生门户（刷题服务） | `go run ./cmd/quiz -data ./data -web ./web-quiz/dist` | 8081 | `web-quiz/`（Vite，代理 /api → :8081） |
+| 主服务（管理 + 门户） | `go run . -data ./data -web ./web-quiz/dist -web-admin ./web/dist` | 8080 | `web/` + `web-quiz/`（Vite dev 各自代理 /api → :8080） |
 | 判题沙箱 | `go run ./cmd/judge-runtime`（见环境变量） | 9090 | — |
 
 开发机直接运行：
 
 ```powershell
-# Windows 一键脚本（后端 + 前端 + 判题 dev 模式）
-scripts/dev.ps1          # 管理端
-scripts/dev-quiz.ps1     # 门户 + 判题（dev token，无 nsjail 受限评测）
+# Windows 一键脚本（后端单进程 + 两个 Vite dev + 判题 dev 模式）
+scripts/dev.ps1
 
-# 或手动：先起后端，再起各自前端
-go run . -data ./data -seed          # 空库时 -seed 灌入示例题册
-go run ./cmd/quiz -data ./data -judge-token dev-token -judge-endpoint http://127.0.0.1:9090
+# 或手动：先起后端（空库 -seed 灌入示例题册），再起各前端
+go run . -data ./data -seed -judge-token dev-token -judge-endpoint http://127.0.0.1:9090
+cd web && npm run dev        # 管理端 :5173
+cd web-quiz && npm run dev   # 门户 :5174
 ```
 
-> 单库说明：所有数据（题库/账号/判题/作答）同处 `./data/orangeoj.db`；两个后端进程各自连接该文件（WAL 并发），需共享同一 `-data` 目录。
+> 单进程说明：全部 API/前端由同一 Go 进程承载（`.data/orangeoj.db` 单库）；生产用构建产物（`-web` 门户 dist 挂 `/`、`-web-admin` 管理 dist 挂 `/admin`），开发用 Vite 代理。
 
 ---
 
@@ -167,32 +167,33 @@ cd web-quiz && npm run build
 scripts/test-oj.ps1
 ```
 
-`scripts/test-oj.ps1` 使用独立端口（18090/18091/19090）与 `%TEMP%` 临时数据，结束后自动清理；无本地工具链的机器对应断言自动 SKIP。
+`scripts/test-oj.ps1` 启动单主服务 + judge-runtime 于独立端口（18090/19090）与 `%TEMP%` 临时数据，结束后自动清理；无本地工具链的机器对应断言自动 SKIP。
 
 ---
 
 ## 项目结构
 
 ```
+main.go              单进程入口（合服：管理 API + 门户 API + 静态托管）
 cmd/
-  quiz/            学生门户服务（:8081，托管 web-quiz）
-  judge-runtime/   判题沙箱（:9090）
+  judge-runtime/     判题沙箱（:9090，唯一独立进程）
 internal/
-  accounts/        users/sessions（单库内账号权威）
-  store/           orangeoj.db：题目/标签/域/空间/空间内容 + 迁移
-  server/          管理端 HTTP API（域/空间/题库/导入导出/备份）
-  quizstore/       判题与作答数据层（submissions/judge_jobs/空间作答）
-  quizserver/      门户 HTTP API（/api/portal/*、/api/oj/*）
-  judge/           判题队列编排
-  judgeserver/     nsjail 沙箱执行器
-  model/           共享类型
-  zipio/           OrangeOJ ZIP 导入导出格式
-web/               管理端前端（React + TS）
-web-quiz/          学生门户前端（React Router + TS）
-deploy/            Docker Compose 部署示例
-scripts/           dev / 端到端测试脚本
-samples/           示例题册（-seed）
-docs/              设计文档
+  app/               单进程组装（共享连接/路由挂载/auth/静态）
+  accounts/          users/sessions（单库内账号权威）
+  store/             orangeoj.db：题目/标签/域/空间/空间内容 + 迁移
+  server/            管理端 HTTP API（域/空间/题库/导入导出/备份）
+  quizstore/         判题与作答数据层（submissions/judge_jobs/空间作答）
+  quizserver/        门户 HTTP API（/api/portal/*、/api/oj/*）
+  judge/             判题队列编排
+  judgeserver/       nsjail 沙箱执行器
+  model/             共享类型
+  zipio/             OrangeOJ ZIP 导入导出格式
+web/                 管理端前端（React + TS）
+web-quiz/            学生门户前端（React Router + TS）
+deploy/              Docker Compose 部署示例
+scripts/             dev / 端到端测试脚本
+samples/             示例题册（-seed）
+docs/                设计文档
 ```
 
 ## 技术栈

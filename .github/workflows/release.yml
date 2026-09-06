@@ -57,7 +57,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # ---------- 主镜像（orangeoj 主站 + quiz 门户双二进制，distroless） ----------
+      # ---------- 主镜像（orangeoj 单二进制：管理 + 门户 API 合服，distroless） ----------
       - name: Extract main image metadata
         id: meta
         uses: docker/metadata-action@v5
