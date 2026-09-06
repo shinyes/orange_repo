@@ -15,7 +15,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { api, ApiError } from '@/api'
 import { useDomain } from '@/pages/admin/domain-context'
 import type { Domain } from '@/api/types'
-import { ConfirmDialog } from './dialogs'
 
 export function DomainAdmin() {
   const qc = useQueryClient()
@@ -138,16 +137,13 @@ export function DomainAdmin() {
       <RenameDomainDialog domain={renaming} onOpenChange={(v) => !v && setRenaming(null)} onDone={invalidate} />
 
       {deleting && (
-        <ConfirmDialog
-          open
-          onOpenChange={(v) => !v && setDeleting(null)}
-          title={`删除域「${deleting.name}」？`}
-          description={
-            forceDelete
-              ? '该域内题目与空间将被一并删除，操作不可撤销！'
-              : '域内题目与空间将一并删除；若域内仍有题目，后端会拒绝并提示需强制删除。'
-          }
-          confirmLabel={forceDelete ? '确认连同题目删除' : '删除'}
+        <DeleteDomainDialog
+          domain={deleting}
+          force={forceDelete}
+          onClose={() => {
+            setDeleting(null)
+            setForceDelete(false)
+          }}
           onConfirm={() => del.mutate({ id: deleting.id, force: forceDelete })}
         />
       )}
@@ -407,6 +403,57 @@ function DomainAdminsDialog(props: { domain: Domain | null; onOpenChange: (v: bo
 
         <DialogFooter>
           <Button variant="outline" onClick={() => props.onOpenChange(false)}>关闭</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ---------- 删除域（须输入域名确认；409 时提示强制删除） ----------
+
+function DeleteDomainDialog(props: {
+  domain: Domain
+  force: boolean
+  onClose: () => void
+  onConfirm: () => void
+}) {
+  const [typed, setTyped] = useState('')
+  const matched = typed.trim() === props.domain.name
+
+  return (
+    <Dialog open onOpenChange={() => props.onClose()}>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="text-destructive">删除域「{props.domain.name}」？</DialogTitle>
+          <DialogDescription>
+            {props.force
+              ? '该域内题目、空间及全部数据将被一并删除，操作不可撤销！'
+              : '该域的题目与空间将一并删除；若域内仍有题目，后端会拒绝并提示需强制删除。'}
+            <br />
+            此操作不可撤销，请输入 <span className="font-medium text-foreground">{props.domain.name}</span>{' '}
+            以确认。
+          </DialogDescription>
+        </DialogHeader>
+        <Input
+          value={typed}
+          onChange={(e) => setTyped(e.target.value)}
+          placeholder={`输入 ${props.domain.name} 以确认删除`}
+          autoFocus
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && matched) props.onConfirm()
+          }}
+        />
+        <DialogFooter>
+          <Button variant="outline" onClick={props.onClose}>
+            取消
+          </Button>
+          <Button
+            variant="destructive"
+            disabled={!matched}
+            onClick={props.onConfirm}
+          >
+            {props.force ? '确认连同题目删除' : '确认删除'}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
