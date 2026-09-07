@@ -283,7 +283,7 @@ function PracticePaper({ sid, pid, data }: {
         <aside className="hidden w-56 shrink-0 overflow-y-auto p-2.5 md:block">
           <div className="space-y-3">
             <div className="rounded-xl border bg-card p-3 shadow-sm">
-              <HistoryCard sid={sid} pid={pid} onViewAll={() => setHistoryAllOpen(true)} />
+              <HistoryCard sid={sid} pid={pid} />
             </div>
             <div className="rounded-xl border bg-card p-3 shadow-sm">
               <PaperNav
@@ -737,14 +737,13 @@ function correctAnswerText(r: PracticeResultItem): string {
 
 // ---------- 交卷历史 ----------
 
-// 左栏「我的提交记录」卡（最近记录；多时内部滚动）
-function HistoryCard({ sid, pid, onViewAll }: { sid: number; pid: number; onViewAll: () => void }) {
+// 左栏「我的提交记录」卡（最近记录；超过 3 条后区域内滚动）
+function HistoryCard({ sid, pid }: { sid: number; pid: number }) {
   const q = useQuery({
     queryKey: ['portal-practice-submissions', sid, pid],
     queryFn: () => api.portalPracticeSubmissions(sid, pid),
   })
   const list = q.data?.submissions ?? []
-  const shown = list.slice(0, 8)
   return (
     <div>
       <div className="flex items-center justify-between gap-2">
@@ -752,12 +751,12 @@ function HistoryCard({ sid, pid, onViewAll }: { sid: number; pid: number; onView
         {list.length > 0 && <span className="text-[10px] tabular-nums text-muted-foreground/80">共 {list.length} 次</span>}
       </div>
       {q.isLoading && <p className="py-2.5 text-center text-[11px] text-muted-foreground">加载中…</p>}
-      {!q.isLoading && shown.length === 0 && (
+      {!q.isLoading && list.length === 0 && (
         <p className="py-2.5 text-[11px] text-muted-foreground">暂无提交记录，交卷后显示在此</p>
       )}
-      {shown.length > 0 && (
+      {list.length > 0 && (
         <div className={cn('mt-1', list.length > 3 && 'max-h-[200px] overflow-y-auto pr-0.5')}>
-          {shown.map((s) => (
+          {list.map((s) => (
             <Link
               key={s.id}
               to={`/s/${sid}/practice/${pid}/record/${s.id}`}
@@ -773,15 +772,6 @@ function HistoryCard({ sid, pid, onViewAll }: { sid: number; pid: number; onView
           ))}
           <p className="mt-1 text-[10px] text-muted-foreground/70">点击记录查看答题卡</p>
         </div>
-      )}
-      {list.length > 8 && (
-        <button
-          type="button"
-          onClick={onViewAll}
-          className="mt-1.5 w-full rounded-md border border-dashed border-border py-1 text-[11px] text-muted-foreground transition-colors hover:border-orange-300 hover:text-orange-600"
-        >
-          查看全部 {list.length} 次记录
-        </button>
       )}
     </div>
   )
