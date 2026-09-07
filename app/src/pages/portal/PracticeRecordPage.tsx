@@ -67,8 +67,12 @@ function RecordSheet({ sid, pid, data }: {
   }
 }) {
   const items = data.items
-  const total = items.length
-  const wrongCount = items.filter((i) => !i.correct).length
+  // 客观题（作答+未作答）；编程题仅导航占位
+  const objItems = items.filter((i) => i.type !== 'programming')
+  const answeredItems = objItems.filter((i) => i.answered)
+  const correctCount = answeredItems.filter((i) => i.correct).length
+  const wrongCount = answeredItems.length - correctCount
+  const missingCount = objItems.length - answeredItems.length
   const [navOpen, setNavOpen] = useState(false)
 
   const jumpTo = (problemId: number) => {
@@ -79,8 +83,9 @@ function RecordSheet({ sid, pid, data }: {
   const nav = (
     <NavCard
       items={items}
-      correct={items.length - wrongCount}
+      correct={correctCount}
       wrong={wrongCount}
+      missing={missingCount}
       createdAt={data.createdAt}
       onJump={jumpTo}
     />
@@ -97,11 +102,16 @@ function RecordSheet({ sid, pid, data }: {
           </h1>
           <div className="flex items-center gap-1.5 text-xs">
             <span className="rounded-md border border-emerald-300 bg-emerald-50 px-1.5 py-0.5 font-semibold text-emerald-700">
-              答对 {total - wrongCount}
+              答对 {correctCount}
             </span>
             <span className="rounded-md border border-red-300 bg-red-50 px-1.5 py-0.5 font-semibold text-red-600">
               答错 {wrongCount}
             </span>
+            {missingCount > 0 && (
+              <span className="rounded-md border border-border bg-muted px-1.5 py-0.5 font-semibold text-muted-foreground">
+                未答 {missingCount}
+              </span>
+            )}
           </div>
           <div className="flex-1" />
           <Button variant="outline" size="sm" className="md:hidden" onClick={() => setNavOpen(true)}>
@@ -123,15 +133,15 @@ function RecordSheet({ sid, pid, data }: {
           {nav}
         </aside>
 
-        {/* 右栏：逐题回顾（唯一内容滚动区；显示本次全部作答题目） */}
+        {/* 右栏：逐题回顾（唯一内容滚动区；显示练习全部客观题） */}
         <div className="min-h-0 flex-1 overflow-y-auto">
           <div className="space-y-3 p-3">
-            {items.map((it) => (
+            {objItems.map((it) => (
               <ReviewCard key={it.problemId} item={it} />
             ))}
-            {items.length === 0 && (
+            {objItems.length === 0 && (
               <div className="rounded-xl border border-dashed p-12 text-center text-sm text-muted-foreground">
-                该次交卷无客观题作答记录
+                本练习无客观题
               </div>
             )}
           </div>
@@ -151,11 +161,12 @@ function RecordSheet({ sid, pid, data }: {
   )
 }
 
-// 左栏导航卡（答题卡网格：对=绿 错=红）
-function NavCard({ items, correct, wrong, createdAt, onJump }: {
+// 左栏导航卡（答题卡网格：对=绿 错=红 未答=白 编程=虚线灰）
+function NavCard({ items, correct, wrong, missing, createdAt, onJump }: {
   items: PracticeRecordItem[]
   correct: number
   wrong: number
+  missing: number
   createdAt: string
   onJump: (problemId: number) => void
 }) {
@@ -165,7 +176,7 @@ function NavCard({ items, correct, wrong, createdAt, onJump }: {
         <span className="text-xs font-bold text-muted-foreground">题目导航</span>
         <span className="text-[10px] tabular-nums text-muted-foreground/80">{formatTime(createdAt)}</span>
       </div>
-      <div className="mt-2 flex flex-wrap items-center gap-3 border-b pb-2 text-[11px]">
+      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 border-b pb-2 text-[11px]">
         <span className="inline-flex items-center gap-1">
           <span className="size-3 rounded border border-emerald-300 bg-emerald-100" />
           <span className="text-muted-foreground">答对 {correct}</span>
@@ -174,24 +185,38 @@ function NavCard({ items, correct, wrong, createdAt, onJump }: {
           <span className="size-3 rounded border border-red-300 bg-red-100" />
           <span className="text-muted-foreground">答错 {wrong}</span>
         </span>
+        {missing > 0 && (
+          <span className="inline-flex items-center gap-1">
+            <span className="size-3 rounded border border-border bg-white" />
+            <span className="text-muted-foreground">未答 {missing}</span>
+          </span>
+        )}
       </div>
       <div className="mt-2 grid grid-cols-5 gap-1.5">
-        {items.map((it) => (
-          <button
-            key={it.problemId}
-            type="button"
-            onClick={() => onJump(it.problemId)}
-            title={`第 ${it.no} 题 · ${it.correct ? '答对' : '答错'}`}
-            className={cn(
-              'flex h-8 items-center justify-center rounded-md border text-xs font-semibold tabular-nums transition-colors',
-              it.correct
-                ? 'border-emerald-300 bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
-                : 'border-red-300 bg-red-50 text-red-600 hover:bg-red-100',
-            )}
-          >
-            {it.no}
-          </button>
-        ))}
+        {items.map((it) => {
+          const isProg = it.type === 'programming'
+          const answered = !!it.answered
+          return (
+            <button
+              key={it.problemId}
+              type="button"
+              onClick={() => onJump(it.problemId)}
+              title={`第 ${it.no} 题${isProg ? '（编程）' : answered ? (it.correct ? ' · 答对' : ' · 答错') : ' · 未作答'}`}
+              className={cn(
+                'flex h-8 items-center justify-center rounded-md border text-xs font-semibold tabular-nums transition-colors',
+                isProg
+                  ? 'border-dashed border-border bg-card text-muted-foreground/60 hover:bg-muted/60'
+                  : answered
+                    ? it.correct
+                      ? 'border-emerald-300 bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
+                      : 'border-red-300 bg-red-50 text-red-600 hover:bg-red-100'
+                    : 'border-border bg-white text-muted-foreground hover:border-primary/50 hover:text-foreground',
+              )}
+            >
+              {it.no}
+            </button>
+          )
+        })}
       </div>
     </div>
   )
@@ -202,10 +227,11 @@ function ReviewCard({ item }: { item: PracticeRecordItem }) {
     queryKey: ['oj-problem', item.problemId],
     queryFn: () => api.ojProblem(item.problemId),
   })
-  const wrong = !item.correct
+  const answered = !!item.answered
+  const wrong = answered && !item.correct
   const selected = item.answer as ObjectiveAnswer | null | undefined
-  // 答对：用户所选即正确项（绿色显示）；答错：用服务端下发的正确项
-  const correctVal: ObjectiveAnswer | undefined = wrong
+  // 答对：用户所选即正确项（绿色显示）；答错/未答：用服务端下发的正确项
+  const correctVal: ObjectiveAnswer | undefined = wrong || !answered
     ? (item.correctAnswer as ObjectiveAnswer | undefined)
     : (selected as ObjectiveAnswer | undefined)
 
@@ -215,17 +241,17 @@ function ReviewCard({ item }: { item: PracticeRecordItem }) {
         <span
           className={cn(
             'flex size-5 shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-white',
-            item.correct ? 'bg-emerald-500' : 'bg-red-500',
+            !answered ? 'bg-muted-foreground/50' : item.correct ? 'bg-emerald-500' : 'bg-red-500',
           )}
         >
-          {item.correct ? '✓' : '✗'}
+          {!answered ? '–' : item.correct ? '✓' : '✗'}
         </span>
         <span className="text-sm font-bold tabular-nums">{item.no}.</span>
         <span className="min-w-0 flex-1 truncate text-sm text-muted-foreground">
           {item.title || `题目 #${item.problemId}`}
         </span>
-        <span className={cn('shrink-0 text-xs font-medium', item.correct ? 'text-emerald-600' : 'text-red-500')}>
-          {item.correct ? '回答正确' : '回答错误'}
+        <span className={cn('shrink-0 text-xs font-medium', !answered ? 'text-muted-foreground' : item.correct ? 'text-emerald-600' : 'text-red-500')}>
+          {!answered ? '未作答' : item.correct ? '回答正确' : '回答错误'}
         </span>
       </div>
       {contentQ.isLoading && <p className="py-4 text-center text-xs text-muted-foreground">题目加载中…</p>}

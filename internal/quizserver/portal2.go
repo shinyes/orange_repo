@@ -233,6 +233,7 @@ func (s *Server) handlePortalPracticeSubmissionDetail(c *fiber.Ctx) error {
 		No            int             `json:"no"`
 		Title         string          `json:"title"`
 		Type          string          `json:"type"`
+		Answered      bool            `json:"answered"` // 客观题该次是否作答
 		Correct       bool            `json:"correct"`
 		Answer        json.RawMessage `json:"answer,omitempty"`
 		CorrectAnswer json.RawMessage `json:"correctAnswer,omitempty"`
@@ -242,21 +243,25 @@ func (s *Server) handlePortalPracticeSubmissionDetail(c *fiber.Ctx) error {
 	no := 0
 	for _, it := range items {
 		no++
+		d := itemDetail{
+			ProblemID: it.ProblemID, No: no, Title: it.ProblemTitle, Type: it.ProblemType,
+		}
 		if it.ProblemType == "programming" {
+			// 编程题：导航占位（answered=false）
+			out = append(out, d)
 			continue
 		}
 		snap, ok := byPid[it.ProblemID]
-		if !ok {
-			continue // 该次未作答此题
+		if ok {
+			d.Answered = true
+			d.Correct = snap.Correct
+			d.Answer = snap.Answer
+			if snap.Correct {
+				objCorrect++
+			}
 		}
-		d := itemDetail{
-			ProblemID: it.ProblemID, No: no, Title: it.ProblemTitle,
-			Type: it.ProblemType, Correct: snap.Correct, Answer: snap.Answer,
-		}
-		if snap.Correct {
-			objCorrect++
-		} else {
-			// 答错：附正确项（用户已交卷可见）
+		// 答错或未作答：附正确项（用户已交卷可见）
+		if !d.Answered || !d.Correct {
 			if env, err := s.QS.Repo.GetObjectiveAnswer(it.ProblemID); err == nil {
 				if env.AnswerIndex != nil {
 					b, _ := json.Marshal(*env.AnswerIndex)

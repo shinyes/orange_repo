@@ -148,13 +148,15 @@ export interface PracticeSubmission {
   createdAt: string
 }
 
-/** 答题卡回看：一次交卷的逐题明细 */
+/** 答题卡回看：一次交卷的逐题明细（练习全卷条目） */
 export interface PracticeRecordItem {
   problemId: number
   no: number
   title?: string
   type: 'single_choice' | 'true_false' | 'programming'
-  /** 该次是否答对（客观题；未作答的题不出现在列表） */
+  /** 客观题该次是否作答（编程题恒 false） */
+  answered?: boolean
+  /** 该次是否答对（仅作答客观题有意义） */
   correct: boolean
   /** 用户所选（客观题；单选=索引 number，判断=boolean） */
   answer?: number | boolean
