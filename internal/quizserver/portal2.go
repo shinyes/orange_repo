@@ -3,8 +3,11 @@ package quizserver
 
 import (
 	"encoding/json"
+	"errors"
 
 	"github.com/gofiber/fiber/v2"
+
+	"orangeoj/internal/quizstore"
 )
 
 // ---------- 空间练习（整卷交卷） ----------
@@ -80,11 +83,13 @@ func (s *Server) handlePortalPracticeSubmit(c *fiber.Ctx) error {
 		Type          string          `json:"type"`
 		CorrectAnswer json.RawMessage `json:"correctAnswer,omitempty"`
 	}
-	// 快照元素：逐题含 correct（交卷记录据此写 student_solved 通过记录）
+	// 快照元素：逐题含 correct 与用户所选 answer（交卷记录据此写 student_solved 通过记录，
+	// 并支持答题卡回看逐题作答）
 	type snapshotItem struct {
-		ProblemID int64  `json:"problemId"`
-		Correct   bool   `json:"correct"`
-		UUID      string `json:"uuid,omitempty"`
+		ProblemID int64           `json:"problemId"`
+		Correct   bool            `json:"correct"`
+		UUID      string          `json:"uuid,omitempty"`
+		Answer    json.RawMessage `json:"answer,omitempty"`
 	}
 	results := make([]result, 0, len(req.Answers))
 	snapItems := make([]snapshotItem, 0, len(req.Answers))
@@ -116,7 +121,8 @@ func (s *Server) handlePortalPracticeSubmit(c *fiber.Ctx) error {
 			}
 		}
 		results = append(results, r)
-		snapItems = append(snapItems, snapshotItem{ProblemID: a.ProblemID, Correct: ok2, UUID: info.uuid})
+		ansJSON, _ := json.Marshal(a.Answer)
+		snapItems = append(snapItems, snapshotItem{ProblemID: a.ProblemID, Correct: ok2, UUID: info.uuid, Answer: ansJSON})
 		if ok2 {
 			correctCount++
 		}
@@ -158,6 +164,118 @@ func (s *Server) handlePortalPracticeSubmissions(c *fiber.Ctx) error {
 		return err
 	}
 	return respondData(c, fiber.StatusOK, fiber.Map{"submissions": subs})
+}
+
+// handlePortalPracticeSubmissionDetail GET /api/portal/space/:id/practice/:pid/submissions/:sid
+// → 答题卡回看：该次交卷快照（逐题对错/所选答案）与练习条目合并的逐题明细。
+func (s *Server) handlePortalPracticeSubmissionDetail(c *fiber.Ctx) error {
+	spaceID, err := s.resolveSpace(c)
+	if err != nil {
+		return err
+	}
+	pid, err := paramID(c, "pid")
+	if err != nil {
+		return respondError(c, fiber.StatusBadRequest, "invalid practice id")
+	}
+	sid, err := paramID(c, "sid")
+	if err != nil {
+		return respondError(c, fiber.StatusBadRequest, "invalid submission id")
+	}
+	user := currentUser(c)
+	p, items, err := s.QS.Repo.GetSpacePracticeBrief(pid, viewerID(user))
+	if err != nil {
+		return respondError(c, fiber.StatusNotFound, "练习不存在")
+	}
+	if p.SpaceID != spaceID {
+		return respondError(c, fiber.StatusNotFound, "练习不存在")
+	}
+	// 提交记录归属校验（只能看自己的）
+	subs, err := s.QS.ListPracticeSubmissions(pid, user.ID)
+	if err != nil {
+		return err
+	}
+	var createdAt string
+	owned := false
+	for _, sb := range subs {
+		if sb.ID == sid {
+			createdAt = sb.CreatedAt
+			owned = true
+			break
+		}
+	}
+	if !owned {
+		return respondError(c, fiber.StatusNotFound, "提交记录不存在")
+	}
+	snapshot, err := s.QS.GetPracticeSubmission(sid)
+	if err != nil {
+		if errors.Is(err, quizstore.ErrNotFound) {
+			return respondError(c, fiber.StatusNotFound, "提交记录不存在")
+		}
+		return err
+	}
+	// 快照 → map
+	type snapItem struct {
+		ProblemID int64           `json:"problemId"`
+		Correct   bool            `json:"correct"`
+		UUID      string          `json:"uuid,omitempty"`
+		Answer    json.RawMessage `json:"answer,omitempty"`
+	}
+	var snaps []snapItem
+	if err := json.Unmarshal([]byte(snapshot), &snaps); err != nil {
+		return respondError(c, fiber.StatusInternalServerError, "快照解析失败")
+	}
+	byPid := map[int64]snapItem{}
+	for _, s2 := range snaps {
+		byPid[s2.ProblemID] = s2
+	}
+	type itemDetail struct {
+		ProblemID     int64           `json:"problemId"`
+		No            int             `json:"no"`
+		Title         string          `json:"title"`
+		Type          string          `json:"type"`
+		Correct       bool            `json:"correct"`
+		Answer        json.RawMessage `json:"answer,omitempty"`
+		CorrectAnswer json.RawMessage `json:"correctAnswer,omitempty"`
+	}
+	out := []itemDetail{}
+	objCorrect := 0
+	no := 0
+	for _, it := range items {
+		no++
+		if it.ProblemType == "programming" {
+			continue
+		}
+		snap, ok := byPid[it.ProblemID]
+		if !ok {
+			continue // 该次未作答此题
+		}
+		d := itemDetail{
+			ProblemID: it.ProblemID, No: no, Title: it.ProblemTitle,
+			Type: it.ProblemType, Correct: snap.Correct, Answer: snap.Answer,
+		}
+		if snap.Correct {
+			objCorrect++
+		} else {
+			// 答错：附正确项（用户已交卷可见）
+			if env, err := s.QS.Repo.GetObjectiveAnswer(it.ProblemID); err == nil {
+				if env.AnswerIndex != nil {
+					b, _ := json.Marshal(*env.AnswerIndex)
+					d.CorrectAnswer = b
+				} else if env.Answer != nil {
+					b, _ := json.Marshal(*env.Answer)
+					d.CorrectAnswer = b
+				}
+			}
+		}
+		out = append(out, d)
+	}
+	return respondData(c, fiber.StatusOK, fiber.Map{
+		"submissionId":    sid,
+		"practiceId":      pid,
+		"createdAt":       createdAt,
+		"objectiveCorrect": objCorrect,
+		"items":           out,
+	})
 }
 
 // ---------- 空间刷题 ----------

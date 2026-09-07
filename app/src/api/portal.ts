@@ -11,6 +11,7 @@ import type {
   OjProblem,
   PortalSpace,
   PracticeDetail,
+  PracticeRecordDetail,
   PracticeSubmission,
   PracticeSubmitResult,
   QuizAnswerResult,
@@ -54,6 +55,8 @@ export const portalApi = {
     ),
   portalPracticeSubmissions: (spaceId: number | string, practiceId: number | string) =>
     req<{ submissions: PracticeSubmission[] }>(`/api/portal/space/${spaceId}/practice/${practiceId}/submissions`),
+  portalPracticeSubmissionDetail: (spaceId: number | string, practiceId: number | string, submissionId: number | string) =>
+    req<PracticeRecordDetail>(`/api/portal/space/${spaceId}/practice/${practiceId}/submissions/${submissionId}`),
 
   // ---- 门户：空间刷题 ----
   portalSpaceQuizzes: (spaceId: number | string) => req<{ quizzes: QuizBrief[] }>(`/api/portal/space/${spaceId}/quizzes`),

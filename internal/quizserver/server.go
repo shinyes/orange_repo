@@ -131,6 +131,7 @@ func (s *Server) RegisterRoutes(app *fiber.App) {
 	portal.Get("/space/:id/practice/:pid", s.handlePortalPractice)
 	portal.Post("/space/:id/practice/:pid/submit", s.handlePortalPracticeSubmit)
 	portal.Get("/space/:id/practice/:pid/submissions", s.handlePortalPracticeSubmissions)
+	portal.Get("/space/:id/practice/:pid/submissions/:sid", s.handlePortalPracticeSubmissionDetail)
 	portal.Get("/space/:id/quizzes", s.handlePortalSpaceQuizzes)
 	portal.Get("/quiz/:qid/problem", s.handlePortalQuizProblem)
 	portal.Post("/quiz/:qid/answer", s.handlePortalQuizAnswer)

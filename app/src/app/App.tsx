@@ -21,6 +21,7 @@ import { TrainingList } from '@/pages/portal/TrainingList'
 import { TrainingDetail } from '@/pages/portal/TrainingDetail'
 import { PracticeList } from '@/pages/portal/PracticeList'
 import { PracticeSolve } from '@/pages/portal/PracticeSolve'
+import { PracticeRecordPage } from '@/pages/portal/PracticeRecordPage'
 import { QuizList } from '@/pages/portal/QuizList'
 import { QuizSolve } from '@/pages/portal/QuizSolve'
 import { RankPage } from '@/pages/portal/RankPage'
@@ -106,6 +107,7 @@ export default function App() {
               <Route path="/s/:spaceId/training/:trainingId" element={<TrainingDetail />} />
               <Route path="/s/:spaceId/training/:trainingId/q/:no" element={<TrainingDetail />} />
               <Route path="/s/:spaceId/practice/:practiceId" element={<PracticeSolve />} />
+              <Route path="/s/:spaceId/practice/:practiceId/record/:submissionId" element={<PracticeRecordPage />} />
               <Route path="/s/:spaceId/quiz/:quizId" element={<QuizSolve />} />
 
               {/* 管理区：仅管理员（global_admin/domain_admin），member 重定向回门户 */}

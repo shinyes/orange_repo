@@ -148,6 +148,28 @@ export interface PracticeSubmission {
   createdAt: string
 }
 
+/** 答题卡回看：一次交卷的逐题明细 */
+export interface PracticeRecordItem {
+  problemId: number
+  no: number
+  title?: string
+  type: 'single_choice' | 'true_false' | 'programming'
+  /** 该次是否答对（客观题；未作答的题不出现在列表） */
+  correct: boolean
+  /** 用户所选（客观题；单选=索引 number，判断=boolean） */
+  answer?: number | boolean
+  /** 答错时附正确项 */
+  correctAnswer?: number | boolean
+}
+
+export interface PracticeRecordDetail {
+  submissionId: number
+  practiceId: number
+  createdAt: string
+  objectiveCorrect: number
+  items: PracticeRecordItem[]
+}
+
 // ---------- 空间刷题（单题随机流） ----------
 
 export interface QuizProblem {

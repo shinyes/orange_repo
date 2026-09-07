@@ -755,14 +755,20 @@ function HistoryCard({ sid, pid, onViewAll }: { sid: number; pid: number; onView
       {shown.length > 0 && (
         <div className={cn('mt-1', shown.length >= 4 && 'max-h-[260px] overflow-y-auto pr-0.5')}>
           {shown.map((s) => (
-            <div key={s.id} className="flex items-center gap-2 py-1.5 text-xs">
+            <Link
+              key={s.id}
+              to={`/s/${sid}/practice/${pid}/record/${s.id}`}
+              title="点击查看该次答题卡"
+              className="flex items-center gap-2 rounded-md py-1.5 pr-1 text-xs transition-colors hover:bg-orange-50/60"
+            >
               <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-orange-50 text-[10px] font-bold tabular-nums text-orange-600">
                 {s.objectiveCorrect}
               </span>
               <span className="min-w-0 truncate text-muted-foreground">答对 {s.objectiveCorrect} 题</span>
               <span className="ml-auto shrink-0 tabular-nums text-muted-foreground/80">{formatTime(s.createdAt)}</span>
-            </div>
+            </Link>
           ))}
+          <p className="mt-1 text-[10px] text-muted-foreground/70">点击记录查看答题卡</p>
         </div>
       )}
       {list.length > 8 && (
@@ -797,11 +803,16 @@ function PracticeHistoryDialog({ sid, pid, open, onClose }: { sid: number; pid: 
             <p className="py-6 text-center text-xs text-muted-foreground">暂无提交记录</p>
           )}
           {list.map((s) => (
-            <div key={s.id} className="flex items-center gap-3 border-b px-2 py-2.5 text-xs last:border-b-0">
+            <Link
+              key={s.id}
+              to={`/s/${sid}/practice/${pid}/record/${s.id}`}
+              className="flex items-center gap-3 border-b px-2 py-2.5 text-xs transition-colors last:border-b-0 hover:bg-orange-50/50"
+            >
               <span className="tabular-nums text-muted-foreground">#{s.id}</span>
               <span className="font-medium text-emerald-600">答对 {s.objectiveCorrect} 题</span>
               <span className="ml-auto tabular-nums text-muted-foreground">{formatTime(s.createdAt)}</span>
-            </div>
+              <span className="text-[10px] text-orange-600">查看答题卡 →</span>
+            </Link>
           ))}
         </div>
       </DialogContent>
