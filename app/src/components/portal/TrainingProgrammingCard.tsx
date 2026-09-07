@@ -196,7 +196,6 @@ export function TrainingProgrammingCard({ problemId, trainingId, solved, onSolve
         <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={() => setHistoryOpen(true)}>
           <HistoryIcon className="size-3.5" /> 测评记录
         </Button>
-        <span className="ml-auto text-[11px] text-muted-foreground">运行/测试/提交均真实评测</span>
       </div>
 
       {/* 判定横幅 */}

@@ -12,6 +12,9 @@ import {
   Code2Icon,
   Grid3X3Icon,
   Loader2Icon,
+  RotateCcwIcon,
+  ZoomInIcon,
+  ZoomOutIcon,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -67,6 +70,8 @@ function TrainingFlow({ sid, tid, data }: {
   const all = useMemo(() => groups.flatMap((g) => g.items), [groups])
   const [activeIdx, setActiveIdx] = useState(0)
   const [navOpen, setNavOpen] = useState(false) // 移动端导航浮窗
+  // 题面字号缩放（zoom 视觉缩放整块题面）
+  const [statementScale, setStatementScale] = useState(1)
   const item = all[activeIdx] ?? null
 
   useEffect(() => {
@@ -111,10 +116,6 @@ function TrainingFlow({ sid, tid, data }: {
         <div className="flex min-h-0 flex-1 flex-col md:flex-row">
           {/* 左训练导航（PC） */}
           <aside className="hidden w-48 shrink-0 overflow-y-auto border-r bg-muted/20 p-2.5 md:block">
-            <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
-              <Code2Icon className="size-3.5 text-primary/60" />
-              <span className="truncate">{training.title}</span>
-            </div>
             <div className="space-y-3">
               {groups.map((g) => {
                 if (g.items.length === 0) return null
@@ -166,8 +167,9 @@ function TrainingFlow({ sid, tid, data }: {
               (itemObjective ? (
                 <div className="h-full overflow-y-auto">
                   <PageContainer className="py-4">
-                    {/* 题目头 */}
+                    {/* 题目头（最左=题面文字缩放控制） */}
                     <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                      <ZoomControls scale={statementScale} onChange={setStatementScale} />
                       <span className="rounded bg-muted px-1.5 py-0.5 font-medium">{item.chapterTitle}</span>
                       <span>第 {activeIdx + 1} / {all.length} 题</span>
                       <span>{training.maxAttempts > 0 ? `限答 ${training.maxAttempts} 次` : '不限次'}</span>
@@ -175,11 +177,13 @@ function TrainingFlow({ sid, tid, data }: {
                         <span className="inline-flex items-center gap-1 text-red-600">已达上限，可回顾</span>
                       )}
                     </div>
-                    <ObjectiveCard
-                      key={`${item.problemId}`}
-                      sid={sid} tid={tid} item={item} maxAttempts={training.maxAttempts}
-                      onAnswered={invalidate}
-                    />
+                    <div style={{ zoom: statementScale }}>
+                      <ObjectiveCard
+                        key={`${item.problemId}`}
+                        sid={sid} tid={tid} item={item} maxAttempts={training.maxAttempts}
+                        onAnswered={invalidate}
+                      />
+                    </div>
                   </PageContainer>
                 </div>
               ) : (
@@ -188,10 +192,13 @@ function TrainingFlow({ sid, tid, data }: {
                     <PageContainer className="py-4">
                       {/* 题目头 */}
                       <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                        <ZoomControls scale={statementScale} onChange={setStatementScale} />
                         <span className="rounded bg-muted px-1.5 py-0.5 font-medium">{item.chapterTitle}</span>
                         <span>第 {activeIdx + 1} / {all.length} 题</span>
                       </div>
-                      <ProgrammingStatement problemId={item.problemId} itemSolved={itemSolved} />
+                      <div style={{ zoom: statementScale }}>
+                        <ProgrammingStatement problemId={item.problemId} itemSolved={itemSolved} />
+                      </div>
                     </PageContainer>
                   }
                   right={
@@ -457,6 +464,42 @@ function ObjectiveCard({ sid, tid, item, maxAttempts, onAnswered }: {
         </p>
       )}
     </div>
+  )
+}
+
+// 题面文字缩放控制（放大/缩小/重置；作用于整块题面 zoom）。
+function ZoomControls({ scale, onChange }: { scale: number; onChange: (s: number) => void }) {
+  const step = 0.1
+  return (
+    <span className="flex shrink-0 items-center gap-0.5 rounded-lg border bg-background px-1 py-0.5">
+      <button
+        type="button"
+        title="缩小题目文字"
+        className="flex size-5 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-40"
+        disabled={scale <= 0.7}
+        onClick={() => onChange(Math.round((scale - step) * 100) / 100)}
+      >
+        <ZoomOutIcon className="size-3.5" />
+      </button>
+      <span className="w-9 text-center text-[10px] tabular-nums">{Math.round(scale * 100)}%</span>
+      <button
+        type="button"
+        title="放大题目文字"
+        className="flex size-5 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-40"
+        disabled={scale >= 2}
+        onClick={() => onChange(Math.round((scale + step) * 100) / 100)}
+      >
+        <ZoomInIcon className="size-3.5" />
+      </button>
+      <button
+        type="button"
+        title="重置题目文字大小"
+        className="flex size-5 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        onClick={() => onChange(1)}
+      >
+        <RotateCcwIcon className="size-3" />
+      </button>
+    </span>
   )
 }
 
