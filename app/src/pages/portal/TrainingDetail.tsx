@@ -390,6 +390,12 @@ function ObjectiveCard({ sid, tid, item, maxAttempts, onAnswered }: {
   })
 
   const readOnly = item.solved || (item.locked && maxAttempts > 0 && item.attempts >= maxAttempts)
+  // 回顾态：无本地判分但服务端带正确答案（此前答过）→ 静默标出正确项
+  const reviewFeedback = readOnly && !feedback && item.correctAnswer
+    ? ({ correct: false, correctAnswer: item.correctAnswer } as { correct: boolean; correctAnswer?: CorrectAnswer })
+    : null
+  const showFeedback = feedback ?? reviewFeedback
+  const showSilent = reviewFeedback != null
 
   async function submit() {
     if (busy || feedback || readOnly || selected == null) return
@@ -431,9 +437,8 @@ function ObjectiveCard({ sid, tid, item, maxAttempts, onAnswered }: {
           locked={readOnly}
           busy={busy}
           selected={selected}
-          feedback={feedback}
-          // 回顾（已通过/达限）无新判分时沿用缓存结果静默展示红绿
-          silent={readOnly && cached != null && feedback === cached.feedback}
+          feedback={showFeedback}
+          silent={showSilent}
           onSelect={(a) => setSelected(a)}
         />
       )}

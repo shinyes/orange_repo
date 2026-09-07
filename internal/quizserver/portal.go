@@ -152,11 +152,18 @@ func (s *Server) handlePortalTraining(c *fiber.Ctx) error {
 		return respondError(c, fiber.StatusNotFound, "训练不存在")
 	}
 	// 用户作答状态（客观题；member 才有尝试记录；管理员无作答）
+	// 回顾答案：仅当该题已通过或已达上限时下发（答完/锁定后展示正确答案是合理学习行为，
+	// 未作答/还有次数时不下发，避免泄露判题密钥）。
+	type answerView struct {
+		AnswerIndex *int  `json:"answerIndex,omitempty"`
+		Answer      *bool `json:"answer,omitempty"`
+	}
 	type itemView struct {
 		quizstore.SpaceTrainingItem
-		Solved   bool `json:"solved"`
-		Attempts int  `json:"attempts"`
-		Locked   bool `json:"locked"` // 达上限未对=红；或已对=绿锁定
+		Solved        bool        `json:"solved"`
+		Attempts      int         `json:"attempts"`
+		Locked        bool        `json:"locked"` // 达上限未对=红；或已对=绿锁定
+		CorrectAnswer *answerView `json:"correctAnswer,omitempty"`
 	}
 	type chapterView struct {
 		ID     int64      `json:"id"`
@@ -175,6 +182,13 @@ func (s *Server) handlePortalTraining(c *fiber.Ctx) error {
 					iv.Attempts = st.Attempts
 					max := tr.MaxAttempts
 					iv.Locked = st.Solved || (max > 0 && st.Attempts >= max)
+					// 已通过/达限 → 附正确答案供回顾标色
+					if iv.Solved || iv.Locked {
+						if env, aerr := s.QS.Repo.GetAnswer(it.ProblemID); aerr == nil && env != nil {
+							av := &answerView{AnswerIndex: env.AnswerIndex, Answer: env.Answer}
+							iv.CorrectAnswer = av
+						}
+					}
 				}
 			}
 			cv.Items = append(cv.Items, iv)

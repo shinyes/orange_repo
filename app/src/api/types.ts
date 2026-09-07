@@ -76,6 +76,8 @@ export interface TrainingItemView {
   attempts: number
   /** 达上限未对=红锁；已答对=绿锁 */
   locked: boolean
+  /** 已通过/达限时服务端下发的正确答案（回顾标色用；未作答不下发） */
+  correctAnswer?: CorrectAnswer
 }
 
 export interface ChapterView {
