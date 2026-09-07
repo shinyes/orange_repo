@@ -15,22 +15,19 @@ const DRAFT_SAVE_DEBOUNCE_MS = 2000
 /** 云端保存计时器（按 题目×语言 独立计时，跨组件实例共用同一 key 语义）。 */
 const draftTimers = new Map<string, ReturnType<typeof setTimeout>>()
 
-/** 无题目级模板时的通用起始代码（cpp=bits/stdc++.h+main 骨架 / python=TODO 占位）。 */
-export function genericStarter(lang: CodeLang): string {
-  if (lang === 'cpp') {
-    return '// C++\n#include <bits/stdc++.h>\nusing namespace std;\n\nint main() {\n    \n    return 0;\n}\n'
-  }
-  return '# TODO\n'
+/** 无题目级模板时的兜底：空串（设计上不提供默认模板——留空即空白编辑器，学生自己写）。 */
+export function genericStarter(_lang: CodeLang): string {
+  return ''
 }
 
-/** 起始代码解析：题目级模板（starterCpp/starterPy）非空用之，否则通用模板。 */
+/** 起始代码解析：题目级模板（starterCpp/starterPy）非空用之，否则空（无默认模板）。 */
 export function resolveStarter(
   lang: CodeLang,
   problem?: { starterCpp?: string; starterPy?: string } | null,
 ): string {
   const t = problem ? (lang === 'cpp' ? problem.starterCpp : problem.starterPy) : undefined
   if (t != null && t.trim() !== '') return t
-  return genericStarter(lang)
+  return ''
 }
 
 /**

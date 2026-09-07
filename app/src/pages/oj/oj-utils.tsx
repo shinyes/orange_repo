@@ -51,11 +51,3 @@ export function problemStatusBadge(completed: boolean): { text: string; cls: str
     ? { text: '已完成', cls: 'text-emerald-700 bg-emerald-50 border-emerald-200' }
     : { text: '未完成', cls: 'text-muted-foreground bg-muted border-border' }
 }
-
-// 生成编程题起始模板。
-export function starterCode(lang: string): string {
-  if (lang === 'cpp') {
-    return '#include <iostream>\nusing namespace std;\n\nint main() {\n    // TODO\n    return 0;\n}\n'
-  }
-  return '# TODO\n'
-}
