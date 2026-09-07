@@ -20,7 +20,7 @@ func (s *Server) handlePortalPractice(c *fiber.Ctx) error {
 	if err != nil {
 		return respondError(c, fiber.StatusBadRequest, "invalid practice id")
 	}
-	p, items, err := s.QS.Repo.GetSpacePracticeBrief(pid)
+	p, items, err := s.QS.Repo.GetSpacePracticeBrief(pid, viewerID(currentUser(c)))
 	if err != nil {
 		return respondError(c, fiber.StatusNotFound, "练习不存在")
 	}
@@ -50,7 +50,7 @@ func (s *Server) handlePortalPracticeSubmit(c *fiber.Ctx) error {
 		return respondError(c, fiber.StatusBadRequest, "invalid practice id")
 	}
 	user := currentUser(c)
-	p, items, err := s.QS.Repo.GetSpacePracticeBrief(pid)
+	p, items, err := s.QS.Repo.GetSpacePracticeBrief(pid, viewerID(currentUser(c)))
 	if err != nil {
 		return respondError(c, fiber.StatusNotFound, "练习不存在")
 	}
@@ -146,7 +146,7 @@ func (s *Server) handlePortalPracticeSubmissions(c *fiber.Ctx) error {
 		return respondError(c, fiber.StatusBadRequest, "invalid practice id")
 	}
 	user := currentUser(c)
-	p, _, err := s.QS.Repo.GetSpacePracticeBrief(pid)
+	p, _, err := s.QS.Repo.GetSpacePracticeBrief(pid, viewerID(currentUser(c)))
 	if err != nil {
 		return respondError(c, fiber.StatusNotFound, "练习不存在")
 	}
@@ -168,7 +168,7 @@ func (s *Server) handlePortalSpaceQuizzes(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	quizzes, err := s.QS.Repo.ListSpaceQuizzesBrief(spaceID)
+	quizzes, err := s.QS.Repo.ListSpaceQuizzesBrief(spaceID, viewerID(currentUser(c)))
 	if err != nil {
 		return err
 	}
@@ -191,6 +191,13 @@ func (s *Server) handlePortalQuizProblem(c *fiber.Ctx) error {
 	}
 	if _, err := s.resolveSpaceCtx(c, spaceID); err != nil {
 		return err
+	}
+	vis, err := s.QS.Repo.QuizVisibleForUser(qid, viewerID(user))
+	if err != nil {
+		return respondError(c, fiber.StatusInternalServerError, err.Error())
+	}
+	if !vis {
+		return respondError(c, fiber.StatusNotFound, "刷题项目不存在")
 	}
 	ids, err := s.quizProblemIDs(qid)
 	if err != nil {
@@ -241,6 +248,13 @@ func (s *Server) handlePortalQuizAnswer(c *fiber.Ctx) error {
 	}
 	if _, err := s.resolveSpaceCtx(c, spaceID); err != nil {
 		return err
+	}
+	vis, err := s.QS.Repo.QuizVisibleForUser(qid, viewerID(user))
+	if err != nil {
+		return respondError(c, fiber.StatusInternalServerError, err.Error())
+	}
+	if !vis {
+		return respondError(c, fiber.StatusNotFound, "刷题项目不存在")
 	}
 	var req struct {
 		ProblemID int64           `json:"problemId"`

@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 )
 
 // nonNilSlice 空结果返回空切片而非 nil——nil 切片 JSON 序列化为 null，
@@ -155,11 +156,19 @@ func (r *RepoReader) DomainSpaceIDs(domainID int64) ([]int64, error) {
 
 // ---------- 空间训练/练习/刷题结构（门户只读） ----------
 
-// ListSpaceTrainingsBrief 空间训练列表（含题量）。
-func (r *RepoReader) ListSpaceTrainingsBrief(spaceID int64) ([]SpaceTrainingBrief, error) {
+// visibleClause 可见性过滤 SQL 片段（member 需在可见名单；userID<=0=管理员不过滤）。
+func visibleClause(table, kind, alias string, userID int64) string {
+	if userID <= 0 {
+		return ""
+	}
+	return fmt.Sprintf(" AND EXISTS(SELECT 1 FROM %s v WHERE v.%s_id=%s.id AND v.user_id=%d)", table, kind, alias, userID)
+}
+
+// ListSpaceTrainingsBrief 空间训练列表（含题量；member 仅见已分配可见的）。
+func (r *RepoReader) ListSpaceTrainingsBrief(spaceID, userID int64) ([]SpaceTrainingBrief, error) {
 	rows, err := r.DB.Query(`SELECT t.id,t.space_id,t.title,t.description,t.tags_json,t.max_attempts,
 		(SELECT COUNT(*) FROM space_training_items i JOIN space_training_chapters c ON i.chapter_id=c.id WHERE c.training_id=t.id)
-		FROM space_trainings t WHERE t.space_id=? ORDER BY t.id`, spaceID)
+		FROM space_trainings t WHERE t.space_id=?`+visibleClause("space_training_visible", "training", "t", userID)+` ORDER BY t.id`, spaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -178,12 +187,13 @@ func (r *RepoReader) ListSpaceTrainingsBrief(spaceID int64) ([]SpaceTrainingBrie
 }
 
 // GetSpaceTrainingBrief 单训练（含章节+条目题目类型/uuid——作答限次判定）。
-func (r *RepoReader) GetSpaceTrainingBrief(trainingID int64) (*SpaceTrainingBrief, []SpaceTrainingChapter, error) {
+// userID>0 时校验可见性（member 未分配=ErrNotFound）。
+func (r *RepoReader) GetSpaceTrainingBrief(trainingID, userID int64) (*SpaceTrainingBrief, []SpaceTrainingChapter, error) {
 	var b SpaceTrainingBrief
 	var tags string
 	err := r.DB.QueryRow(`SELECT t.id,t.space_id,t.title,t.description,t.tags_json,t.max_attempts,
 		(SELECT COUNT(*) FROM space_training_items i JOIN space_training_chapters c ON i.chapter_id=c.id WHERE c.training_id=t.id)
-		FROM space_trainings t WHERE t.id=?`, trainingID).
+		FROM space_trainings t WHERE t.id=?`+visibleClause("space_training_visible", "training", "t", userID)+``, trainingID).
 		Scan(&b.ID, &b.SpaceID, &b.Title, &b.Description, &tags, &b.MaxAttempts, &b.ProblemCount)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil, ErrNotFound
@@ -252,11 +262,11 @@ func (r *RepoReader) spaceTrainingItems(chapterID int64) ([]SpaceTrainingItem, e
 	return out, nil
 }
 
-// ListSpacePracticesBrief 空间练习列表。
-func (r *RepoReader) ListSpacePracticesBrief(spaceID int64) ([]SpacePracticeBrief, error) {
+// ListSpacePracticesBrief 空间练习列表（member 仅见已分配的）。
+func (r *RepoReader) ListSpacePracticesBrief(spaceID, userID int64) ([]SpacePracticeBrief, error) {
 	rows, err := r.DB.Query(`SELECT p.id,p.space_id,p.title,p.description,p.tags_json,
 		(SELECT COUNT(*) FROM space_practice_items i WHERE i.practice_id=p.id)
-		FROM space_practices p WHERE p.space_id=? ORDER BY p.id`, spaceID)
+		FROM space_practices p WHERE p.space_id=?`+visibleClause("space_practice_visible", "practice", "p", userID)+` ORDER BY p.id`, spaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -274,13 +284,13 @@ func (r *RepoReader) ListSpacePracticesBrief(spaceID int64) ([]SpacePracticeBrie
 	return nonNilSlice(out), rows.Err()
 }
 
-// GetSpacePracticeBrief 单练习（含条目）。
-func (r *RepoReader) GetSpacePracticeBrief(practiceID int64) (*SpacePracticeBrief, []SpacePracticeItem, error) {
+// GetSpacePracticeBrief 单练习（含条目；userID>0 校验可见性）。
+func (r *RepoReader) GetSpacePracticeBrief(practiceID, userID int64) (*SpacePracticeBrief, []SpacePracticeItem, error) {
 	var b SpacePracticeBrief
 	var tags string
 	err := r.DB.QueryRow(`SELECT p.id,p.space_id,p.title,p.description,p.tags_json,
 		(SELECT COUNT(*) FROM space_practice_items i WHERE i.practice_id=p.id)
-		FROM space_practices p WHERE p.id=?`, practiceID).
+		FROM space_practices p WHERE p.id=?`+visibleClause("space_practice_visible", "practice", "p", userID)+``, practiceID).
 		Scan(&b.ID, &b.SpaceID, &b.Title, &b.Description, &tags, &b.ProblemCount)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil, ErrNotFound
@@ -324,10 +334,10 @@ func (r *RepoReader) GetSpacePracticeBrief(practiceID int64) (*SpacePracticeBrie
 	return &b, items, nil
 }
 
-// ListSpaceQuizzesBrief 空间刷题项目列表。
-func (r *RepoReader) ListSpaceQuizzesBrief(spaceID int64) ([]SpaceQuizBrief, error) {
+// ListSpaceQuizzesBrief 空间刷题项目列表（member 仅见已分配的）。
+func (r *RepoReader) ListSpaceQuizzesBrief(spaceID, userID int64) ([]SpaceQuizBrief, error) {
 	rows, err := r.DB.Query(`SELECT id,space_id,title,tags_json,source_type,repo_kind,repo_id
-		FROM space_quizzes WHERE space_id=? ORDER BY id`, spaceID)
+		FROM space_quizzes WHERE space_id=?`+visibleClause("space_quiz_visible", "quiz", "space_quizzes", userID)+` ORDER BY id`, spaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -343,6 +353,38 @@ func (r *RepoReader) ListSpaceQuizzesBrief(spaceID int64) ([]SpaceQuizBrief, err
 		out = append(out, b)
 	}
 	return nonNilSlice(out), rows.Err()
+}
+
+// QuizVisibleForUser 该用户是否可见某刷题项目（作答流校验；userID<=0 管理员恒可见）。
+func (r *RepoReader) QuizVisibleForUser(quizID, userID int64) (bool, error) {
+	if userID <= 0 {
+		return true, nil
+	}
+	var n int
+	err := r.DB.QueryRow(`SELECT COUNT(1) FROM space_quiz_visible v WHERE v.quiz_id=? AND v.user_id=?`, quizID, userID).Scan(&n)
+	if err != nil {
+		return false, err
+	}
+	return n > 0, nil
+}
+
+// TrainingVisibleForUser / PracticeVisibleForUser 作答流校验（管理员恒可见）。
+func (r *RepoReader) TrainingVisibleForUser(trainingID, userID int64) (bool, error) {
+	if userID <= 0 {
+		return true, nil
+	}
+	var n int
+	err := r.DB.QueryRow(`SELECT COUNT(1) FROM space_training_visible v WHERE v.training_id=? AND v.user_id=?`, trainingID, userID).Scan(&n)
+	return n > 0, err
+}
+
+func (r *RepoReader) PracticeVisibleForUser(practiceID, userID int64) (bool, error) {
+	if userID <= 0 {
+		return true, nil
+	}
+	var n int
+	err := r.DB.QueryRow(`SELECT COUNT(1) FROM space_practice_visible v WHERE v.practice_id=? AND v.user_id=?`, practiceID, userID).Scan(&n)
+	return n > 0, err
 }
 
 // decodeRepoTags 解析主库 tags_json（与 store.decodeTags 等价，避免跨包私有依赖）。

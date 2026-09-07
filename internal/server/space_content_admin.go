@@ -823,3 +823,87 @@ func (s *Server) handleDeleteSpaceQuiz(c *fiber.Ctx) error {
 	}
 	return c.SendStatus(fiber.StatusNoContent)
 }
+
+// ---------- 可见成员授权（训练/练习/刷题：默认无成员可见，管理员分配） ----------
+
+// visibleTarget 按 URL 段识别 kind 与资源 id 并做归属校验，返回 (实际spaceID, itemID, table, err)。
+func (s *Server) visibleTarget(c *fiber.Ctx) (int64, int64, string, error) {
+	user := currentUser(c)
+	var item int64
+	var table string
+	var check func(int64) (int64, error)
+	if tid := c.Params("tid"); tid != "" {
+		id, e := paramID(c, "tid")
+		if e != nil { return 0, 0, "", respondError(c, fiber.StatusBadRequest, "invalid id") }
+		item, table = id, "space_training_visible"
+		check = s.Store.SpaceIDOfTraining
+	} else if pid := c.Params("pid"); pid != "" {
+		id, e := paramID(c, "pid")
+		if e != nil { return 0, 0, "", respondError(c, fiber.StatusBadRequest, "invalid id") }
+		item, table = id, "space_practice_visible"
+		check = s.Store.SpaceIDOfPractice
+	} else if qid := c.Params("qid"); qid != "" {
+		id, e := paramID(c, "qid")
+		if e != nil { return 0, 0, "", respondError(c, fiber.StatusBadRequest, "invalid id") }
+		item, table = id, "space_quiz_visible"
+		check = s.Store.SpaceIDOfQuiz
+	} else {
+		return 0, 0, "", respondError(c, fiber.StatusNotFound, "资源不存在")
+	}
+	as, err := check(item)
+	if err != nil {
+		if err == store.ErrNotFound {
+			return 0, 0, "", respondError(c, fiber.StatusNotFound, "资源不存在")
+		}
+		return 0, 0, "", err
+	}
+	if aerr := s.requireSpaceAccess(c, user, as); aerr != nil {
+		return 0, 0, "", aerr
+	}
+	return as, item, table, nil
+}
+
+// handleGetVisibleUsers GET .../visible → 可见成员名单。
+func (s *Server) handleGetVisibleUsers(c *fiber.Ctx) error {
+	_, itemID, table, err := s.visibleTarget(c)
+	if err != nil {
+		return err
+	}
+	ids, err := s.Store.VisibleUserIDs(table, itemID)
+	if err != nil {
+		return err
+	}
+	return respondData(c, fiber.StatusOK, fiber.Map{"userIds": ids})
+}
+
+// handleSetVisibleUsers PUT .../visible {userIds} → 覆盖式设置可见成员（空=无成员可见）。
+func (s *Server) handleSetVisibleUsers(c *fiber.Ctx) error {
+	spaceID, itemID, table, err := s.visibleTarget(c)
+	if err != nil {
+		return err
+	}
+	var req struct {
+		UserIDs []int64 `json:"userIds"`
+	}
+	if err := c.BodyParser(&req); err != nil {
+		return respondError(c, fiber.StatusBadRequest, "invalid request")
+	}
+	// 仅空间成员可被设为可见（防把任意账号加入）
+	members, err := s.Store.SpaceMemberIDs(spaceID)
+	if err != nil {
+		return err
+	}
+	allowed := map[int64]bool{}
+	for _, m := range members {
+		allowed[m] = true
+	}
+	for _, uid := range req.UserIDs {
+		if !allowed[uid] {
+			return respondError(c, fiber.StatusBadRequest, "用户不是该空间成员")
+		}
+	}
+	if err := s.Store.SetVisibleUsers(table, itemID, req.UserIDs); err != nil {
+		return err
+	}
+	return c.SendStatus(fiber.StatusNoContent)
+}

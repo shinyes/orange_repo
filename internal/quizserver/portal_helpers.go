@@ -14,6 +14,18 @@ import (
 	"orangeoj/internal/store"
 )
 
+// viewerID 门户内容可见性视角 id：管理员（域/系统）0=不过滤（全部可见）；
+// member 返回用户 id（按可见成员名单过滤）。
+func viewerID(user *accounts.User) int64 {
+	if user == nil {
+		return 0
+	}
+	if isAdminRole(user.Role) {
+		return 0
+	}
+	return user.ID
+}
+
 // resolveSpaceCtx 供无 :id 路径参数端点使用：校验 user 是 spaceID 成员或管理员并注入。
 func (s *Server) resolveSpaceCtx(c *fiber.Ctx, spaceID int64) (int64, error) {
 	user := currentUser(c)

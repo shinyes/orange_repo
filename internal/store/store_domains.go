@@ -321,6 +321,22 @@ func (s *Store) migrateSpaceContent() error {
 			repo_id INTEGER NOT NULL DEFAULT 0,
 			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 		);`,
+		// ---------- 空间内容可见成员授权（空=默认无成员可见；管理员始终可见） ----------
+		`CREATE TABLE IF NOT EXISTS space_training_visible (
+			training_id INTEGER NOT NULL REFERENCES space_trainings(id) ON DELETE CASCADE,
+			user_id INTEGER NOT NULL,
+			PRIMARY KEY(training_id, user_id)
+		);`,
+		`CREATE TABLE IF NOT EXISTS space_practice_visible (
+			practice_id INTEGER NOT NULL REFERENCES space_practices(id) ON DELETE CASCADE,
+			user_id INTEGER NOT NULL,
+			PRIMARY KEY(practice_id, user_id)
+		);`,
+		`CREATE TABLE IF NOT EXISTS space_quiz_visible (
+			quiz_id INTEGER NOT NULL REFERENCES space_quizzes(id) ON DELETE CASCADE,
+			user_id INTEGER NOT NULL,
+			PRIMARY KEY(quiz_id, user_id)
+		);`,
 		`CREATE INDEX IF NOT EXISTS idx_space_trainings_space ON space_trainings(space_id);`,
 		`CREATE INDEX IF NOT EXISTS idx_space_practices_space ON space_practices(space_id);`,
 		`CREATE INDEX IF NOT EXISTS idx_space_quizzes_space ON space_quizzes(space_id);`,

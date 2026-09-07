@@ -109,21 +109,22 @@ func (s *Server) spacesOfAllDomains() ([]quizstore.SpaceBrief, error) {
 	return out, rows.Err()
 }
 
-// handlePortalSpaceHome GET /api/portal/space/:id/home → 三区概览。
+// handlePortalSpaceHome GET /api/portal/space/:id/home → 三区概览（member 仅见已分配项目）。
 func (s *Server) handlePortalSpaceHome(c *fiber.Ctx) error {
 	spaceID, err := s.resolveSpace(c)
 	if err != nil {
 		return err
 	}
-	trainings, err := s.QS.Repo.ListSpaceTrainingsBrief(spaceID)
+	vid := viewerID(currentUser(c))
+	trainings, err := s.QS.Repo.ListSpaceTrainingsBrief(spaceID, vid)
 	if err != nil {
 		return err
 	}
-	practices, err := s.QS.Repo.ListSpacePracticesBrief(spaceID)
+	practices, err := s.QS.Repo.ListSpacePracticesBrief(spaceID, vid)
 	if err != nil {
 		return err
 	}
-	quizzes, err := s.QS.Repo.ListSpaceQuizzesBrief(spaceID)
+	quizzes, err := s.QS.Repo.ListSpaceQuizzesBrief(spaceID, vid)
 	if err != nil {
 		return err
 	}
@@ -144,7 +145,7 @@ func (s *Server) handlePortalTraining(c *fiber.Ctx) error {
 		return respondError(c, fiber.StatusBadRequest, "invalid training id")
 	}
 	user := currentUser(c)
-	tr, chapters, err := s.QS.Repo.GetSpaceTrainingBrief(tid)
+	tr, chapters, err := s.QS.Repo.GetSpaceTrainingBrief(tid, viewerID(user))
 	if err != nil {
 		return respondError(c, fiber.StatusNotFound, "训练不存在")
 	}
@@ -211,7 +212,7 @@ func (s *Server) handlePortalTrainingAnswer(c *fiber.Ctx) error {
 		return respondError(c, fiber.StatusBadRequest, "invalid training id")
 	}
 	user := currentUser(c)
-	tr, chapters, err := s.QS.Repo.GetSpaceTrainingBrief(tid)
+	tr, chapters, err := s.QS.Repo.GetSpaceTrainingBrief(tid, viewerID(user))
 	if err != nil {
 		return respondError(c, fiber.StatusNotFound, "训练不存在")
 	}

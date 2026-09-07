@@ -176,6 +176,13 @@ func (s *Server) registerManagement(app *fiber.App) {
 	ga("GET", "/space/:id/quizzes", s.handleListSpaceQuizzes)
 	ga("POST", "/space/:id/quizzes", s.handleCreateSpaceQuiz)
 	ga("DELETE", "/space/:id/quizzes/:qid", s.handleDeleteSpaceQuiz)
+	// 可见成员授权（训练/练习/刷题：默认无成员可见，管理员分配）
+	ga("GET", "/space/:id/trainings/:tid/visible", s.handleGetVisibleUsers)
+	ga("PUT", "/space/:id/trainings/:tid/visible", s.handleSetVisibleUsers)
+	ga("GET", "/space/:id/practices/:pid/visible", s.handleGetVisibleUsers)
+	ga("PUT", "/space/:id/practices/:pid/visible", s.handleSetVisibleUsers)
+	ga("GET", "/space/:id/quizzes/:qid/visible", s.handleGetVisibleUsers)
+	ga("PUT", "/space/:id/quizzes/:qid/visible", s.handleSetVisibleUsers)
 
 	ga("GET", "/trainings", s.handleListTrainings)
 	ga("POST", "/trainings", s.handleCreateTraining)

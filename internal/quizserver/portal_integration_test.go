@@ -104,6 +104,16 @@ func newPortalEnv(t *testing.T) (*fiber.App, map[string]int64, int64, string) {
 	if err := main2.SetSpaceMembers(spaceID, []int64{stuID}); err != nil {
 		t.Fatal(err)
 	}
+	// 可见成员授权：默认无成员可见——测试为 stu1 分配训练/练习/刷题（与产品语义一致）
+	if err := main2.SetVisibleUsers("space_training_visible", ids["training"], []int64{stuID}); err != nil {
+		t.Fatal(err)
+	}
+	if err := main2.SetVisibleUsers("space_practice_visible", ids["practice"], []int64{stuID}); err != nil {
+		t.Fatal(err)
+	}
+	if err := main2.SetVisibleUsers("space_quiz_visible", ids["quiz"], []int64{stuID}); err != nil {
+		t.Fatal(err)
+	}
 	if err := main2.Close(); err != nil {
 		t.Fatal(err)
 	}
