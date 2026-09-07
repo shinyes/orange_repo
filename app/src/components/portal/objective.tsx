@@ -107,13 +107,9 @@ export function ObjectiveQuestion({
                 type="button"
                 disabled={!clickable}
                 onClick={() => onSelect?.(v)}
-                className={cn('flex flex-col items-center justify-center gap-0.5 p-4 text-base', optionCls(v))}
+                className={cn('flex items-center justify-center p-4 text-base', optionCls(v))}
               >
-                <span className="font-medium">{v ? '对' : '错'}</span>
-                <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                  {v ? '✓ 正确' : '✗ 错误'}
-                  <ResultIcon value={v} answered={answered} correctVal={correctVal} selected={selected} />
-                </span>
+                <span className="font-medium">{v ? '正确' : '错误'}</span>
               </button>
             ))}
           </div>

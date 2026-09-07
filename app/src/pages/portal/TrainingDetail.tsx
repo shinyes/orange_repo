@@ -173,11 +173,6 @@ function TrainingFlow({ sid, tid, data }: {
                       {itemObjective && (
                         <>
                           <span>{training.maxAttempts > 0 ? `限答 ${training.maxAttempts} 次` : '不限次'}</span>
-                          {item.solved && (
-                            <span className="inline-flex items-center gap-1 text-emerald-600">
-                              <CircleCheckBigIcon className="size-3.5" /> 已通过
-                            </span>
-                          )}
                           {!item.solved && item.locked && (
                             <span className="inline-flex items-center gap-1 text-red-600">已达上限，可回顾</span>
                           )}
