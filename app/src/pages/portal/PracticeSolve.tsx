@@ -464,7 +464,7 @@ function ObjectiveBlock({ item, no, verdict, resultItem, selected, onToggle }: {
   return (
     <div id={`pq-${item.problemId}`} className="scroll-mt-36 p-4">
       <div className="flex items-start gap-2">
-        <span className="mt-0.5 min-w-[1.6rem] text-right text-sm font-bold tabular-nums text-foreground">{no}.</span>
+        <span className="min-w-[1.6rem] text-right text-[16px] font-bold leading-[26px] tabular-nums text-foreground">{no}.</span>
         <div className="min-w-0 flex-1">
           {verdict !== 'idle' && verdict !== 'answered' && (
             <div className="mb-1.5"><VerdictChip verdict={verdict} /></div>
@@ -479,7 +479,7 @@ function ObjectiveBlock({ item, no, verdict, resultItem, selected, onToggle }: {
             <>
               <Markdown
                 text={preserveLineBreaks(contentQ.data.statementMd || '（暂无题面）')}
-                className="markdown-body mt-2 text-[16px] leading-relaxed"
+                className="markdown-body text-[16px] leading-[26px]"
               />
               <div className="mt-2">
                 {contentQ.data.type === 'single_choice'
@@ -641,11 +641,11 @@ function ProgrammingBlock({ item, no, sid, pid }: {
   return (
     <div id={`pq-${item.problemId}`} className="scroll-mt-36 p-4">
       <div className="flex items-start gap-2">
-        <span className="mt-0.5 min-w-[1.6rem] text-right text-sm font-bold tabular-nums text-foreground">{no}.</span>
+        <span className="min-w-[1.6rem] text-right text-sm font-bold leading-5 tabular-nums text-foreground">{no}.</span>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
             <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-              <span className="text-sm font-semibold">{item.problemTitle || `题目 #${item.problemId}`}</span>
+              <span className="text-sm font-semibold leading-5">{item.problemTitle || `题目 #${item.problemId}`}</span>
               <Badge variant="secondary" className="px-1.5 py-0 text-[10px] font-medium">
                 <Code2Icon className="size-3" /> 编程
               </Badge>
