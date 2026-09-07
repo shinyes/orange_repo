@@ -157,6 +157,7 @@ type codeSubmitRequest struct {
 	SourceCode string `json:"sourceCode"`
 	InputData  string `json:"inputData"`
 	TrainingID int64  `json:"trainingId"` // >0=训练内提交（历史按训练×题隔离）
+	PracticeID int64  `json:"practiceId"` // >0=练习内提交（历史按练习×题隔离）
 }
 
 // judgeEnabled 是否配置了 judge-runtime。
@@ -195,7 +196,7 @@ func (s *Server) handleOJCodeAction(c *fiber.Ctx, submitType judge.SubmitType) e
 	if len(req.SourceCode) > 256*1024 {
 		return respondError(c, fiber.StatusBadRequest, "代码过长")
 	}
-	submissionID, err := s.QS.CreateProgrammingSubmission(user.ID, p.ID, req.TrainingID, p.Type, lang, req.SourceCode, req.InputData, submitType)
+	submissionID, err := s.QS.CreateProgrammingSubmission(user.ID, p.ID, req.TrainingID, req.PracticeID, p.Type, lang, req.SourceCode, req.InputData, submitType)
 	if err != nil {
 		return respondError(c, fiber.StatusInternalServerError, err.Error())
 	}
@@ -317,14 +318,19 @@ func (s *Server) handleOJSubmissions(c *fiber.Ctx) error {
 	if !visible {
 		return respondError(c, fiber.StatusNotFound, "题目不存在或不可见")
 	}
-	// 训练内历史隔离：?trainingId=N 仅返回该训练内的提交
-	var trainingID int64
+	// 训练/练习内历史隔离：?trainingId=N / ?practiceId=M 仅返回对应上下文内的提交
+	var trainingID, practiceID int64
 	if raw := strings.TrimSpace(c.Query("trainingId")); raw != "" {
 		if tid, perr := strconv.ParseInt(raw, 10, 64); perr == nil && tid > 0 {
 			trainingID = tid
 		}
 	}
-	list, err := s.QS.ListSubmissions(user.ID, problemID, trainingID)
+	if raw := strings.TrimSpace(c.Query("practiceId")); raw != "" {
+		if pid, perr := strconv.ParseInt(raw, 10, 64); perr == nil && pid > 0 {
+			practiceID = pid
+		}
+	}
+	list, err := s.QS.ListSubmissions(user.ID, problemID, trainingID, practiceID)
 	if err != nil {
 		return respondError(c, fiber.StatusInternalServerError, err.Error())
 	}

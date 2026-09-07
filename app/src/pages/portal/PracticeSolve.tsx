@@ -639,7 +639,7 @@ function ProgrammingBlock({ item, no, sid, pid }: {
           <span className="text-sm font-semibold">{item.problemTitle || `题目 #${item.problemId}`}</span>
         </div>
         <Link
-          to={`/problem/${item.problemId}?back=${encodeURIComponent(`/s/${sid}/practice/${pid}`)}`}
+          to={`/problem/${item.problemId}?practiceId=${pid}&back=${encodeURIComponent(`/s/${sid}/practice/${pid}`)}`}
           className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-orange-500 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-orange-600"
         >
           进入编程

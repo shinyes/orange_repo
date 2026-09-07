@@ -76,18 +76,20 @@ export const portalApi = {
     req<{ submissionId: number; status: string }>(`/api/oj/problem/${id}/run`, json({ method: 'POST', body: JSON.stringify({ language, sourceCode, inputData }) })),
   ojTest: (id: number, language: CodeLang, sourceCode: string) =>
     req<{ submissionId: number; status: string }>(`/api/oj/problem/${id}/test`, json({ method: 'POST', body: JSON.stringify({ language, sourceCode }) })),
-  /** 提交：trainingId 可选——省略=全局（做题页/练习）；>0=训练内提交（服务端落 submissions.training_id）。 */
-  ojSubmit: (id: number, language: CodeLang, sourceCode: string, trainingId?: number) =>
+  /** 提交：trainingId/practiceId 可选——省略=全局（做题页）；>0=训练/练习内提交（服务端落对应上下文列）。 */
+  ojSubmit: (id: number, language: CodeLang, sourceCode: string, trainingId?: number, practiceId?: number) =>
     req<{ submissionId: number; status: string }>(`/api/oj/problem/${id}/submit`, json({
       method: 'POST',
-      body: JSON.stringify({ language, sourceCode, ...(trainingId ? { trainingId } : {}) }),
+      body: JSON.stringify({ language, sourceCode, ...(trainingId ? { trainingId } : {}), ...(practiceId ? { practiceId } : {}) }),
     })),
   ojObjectiveSubmit: (id: number, answer: ObjectiveAnswer) =>
     req<{ submissionId: number; verdict: Verdict; score: number; correct: boolean; correctAnswer: { answerIndex?: number; answer?: boolean } }>(
       `/api/oj/problem/${id}/objective-submit`, json({ method: 'POST', body: JSON.stringify({ answer }) })),
   ojPoll: (submissionId: number, trainingId?: number) =>
     req<SubmissionPoll>(`/api/oj/submission/${submissionId}/poll${trainingId ? `?trainingId=${trainingId}` : ''}`),
-  /** 提交历史：trainingId 可选——省略=全局；>0=仅该训练内提交。 */
-  ojSubmissions: (id: number, trainingId?: number) =>
-    req<{ submissions: Submission[] }>(`/api/oj/problem/${id}/submissions${trainingId ? `?trainingId=${trainingId}` : ''}`),
+  /** 提交历史：trainingId/practiceId 可选——省略=全局；>0=仅对应上下文内提交。 */
+  ojSubmissions: (id: number, trainingId?: number, practiceId?: number) =>
+    req<{ submissions: Submission[] }>(`/api/oj/problem/${id}/submissions${
+      trainingId ? `?trainingId=${trainingId}` : practiceId ? `?practiceId=${practiceId}` : ''
+    }`),
 }

@@ -42,6 +42,7 @@ export function ProblemSolvePage() {
   const pid = Number(problemId)
   const backTo = searchParams.get('back') ?? '/'
   const review = searchParams.get('review') === '1'
+  const practiceId = Number(searchParams.get('practiceId') || 0) || undefined
 
   const problemQ = useQuery({
     queryKey: ['oj-problem', pid],
@@ -60,7 +61,7 @@ export function ProblemSolvePage() {
     )
   }
   return problem.type === 'programming' ? (
-    <ProgrammingSolve key={pid} problem={problem} backTo={backTo} review={review} />
+    <ProgrammingSolve key={pid} problem={problem} backTo={backTo} review={review} practiceId={practiceId} />
   ) : (
     <ObjectiveSolve key={pid} problem={problem} backTo={backTo} />
   )
@@ -199,7 +200,7 @@ function ObjectiveSolve({ problem, backTo }: { problem: OjProblem; backTo: strin
 
 // ---------------- 编程题 ----------------
 
-function ProgrammingSolve({ problem, backTo, review }: { problem: OjProblem; backTo: string; review?: boolean }) {
+function ProgrammingSolve({ problem, backTo, review, practiceId }: { problem: OjProblem; backTo: string; review?: boolean; practiceId?: number }) {
   const samples = (problem.bodyJson.samples as { input?: string; output?: string }[] | undefined) ?? []
   const [lang, setLang] = useState<CodeLang>(() => (localStorage.getItem(DRAFT_KEY + `-lang-${problem.id}`) as CodeLang) || 'python')
   // 初始 code：本地草稿 →（异步）云草稿 → 题目模板（starterPy/starterCpp）→ 通用模板。
@@ -276,7 +277,7 @@ function ProgrammingSolve({ problem, backTo, review }: { problem: OjProblem; bac
         ? await api.ojRun(problem.id, lang, codeRef.current, inputOverride ?? '')
         : kind === 'test'
           ? await api.ojTest(problem.id, lang, codeRef.current)
-          : await api.ojSubmit(problem.id, lang, codeRef.current)
+          : await api.ojSubmit(problem.id, lang, codeRef.current, undefined, practiceId)
       const snap = await poll(created.submissionId)
       applySnap(snap, kind)
     } catch (err) {
@@ -426,7 +427,7 @@ function ProgrammingSolve({ problem, backTo, review }: { problem: OjProblem; bac
       onSubmit={() => { setShowCustomInput(false); void action('run', customInput) }}
       busy={busyAction === 'run'}
     />
-    <SubmissionHistoryDialog problemId={problem.id} open={historyOpen} onOpenChange={setHistoryOpen} />
+    <SubmissionHistoryDialog problemId={problem.id} practiceId={practiceId} open={historyOpen} onOpenChange={setHistoryOpen} />
     </>
     </div>
     </div>
@@ -505,11 +506,11 @@ function CustomInputDialog({ open, onOpenChange, value, onChange, onSubmit, busy
 
 // ---------------- 测评记录 ----------------
 
-function SubmissionHistoryDialog({ problemId, open, onOpenChange }: { problemId: number; open: boolean; onOpenChange: (v: boolean) => void }) {
+function SubmissionHistoryDialog({ problemId, practiceId, open, onOpenChange }: { problemId: number; practiceId?: number; open: boolean; onOpenChange: (v: boolean) => void }) {
   const [selected, setSelected] = useState<Submission | null>(null)
   const submissionsQ = useQuery({
-    queryKey: ['oj-submissions', problemId],
-    queryFn: () => api.ojSubmissions(problemId),
+    queryKey: ['oj-submissions', problemId, practiceId],
+    queryFn: () => api.ojSubmissions(problemId, undefined, practiceId),
     enabled: open,
   })
   const list = submissionsQ.data?.submissions ?? []

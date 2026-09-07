@@ -110,6 +110,7 @@ func (s *Store) migrate() error {
 			user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
 			problem_id INTEGER NOT NULL,
 			training_id INTEGER NOT NULL DEFAULT 0, -- 训练内提交（0=非训练/全局；按训练×题过滤历史）
+			practice_id INTEGER NOT NULL DEFAULT 0, -- 练习内提交（0=非练习/全局；按练习×题过滤历史）
 			question_type TEXT NOT NULL,
 			language TEXT NOT NULL DEFAULT '',
 			source_code TEXT NOT NULL DEFAULT '',
@@ -189,7 +190,7 @@ func (s *Store) migrate() error {
 			return fmt.Errorf("quiz migrate failed: %w; stmt: %s", err, stmt)
 		}
 	}
-	// 存量库兼容补列：submissions.training_id（新列；CREATE IF NOT EXISTS 不改旧表）
+	// 存量库兼容补列：submissions.training_id / practice_id（新列；CREATE IF NOT EXISTS 不改旧表）
 	{
 		var n int
 		if err := s.DB.QueryRow(`SELECT COUNT(1) FROM pragma_table_info('submissions') WHERE name='training_id'`).Scan(&n); err != nil {
@@ -198,6 +199,15 @@ func (s *Store) migrate() error {
 		if n == 0 {
 			if _, err := s.DB.Exec(`ALTER TABLE submissions ADD COLUMN training_id INTEGER NOT NULL DEFAULT 0`); err != nil {
 				return fmt.Errorf("quiz migrate add submissions.training_id: %w", err)
+			}
+		}
+		var m int
+		if err := s.DB.QueryRow(`SELECT COUNT(1) FROM pragma_table_info('submissions') WHERE name='practice_id'`).Scan(&m); err != nil {
+			return err
+		}
+		if m == 0 {
+			if _, err := s.DB.Exec(`ALTER TABLE submissions ADD COLUMN practice_id INTEGER NOT NULL DEFAULT 0`); err != nil {
+				return fmt.Errorf("quiz migrate add submissions.practice_id: %w", err)
 			}
 		}
 	}
