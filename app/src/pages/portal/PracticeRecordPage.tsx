@@ -87,9 +87,9 @@ function RecordSheet({ sid, pid, data }: {
   )
 
   return (
-    <div className="mx-auto w-full max-w-6xl">
-      {/* 页内顶部条：标题 + 汇总 + 移动端导航按钮 */}
-      <div className="sticky top-0 z-30 border-b bg-white/95 backdrop-blur shadow-sm">
+    <div className="flex h-full min-h-0 flex-col">
+      {/* 顶部固定行（页内标题条；不再随滚动） */}
+      <div className="shrink-0 border-b bg-background shadow-sm">
         <div className="mx-auto flex h-14 w-full max-w-6xl items-center gap-3 px-3">
           <h1 className="flex min-w-0 items-center gap-2 text-base font-bold">
             <span className="truncate">本次答题卡</span>
@@ -116,24 +116,25 @@ function RecordSheet({ sid, pid, data }: {
         </div>
       </div>
 
-      <div className="mx-auto flex w-full max-w-6xl items-start gap-4 px-3 pt-4">
-        {/* 左栏：答题卡导航（固定） */}
-        <aside className="hidden w-56 shrink-0 self-start md:block">
-          <div className="sticky top-[4.25rem] flex max-h-[calc(100dvh-5.5rem)] flex-col gap-3 overflow-y-auto pr-0.5">
-            {nav}
-          </div>
+      {/* 内容行：左导航固定，右回顾为唯一滚动区 */}
+      <div className="mx-auto flex min-h-0 w-full max-w-6xl flex-1">
+        {/* 左栏：答题卡导航（自身随内容滚动，不随右栏滚动） */}
+        <aside className="hidden w-56 shrink-0 overflow-y-auto p-2.5 md:block">
+          {nav}
         </aside>
 
-        {/* 右：逐题回顾 */}
-        <div className="min-w-0 flex-1 space-y-3">
-          {items.map((it) => (
-            <ReviewCard key={it.problemId} item={it} />
-          ))}
-          {items.length === 0 && (
-            <div className="rounded-xl border border-dashed p-12 text-center text-sm text-muted-foreground">
-              该次交卷无客观题作答记录
-            </div>
-          )}
+        {/* 右栏：逐题回顾（唯一内容滚动区） */}
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="space-y-3 p-3">
+            {items.map((it) => (
+              <ReviewCard key={it.problemId} item={it} />
+            ))}
+            {items.length === 0 && (
+              <div className="rounded-xl border border-dashed p-12 text-center text-sm text-muted-foreground">
+                该次交卷无客观题作答记录
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

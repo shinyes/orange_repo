@@ -51,7 +51,7 @@ export function PracticeSolve() {
         backLabel="返回练习列表"
         headerExtra={<HeaderActionBar />}
       >
-        <div className="min-h-full bg-[#eef2f7]">
+        <div className="h-full bg-[#eef2f7]">
           <PracticePaper sid={sid} pid={pid} data={data} />
         </div>
       </SpacePageShell>
@@ -276,11 +276,12 @@ function PracticePaper({ sid, pid, data }: {
   const progCount = items.length - objectiveItems.length
 
   return (
-    <div className="mx-auto w-full max-w-6xl">
-      <div className="mx-auto flex w-full max-w-6xl items-start gap-4 px-3 pt-3">
-        {/* 左栏：我的提交记录 + 题号导航（整体 sticky 固定，不随滚动） */}
-        <aside className="hidden w-56 shrink-0 self-start md:block">
-          <div className="sticky top-16 flex max-h-[calc(100dvh-5rem)] flex-col gap-3 overflow-y-auto pr-0.5">
+    <div className="flex h-full min-h-0 flex-col">
+      {/* 内容行：左栏固定 + 右栏唯一内容滚动区 */}
+      <div className="mx-auto flex min-h-0 w-full max-w-6xl flex-1">
+        {/* 左栏：我的提交记录 + 题号导航（自身随内容滚动，不随右栏滚动） */}
+        <aside className="hidden w-56 shrink-0 overflow-y-auto p-2.5 md:block">
+          <div className="space-y-3">
             <div className="rounded-xl border bg-card p-3 shadow-sm">
               <HistoryCard sid={sid} pid={pid} onViewAll={() => setHistoryAllOpen(true)} />
             </div>
@@ -296,56 +297,58 @@ function PracticePaper({ sid, pid, data }: {
           </div>
         </aside>
 
-        {/* 右：卷面 */}
-        <div className="min-w-0 flex-1">
-          {/* 交卷结果（横向通栏） */}
-          {result && (
-            <ResultPanel
-              result={result}
-              items={objectiveItems}
-              onDismiss={dismissResult}
-            />
-          )}
-
-          {/* 题目分组节卡 */}
-          <div className={cn('space-y-3', result && 'mt-3')}>
-            {grouped.map((g, gi) => {
-              const isProgramming = g.key === 'programming'
-              const children = isProgramming
-                ? g.items.map((it) => (
-                  <ProgrammingBlock
-                    key={it.problemId}
-                    item={it}
-                    no={noByPid.get(it.problemId) ?? 0}
-                    sid={sid}
-                    pid={pid}
-                  />
-                ))
-                : g.items.map((it) => (
-                  <ObjectiveBlock
-                    key={it.problemId}
-                    item={it}
-                    no={noByPid.get(it.problemId) ?? 0}
-                    verdict={verdictOf(it.problemId)}
-                    resultItem={resultItemOf(it.problemId)}
-                    selected={answers[it.problemId] ?? null}
-                    onToggle={(a) => toggleAnswer(it.problemId, a)}
-                  />
-                ))
-              return (
-                <section key={g.key} className="overflow-hidden rounded-xl border bg-card shadow-sm">
-                  <div className="border-b px-4 pt-3 pb-2 text-xs font-bold text-muted-foreground">
-                    {sectionTitles[gi]}
-                  </div>
-                  <div className="divide-y divide-border">{children}</div>
-                </section>
-              )
-            })}
-            {items.length === 0 && (
-              <div className="rounded-xl border border-dashed p-12 text-center text-sm text-muted-foreground">
-                本练习暂无题目
-              </div>
+        {/* 右栏：卷面（唯一内容滚动区） */}
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="w-full px-3 pt-3 pb-4">
+            {/* 交卷结果（横向通栏） */}
+            {result && (
+              <ResultPanel
+                result={result}
+                items={objectiveItems}
+                onDismiss={dismissResult}
+              />
             )}
+
+            {/* 题目分组节卡 */}
+            <div className={cn('space-y-3', result && 'mt-3')}>
+              {grouped.map((g, gi) => {
+                const isProgramming = g.key === 'programming'
+                const children = isProgramming
+                  ? g.items.map((it) => (
+                    <ProgrammingBlock
+                      key={it.problemId}
+                      item={it}
+                      no={noByPid.get(it.problemId) ?? 0}
+                      sid={sid}
+                      pid={pid}
+                    />
+                  ))
+                  : g.items.map((it) => (
+                    <ObjectiveBlock
+                      key={it.problemId}
+                      item={it}
+                      no={noByPid.get(it.problemId) ?? 0}
+                      verdict={verdictOf(it.problemId)}
+                      resultItem={resultItemOf(it.problemId)}
+                      selected={answers[it.problemId] ?? null}
+                      onToggle={(a) => toggleAnswer(it.problemId, a)}
+                    />
+                  ))
+                return (
+                  <section key={g.key} className="overflow-hidden rounded-xl border bg-card shadow-sm">
+                    <div className="border-b px-4 pt-3 pb-2 text-xs font-bold text-muted-foreground">
+                      {sectionTitles[gi]}
+                    </div>
+                    <div className="divide-y divide-border">{children}</div>
+                  </section>
+                )
+              })}
+              {items.length === 0 && (
+                <div className="rounded-xl border border-dashed p-12 text-center text-sm text-muted-foreground">
+                  本练习暂无题目
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -753,7 +756,7 @@ function HistoryCard({ sid, pid, onViewAll }: { sid: number; pid: number; onView
         <p className="py-2.5 text-[11px] text-muted-foreground">暂无提交记录，交卷后显示在此</p>
       )}
       {shown.length > 0 && (
-        <div className={cn('mt-1', shown.length >= 4 && 'max-h-[260px] overflow-y-auto pr-0.5')}>
+        <div className={cn('mt-1', list.length > 3 && 'max-h-[200px] overflow-y-auto pr-0.5')}>
           {shown.map((s) => (
             <Link
               key={s.id}
