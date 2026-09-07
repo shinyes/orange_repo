@@ -1,6 +1,6 @@
-// 可拖拽左右分栏（桌面 lg+）：左题面区 + 拖拽分隔条 + 右编辑器区（可拖动调宽）。
+// 可拖拽左右分栏（桌面 lg+）：左题面区 flex-1 + 拖拽分隔条 + 右编辑器区（宽度=rightPct%）。
 // 移动端（<lg）自动纵向堆叠：题面在上、编辑器在下。
-// 两栏内容自行负责滚动（外层高度由父级 flex 约束）。
+// 两栏内容自行负责滚动；外层高度由父级 flex 约束。
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
 
@@ -32,7 +32,6 @@ export function SplitPane({
       if (!dragging.current || !rootRef.current) return
       const rect = rootRef.current.getBoundingClientRect()
       if (rect.width <= 0) return
-      // 右边缘到光标距离 = 右侧宽度
       const rw = rect.right - e.clientX
       setRightPct(clamp((rw / rect.width) * 100))
       e.preventDefault()
@@ -52,9 +51,9 @@ export function SplitPane({
   }, [clamp])
 
   return (
-    <div ref={rootRef} className="flex h-full min-h-0 min-w-0 flex-col lg:flex-row">
-      {/* 左：题面（占剩余宽度；自身内部滚动） */}
-      <div className="min-h-0 flex-1 overflow-y-auto lg:border-r">{left}</div>
+    <div ref={rootRef} className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden lg:flex-row">
+      {/* 左：题面（占剩余宽度；自身滚动） */}
+      <div className="min-h-0 w-full flex-1 overflow-y-auto lg:border-r">{left}</div>
 
       {/* 拖拽分隔条（仅桌面） */}
       <div
@@ -77,18 +76,11 @@ export function SplitPane({
         <span className="pointer-events-none h-14 w-0.5 rounded-full bg-muted-foreground/40" />
       </div>
 
-      {/* 右：编辑器（桌面宽度=百分比；移动端纵向在下） */}
-      <div
-        className={cn('flex min-h-0 flex-col lg:shrink-0 lg:h-full', active && 'lg:pointer-events-none')}
-        style={{ width: '100%', ['--split-right' as string]: `${rightPct}%` }}
-      >
-        {/* 桌面显示：固定百分比宽，内部滚动 */}
-        <div className="hidden h-full min-h-0 min-w-0 overflow-y-auto lg:block" style={{ width: 'var(--split-right)' }}>
-          {right}
-        </div>
-        {/* 移动端显示 */}
-        <div className="min-h-0 lg:hidden">{right}</div>
+      {/* 右：编辑器（桌面宽度=百分比；移动端整宽在下） */}
+      <div className="hidden min-h-0 flex-col lg:flex lg:h-full lg:shrink-0" style={{ width: `${rightPct}%` }}>
+        {right}
       </div>
+      <div className="min-h-0 w-full flex-col lg:hidden">{right}</div>
     </div>
   )
 }
