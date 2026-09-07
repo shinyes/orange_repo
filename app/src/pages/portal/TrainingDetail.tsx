@@ -167,15 +167,17 @@ function TrainingFlow({ sid, tid, data }: {
               (itemObjective ? (
                 <div className="h-full overflow-y-auto">
                   <PageContainer className="py-4">
-                    {/* 题目头（最左=题面文字缩放控制） */}
+                    {/* 题目头（题面文字缩放控件置右） */}
                     <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                      <ZoomControls scale={statementScale} onChange={setStatementScale} />
                       <span className="rounded bg-muted px-1.5 py-0.5 font-medium">{item.chapterTitle}</span>
                       <span>第 {activeIdx + 1} / {all.length} 题</span>
                       <span>{training.maxAttempts > 0 ? `限答 ${training.maxAttempts} 次` : '不限次'}</span>
                       {!item.solved && item.locked && (
                         <span className="inline-flex items-center gap-1 text-red-600">已达上限，可回顾</span>
                       )}
+                      <span className="ml-auto">
+                        <ZoomControls scale={statementScale} onChange={setStatementScale} />
+                      </span>
                     </div>
                     <div style={{ zoom: statementScale }}>
                       <ObjectiveCard
@@ -190,11 +192,13 @@ function TrainingFlow({ sid, tid, data }: {
                 <SplitPane
                   left={
                     <PageContainer className="py-4">
-                      {/* 题目头 */}
+                      {/* 题目头（题面文字缩放控件置右） */}
                       <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                        <ZoomControls scale={statementScale} onChange={setStatementScale} />
                         <span className="rounded bg-muted px-1.5 py-0.5 font-medium">{item.chapterTitle}</span>
                         <span>第 {activeIdx + 1} / {all.length} 题</span>
+                        <span className="ml-auto">
+                          <ZoomControls scale={statementScale} onChange={setStatementScale} />
+                        </span>
                       </div>
                       <div style={{ zoom: statementScale }}>
                         <ProgrammingStatement problemId={item.problemId} itemSolved={itemSolved} />

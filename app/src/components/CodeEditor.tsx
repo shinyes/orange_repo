@@ -57,10 +57,10 @@ export function CodeEditor({
         padding: { top: 8 },
         scrollbar: { verticalScrollbarSize: 10, horizontalScrollbarSize: 10 },
         contextmenu: true,
-        // 行号两侧留白最小化（无断点区/无折叠箭头区）
-        glyphMargin: false,
+        // 行号留白：左侧不留（无折叠箭头/装饰）；右侧保留 glyph 断点区
+        glyphMargin: true,
         folding: false,
-        lineDecorationsWidth: 4,
+        lineDecorationsWidth: 0,
         // Ctrl+鼠标滚轮 缩放字号（Monaco 原生）
         mouseWheelZoom: true,
       }}
