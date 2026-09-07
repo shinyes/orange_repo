@@ -631,14 +631,6 @@ function ProgrammingBlock({ item, no, sid, pid }: {
   sid: number
   pid: number
 }) {
-  const metaQ = useQuery({
-    queryKey: ['oj-problem', item.problemId],
-    queryFn: () => api.ojProblem(item.problemId),
-  })
-  const timeLimitMs = metaQ.data?.timeLimitMs
-  const memoryLimitMiB = metaQ.data?.memoryLimitMiB
-  const hasTime = !!timeLimitMs && timeLimitMs > 0
-  const hasMemory = !!memoryLimitMiB && memoryLimitMiB > 0
   return (
     <div id={`pq-${item.problemId}`} className="scroll-mt-36 p-4">
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
@@ -653,22 +645,8 @@ function ProgrammingBlock({ item, no, sid, pid }: {
           进入编程
         </Link>
       </div>
-          {(hasTime || hasMemory) ? (
-            <p className="mt-1.5 text-xs text-muted-foreground tabular-nums">
-              {hasTime && <>时间限制: {msToLimit(timeLimitMs)}</>}
-              {hasTime && hasMemory && <span className="mx-1.5 text-muted-foreground/60">|</span>}
-              {hasMemory && <>内存限制: {memoryLimitMiB} MB</>}
-            </p>
-          ) : (
-            <p className="mt-1.5 text-xs text-muted-foreground">在编程页编写代码并提交判题</p>
-          )}
     </div>
   )
-}
-
-function msToLimit(ms: number): string {
-  if (ms % 1000 === 0) return `${Math.round(ms / 1000)}s`
-  return `${ms} ms`
 }
 
 // ---------- 交卷结果 ----------

@@ -237,12 +237,6 @@ function NavCard({ items, correct, wrong, missing, createdAt, onJump, onOpenProg
 
 // 编程题回顾卡：点击进入做题页只读回顾（题目/代码/测评记录，不可作答）
 function ProgrammingReviewCard({ item, onOpen }: { item: PracticeRecordItem; onOpen: () => void }) {
-  const contentQ = useQuery({
-    queryKey: ['oj-problem', item.problemId],
-    queryFn: () => api.ojProblem(item.problemId),
-  })
-  const timeMs = contentQ.data?.timeLimitMs
-  const memMiB = contentQ.data?.memoryLimitMiB
   return (
     <div id={`r-${item.problemId}`} className="scroll-mt-24 rounded-xl border bg-card p-4 shadow-sm">
       <div className="flex items-center gap-2">
@@ -258,13 +252,6 @@ function ProgrammingReviewCard({ item, onOpen }: { item: PracticeRecordItem; onO
           <Code2Icon className="size-3.5" /> 查看题目与记录
         </button>
       </div>
-      {(timeMs || memMiB) && (
-        <p className="mt-2 text-xs tabular-nums text-muted-foreground">
-          {timeMs ? <>时间限制: {timeMs % 1000 === 0 ? `${Math.round(timeMs / 1000)}s` : `${timeMs} ms`}</> : null}
-          {timeMs && memMiB ? <span className="mx-1.5 text-muted-foreground/60">|</span> : null}
-          {memMiB ? <>内存限制: {memMiB} MB</> : null}
-        </p>
-      )}
     </div>
   )
 }
