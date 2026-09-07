@@ -29,6 +29,8 @@ export interface ObjectiveQuestionProps {
   selected?: ObjectiveAnswer | null
   /** 判分反馈；非空时展示对/错 + 正确项，并禁止修改 */
   feedback?: { correct: boolean; correctAnswer?: CorrectAnswer } | null
+  /** silent：有 feedback 但不显示结果横幅（训练回顾态复用判分结果展示选项红绿） */
+  silent?: boolean
   /** 用户点选（自动提交流由调用方在回调内发起请求） */
   onSelect?: (a: ObjectiveAnswer) => void
   showTitle?: string
@@ -40,6 +42,7 @@ export function ObjectiveQuestion({
   busy,
   selected,
   feedback,
+  silent,
   onSelect,
   showTitle,
 }: ObjectiveQuestionProps) {
@@ -117,7 +120,7 @@ export function ObjectiveQuestion({
         )}
       </div>
 
-      {answered && (
+      {answered && !silent && (
         <div
           className={cn(
             'mt-4 flex items-center gap-2 rounded-xl border p-3 text-sm',
