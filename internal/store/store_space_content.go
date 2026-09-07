@@ -12,22 +12,23 @@ import (
 
 // SpaceTraining 空间训练视图（含题量）。
 type SpaceTraining struct {
-	ID           int64  `json:"id"`
-	SpaceID      int64  `json:"spaceId"`
-	Title        string `json:"title"`
-	Description  string `json:"description"`
+	ID           int64    `json:"id"`
+	UUID         string   `json:"uuid,omitempty"`
+	SpaceID      int64    `json:"spaceId"`
+	Title        string   `json:"title"`
+	Description  string   `json:"description"`
 	Tags         []string `json:"tags"`
-	MaxAttempts  int    `json:"maxAttempts"`
-	ProblemCount int    `json:"problemCount"`
+	MaxAttempts  int      `json:"maxAttempts"`
+	ProblemCount int      `json:"problemCount"`
 }
 
 // SpaceChapter 空间训练章节（含条目）。
 type SpaceChapter struct {
-	ID        int64             `json:"id"`
-	TrainingID int64            `json:"trainingId"`
-	Title     string            `json:"title"`
-	OrderNo   int               `json:"orderNo"`
-	Items     []SpaceChapterItem `json:"items"`
+	ID         int64              `json:"id"`
+	TrainingID int64              `json:"trainingId"`
+	Title      string             `json:"title"`
+	OrderNo    int                `json:"orderNo"`
+	Items      []SpaceChapterItem `json:"items"`
 }
 
 // SpaceChapterItem 章节条目。
@@ -46,8 +47,12 @@ func (s *Store) CreateSpaceTraining(spaceID int64, title, description string, ta
 	if maxAttempts <= 0 {
 		maxAttempts = 3
 	}
-	res, err := s.DB.Exec(`INSERT INTO space_trainings(space_id,title,description,tags_json,max_attempts)
-		VALUES(?,?,?,?,?)`, spaceID, title, description, encodeTags(tags), maxAttempts)
+	u, err := NewUUIDv7()
+	if err != nil {
+		return 0, err
+	}
+	res, err := s.DB.Exec(`INSERT INTO space_trainings(uuid,space_id,title,description,tags_json,max_attempts)
+		VALUES(?,?,?,?,?,?)`, u, spaceID, title, description, encodeTags(tags), maxAttempts)
 	if err != nil {
 		return 0, err
 	}
@@ -56,7 +61,7 @@ func (s *Store) CreateSpaceTraining(spaceID int64, title, description string, ta
 
 // ListSpaceTrainings 空间内训练列表。
 func (s *Store) ListSpaceTrainings(spaceID int64) ([]SpaceTraining, error) {
-	rows, err := s.DB.Query(`SELECT t.id,t.space_id,t.title,t.description,t.tags_json,t.max_attempts,
+	rows, err := s.DB.Query(`SELECT t.id,t.uuid,t.space_id,t.title,t.description,t.tags_json,t.max_attempts,
 		(SELECT COUNT(*) FROM space_training_items i JOIN space_training_chapters c ON i.chapter_id=c.id WHERE c.training_id=t.id)
 		FROM space_trainings t WHERE t.space_id=? ORDER BY t.id`, spaceID)
 	if err != nil {
@@ -67,7 +72,7 @@ func (s *Store) ListSpaceTrainings(spaceID int64) ([]SpaceTraining, error) {
 	for rows.Next() {
 		var t SpaceTraining
 		var tags string
-		if err := rows.Scan(&t.ID, &t.SpaceID, &t.Title, &t.Description, &tags, &t.MaxAttempts, &t.ProblemCount); err != nil {
+		if err := rows.Scan(&t.ID, &t.UUID, &t.SpaceID, &t.Title, &t.Description, &tags, &t.MaxAttempts, &t.ProblemCount); err != nil {
 			return nil, err
 		}
 		t.Tags = decodeTags(tags)
@@ -80,10 +85,10 @@ func (s *Store) ListSpaceTrainings(spaceID int64) ([]SpaceTraining, error) {
 func (s *Store) GetSpaceTraining(id int64) (*SpaceTraining, []SpaceChapter, error) {
 	var t SpaceTraining
 	var tags string
-	err := s.DB.QueryRow(`SELECT t.id,t.space_id,t.title,t.description,t.tags_json,t.max_attempts,
+	err := s.DB.QueryRow(`SELECT t.id,t.uuid,t.space_id,t.title,t.description,t.tags_json,t.max_attempts,
 		(SELECT COUNT(*) FROM space_training_items i JOIN space_training_chapters c ON i.chapter_id=c.id WHERE c.training_id=t.id)
 		FROM space_trainings t WHERE t.id=?`, id).
-		Scan(&t.ID, &t.SpaceID, &t.Title, &t.Description, &tags, &t.MaxAttempts, &t.ProblemCount)
+		Scan(&t.ID, &t.UUID, &t.SpaceID, &t.Title, &t.Description, &tags, &t.MaxAttempts, &t.ProblemCount)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil, ErrNotFound
 	}
@@ -405,6 +410,7 @@ func (s *Store) spaceChapterItems(chapterID int64) ([]SpaceChapterItem, error) {
 // SpacePractice 空间练习视图。
 type SpacePractice struct {
 	ID           int64    `json:"id"`
+	UUID         string   `json:"uuid,omitempty"`
 	SpaceID      int64    `json:"spaceId"`
 	Title        string   `json:"title"`
 	Description  string   `json:"description"`
@@ -425,8 +431,12 @@ type SpacePracticeItem struct {
 
 // CreateSpacePractice 建空间练习。
 func (s *Store) CreateSpacePractice(spaceID int64, title, description string, tags []string) (int64, error) {
-	res, err := s.DB.Exec(`INSERT INTO space_practices(space_id,title,description,tags_json) VALUES(?,?,?,?)`,
-		spaceID, title, description, encodeTags(tags))
+	u, err := NewUUIDv7()
+	if err != nil {
+		return 0, err
+	}
+	res, err := s.DB.Exec(`INSERT INTO space_practices(uuid,space_id,title,description,tags_json) VALUES(?,?,?,?,?)`,
+		u, spaceID, title, description, encodeTags(tags))
 	if err != nil {
 		return 0, err
 	}
@@ -435,7 +445,7 @@ func (s *Store) CreateSpacePractice(spaceID int64, title, description string, ta
 
 // ListSpacePractices 空间练习列表。
 func (s *Store) ListSpacePractices(spaceID int64) ([]SpacePractice, error) {
-	rows, err := s.DB.Query(`SELECT p.id,p.space_id,p.title,p.description,p.tags_json,
+	rows, err := s.DB.Query(`SELECT p.id,p.uuid,p.space_id,p.title,p.description,p.tags_json,
 		(SELECT COUNT(*) FROM space_practice_items i WHERE i.practice_id=p.id)
 		FROM space_practices p WHERE p.space_id=? ORDER BY p.id`, spaceID)
 	if err != nil {
@@ -446,7 +456,7 @@ func (s *Store) ListSpacePractices(spaceID int64) ([]SpacePractice, error) {
 	for rows.Next() {
 		var p SpacePractice
 		var tags string
-		if err := rows.Scan(&p.ID, &p.SpaceID, &p.Title, &p.Description, &tags, &p.ProblemCount); err != nil {
+		if err := rows.Scan(&p.ID, &p.UUID, &p.SpaceID, &p.Title, &p.Description, &tags, &p.ProblemCount); err != nil {
 			return nil, err
 		}
 		p.Tags = decodeTags(tags)
@@ -459,10 +469,10 @@ func (s *Store) ListSpacePractices(spaceID int64) ([]SpacePractice, error) {
 func (s *Store) GetSpacePractice(id int64) (*SpacePractice, []SpacePracticeItem, error) {
 	var p SpacePractice
 	var tags string
-	err := s.DB.QueryRow(`SELECT p.id,p.space_id,p.title,p.description,p.tags_json,
+	err := s.DB.QueryRow(`SELECT p.id,p.uuid,p.space_id,p.title,p.description,p.tags_json,
 		(SELECT COUNT(*) FROM space_practice_items i WHERE i.practice_id=p.id)
 		FROM space_practices p WHERE p.id=?`, id).
-		Scan(&p.ID, &p.SpaceID, &p.Title, &p.Description, &tags, &p.ProblemCount)
+		Scan(&p.ID, &p.UUID, &p.SpaceID, &p.Title, &p.Description, &tags, &p.ProblemCount)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil, ErrNotFound
 	}
@@ -563,20 +573,25 @@ func (s *Store) ListSpacePracticeItems(practiceID int64) ([]SpacePracticeItem, e
 
 // SpaceQuiz 刷题项目视图。
 type SpaceQuiz struct {
-	ID         int64    `json:"id"`
-	SpaceID    int64    `json:"spaceId"`
-	Title      string   `json:"title"`
-	Tags       []string `json:"tags"`
-	SourceType string   `json:"sourceType"` // tags | repo
-	RepoKind   string   `json:"repoKind,omitempty"`
-	RepoID     int64    `json:"repoId,omitempty"`
-	ProblemCount int    `json:"problemCount"`
+	ID           int64    `json:"id"`
+	UUID         string   `json:"uuid,omitempty"`
+	SpaceID      int64    `json:"spaceId"`
+	Title        string   `json:"title"`
+	Tags         []string `json:"tags"`
+	SourceType   string   `json:"sourceType"` // tags | repo
+	RepoKind     string   `json:"repoKind,omitempty"`
+	RepoID       int64    `json:"repoId,omitempty"`
+	ProblemCount int      `json:"problemCount"`
 }
 
 // CreateSpaceQuiz 建刷题项目。
 func (s *Store) CreateSpaceQuiz(spaceID int64, title string, tags []string, sourceType, repoKind string, repoID int64) (int64, error) {
-	res, err := s.DB.Exec(`INSERT INTO space_quizzes(space_id,title,tags_json,source_type,repo_kind,repo_id)
-		VALUES(?,?,?,?,?,?)`, spaceID, title, encodeTags(tags), sourceType, repoKind, repoID)
+	u, err := NewUUIDv7()
+	if err != nil {
+		return 0, err
+	}
+	res, err := s.DB.Exec(`INSERT INTO space_quizzes(uuid,space_id,title,tags_json,source_type,repo_kind,repo_id)
+		VALUES(?,?,?,?,?,?,?)`, u, spaceID, title, encodeTags(tags), sourceType, repoKind, repoID)
 	if err != nil {
 		return 0, err
 	}
@@ -585,7 +600,7 @@ func (s *Store) CreateSpaceQuiz(spaceID int64, title string, tags []string, sour
 
 // ListSpaceQuizzes 空间刷题项目列表。
 func (s *Store) ListSpaceQuizzes(spaceID int64) ([]SpaceQuiz, error) {
-	rows, err := s.DB.Query(`SELECT id,space_id,title,tags_json,source_type,repo_kind,repo_id
+	rows, err := s.DB.Query(`SELECT id,uuid,space_id,title,tags_json,source_type,repo_kind,repo_id
 		FROM space_quizzes WHERE space_id=? ORDER BY id`, spaceID)
 	if err != nil {
 		return nil, err
@@ -595,7 +610,7 @@ func (s *Store) ListSpaceQuizzes(spaceID int64) ([]SpaceQuiz, error) {
 	for rows.Next() {
 		var q SpaceQuiz
 		var tags string
-		if err := rows.Scan(&q.ID, &q.SpaceID, &q.Title, &tags, &q.SourceType, &q.RepoKind, &q.RepoID); err != nil {
+		if err := rows.Scan(&q.ID, &q.UUID, &q.SpaceID, &q.Title, &tags, &q.SourceType, &q.RepoKind, &q.RepoID); err != nil {
 			return nil, err
 		}
 		q.Tags = decodeTags(tags)

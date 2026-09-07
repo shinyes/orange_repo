@@ -37,6 +37,7 @@ type backupChapter struct {
 
 // backupTraining 训练条目。
 type backupTraining struct {
+	UUID        string          `json:"uuid,omitempty"`
 	Title       string          `json:"title"`
 	Description string          `json:"description"`
 	Tags        []string        `json:"tags"`
@@ -46,6 +47,7 @@ type backupTraining struct {
 
 // backupPractice 练习条目。
 type backupPractice struct {
+	UUID        string   `json:"uuid,omitempty"`
 	Title       string   `json:"title"`
 	Description string   `json:"description"`
 	Tags        []string `json:"tags"`
@@ -131,7 +133,7 @@ func (s *Server) buildBackup() (*backupManifest, []zipio.ExportProblem, error) {
 		return nil, nil, err
 	}
 	for _, t := range trainings {
-		bt := backupTraining{Title: t.Title, Description: t.Description, Tags: t.Tags, Folder: pathOf(t.FolderID)}
+		bt := backupTraining{UUID: t.UUID, Title: t.Title, Description: t.Description, Tags: t.Tags, Folder: pathOf(t.FolderID)}
 		chapters, err := s.Store.ListChapters(t.ID)
 		if err != nil {
 			return nil, nil, err
@@ -156,7 +158,7 @@ func (s *Server) buildBackup() (*backupManifest, []zipio.ExportProblem, error) {
 		return nil, nil, err
 	}
 	for _, p := range practices {
-		bp := backupPractice{Title: p.Title, Description: p.Description, Tags: p.Tags, Folder: pathOf(p.FolderID)}
+		bp := backupPractice{UUID: p.UUID, Title: p.Title, Description: p.Description, Tags: p.Tags, Folder: pathOf(p.FolderID)}
 		items, err := s.Store.ListPracticeItems(p.ID)
 		if err != nil {
 			return nil, nil, err

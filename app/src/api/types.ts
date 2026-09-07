@@ -34,6 +34,7 @@ export interface SpaceHome {
 
 export interface TrainingBrief {
   id: number
+  uuid?: string
   spaceId: number
   title: string
   description: string
@@ -44,6 +45,7 @@ export interface TrainingBrief {
 
 export interface PracticeBrief {
   id: number
+  uuid?: string
   spaceId: number
   title: string
   description: string
@@ -53,6 +55,7 @@ export interface PracticeBrief {
 
 export interface QuizBrief {
   id: number
+  uuid?: string
   spaceId: number
   title: string
   tags: string[]
@@ -290,6 +293,7 @@ export interface Chapter {
 
 export interface Training {
   id: number
+  uuid?: string
   title: string
   description: string
   tags: string[]
@@ -317,6 +321,7 @@ export interface PracticeItem {
 
 export interface Practice {
   id: number
+  uuid?: string
   title: string
   description: string
   tags: string[]
@@ -378,6 +383,7 @@ export interface SpaceMember {
 
 export interface SpaceTraining {
   id: number
+  uuid?: string
   spaceId: number
   title: string
   description: string
@@ -406,6 +412,7 @@ export interface SpaceChapter {
 
 export interface SpacePractice {
   id: number
+  uuid?: string
   spaceId: number
   title: string
   description: string
@@ -425,6 +432,7 @@ export interface SpacePracticeItem {
 
 export interface SpaceQuiz {
   id: number
+  uuid?: string
   spaceId: number
   title: string
   tags: string[]

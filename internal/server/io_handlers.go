@@ -375,7 +375,7 @@ func (s *Server) handleExportTraining(c *fiber.Ctx) error {
 			Title: ch.Title, OrderNo: ch.OrderNo, ProblemIDs: indexes,
 		})
 	}
-	meta := &zipio.PlanMeta{Title: t.Title, Description: t.Description, Tags: t.Tags, Chapters: planChapters}
+	meta := &zipio.PlanMeta{UUID: t.UUID, Title: t.Title, Description: t.Description, Tags: t.Tags, Chapters: planChapters}
 	data, err := zipio.BuildZip(entries, meta, s.uploadResolver)
 	if err != nil {
 		return err
@@ -414,7 +414,7 @@ func (s *Server) handleExportPractice(c *fiber.Ctx) error {
 		entries = append(entries, problemToExport(full))
 	}
 	meta := &zipio.PlanMeta{
-		Title: p.Title, Description: p.Description, Tags: p.Tags,
+		UUID: p.UUID, Title: p.Title, Description: p.Description, Tags: p.Tags,
 		Chapters: []zipio.PlanChapter{{Title: p.Title, OrderNo: 1, ProblemIDs: indexes}},
 	}
 	data, err := zipio.BuildZip(entries, meta, s.uploadResolver)

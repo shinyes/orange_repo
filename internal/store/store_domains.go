@@ -277,6 +277,7 @@ func (s *Store) migrateSpaceContent() error {
 	stmts := []string{
 		`CREATE TABLE IF NOT EXISTS space_trainings (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			uuid TEXT NOT NULL DEFAULT '',
 			space_id INTEGER NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
 			title TEXT NOT NULL,
 			description TEXT NOT NULL DEFAULT '',
@@ -298,6 +299,7 @@ func (s *Store) migrateSpaceContent() error {
 		);`,
 		`CREATE TABLE IF NOT EXISTS space_practices (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			uuid TEXT NOT NULL DEFAULT '',
 			space_id INTEGER NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
 			title TEXT NOT NULL,
 			description TEXT NOT NULL DEFAULT '',
@@ -313,6 +315,7 @@ func (s *Store) migrateSpaceContent() error {
 		// 空间刷题项目
 		`CREATE TABLE IF NOT EXISTS space_quizzes (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			uuid TEXT NOT NULL DEFAULT '',
 			space_id INTEGER NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
 			title TEXT NOT NULL,
 			tags_json TEXT NOT NULL DEFAULT '[]',

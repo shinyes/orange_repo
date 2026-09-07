@@ -13,8 +13,12 @@ func (s *Store) CreateTraining(title, description string, tags []string, folderI
 	if err := s.ensureFolder(folderID); err != nil {
 		return 0, err
 	}
-	res, err := s.DB.Exec(`INSERT INTO trainings(title,description,tags_json,folder_id) VALUES(?,?,?,?)`,
-		title, description, encodeTags(tags), nullInt64(folderID))
+	u, err := NewUUIDv7()
+	if err != nil {
+		return 0, err
+	}
+	res, err := s.DB.Exec(`INSERT INTO trainings(uuid,title,description,tags_json,folder_id) VALUES(?,?,?,?,?)`,
+		u, title, description, encodeTags(tags), nullInt64(folderID))
 	if err != nil {
 		return 0, err
 	}
@@ -27,7 +31,7 @@ func scanTrainingRows(rows *sql.Rows) ([]model.Training, error) {
 	for rows.Next() {
 		var t model.Training
 		var tagsJSON string
-		if err := rows.Scan(&t.ID, &t.Title, &t.Description, &tagsJSON, &t.CreatedAt); err != nil {
+		if err := rows.Scan(&t.ID, &t.UUID, &t.Title, &t.Description, &tagsJSON, &t.CreatedAt); err != nil {
 			return nil, err
 		}
 		t.Tags = decodeTags(tagsJSON)
@@ -38,7 +42,7 @@ func scanTrainingRows(rows *sql.Rows) ([]model.Training, error) {
 
 // ListTrainings 列出训练（含题目数）。
 func (s *Store) ListTrainings() ([]model.Training, error) {
-	rows, err := s.DB.Query(`SELECT id,title,description,tags_json,created_at,folder_id,
+	rows, err := s.DB.Query(`SELECT id,uuid,title,description,tags_json,created_at,folder_id,
 		(SELECT COUNT(*) FROM training_items ti JOIN training_chapters tc ON ti.chapter_id=tc.id WHERE tc.training_id=trainings.id)
 		FROM trainings ORDER BY id DESC`)
 	if err != nil {
@@ -51,7 +55,7 @@ func (s *Store) ListTrainings() ([]model.Training, error) {
 		var tagsJSON string
 		var count int
 		var folder sql.NullInt64
-		if err := rows.Scan(&t.ID, &t.Title, &t.Description, &tagsJSON, &t.CreatedAt, &folder, &count); err != nil {
+		if err := rows.Scan(&t.ID, &t.UUID, &t.Title, &t.Description, &tagsJSON, &t.CreatedAt, &folder, &count); err != nil {
 			return nil, err
 		}
 		t.Tags = decodeTags(tagsJSON)

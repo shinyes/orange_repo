@@ -52,8 +52,10 @@ type PlanChapter struct {
 	ProblemIDs []int  `json:"problemIds"`
 }
 
-// PlanMeta 与上游 importedTrainingPlanMeta 一致。
+// PlanMeta 与上游 importedTrainingPlanMeta 一致（额外 uuid 字段供导出包携带题册
+// 训练/练习记录的稳定标识；上游/旧版导入器不识别则自然忽略）。
 type PlanMeta struct {
+	UUID        string        `json:"uuid,omitempty"`
 	Title       string        `json:"title,omitempty"`
 	Description string        `json:"description,omitempty"`
 	Tags        []string      `json:"tags,omitempty"`
@@ -161,6 +163,9 @@ func buildZip(problems []ExportProblem, meta *PlanMeta, resolve ImageResolver, e
 
 	if meta != nil && (len(meta.Chapters) > 0 || meta.Title != "" || len(meta.Tags) > 0) {
 		planData := map[string]any{"chapters": planChaptersOrEmpty(meta.Chapters)}
+		if meta.UUID != "" {
+			planData["uuid"] = meta.UUID
+		}
 		if meta.Title != "" {
 			planData["title"] = meta.Title
 		}

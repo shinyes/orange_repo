@@ -13,8 +13,12 @@ func (s *Store) CreatePractice(title, description string, tags []string, folderI
 	if err := s.ensureFolder(folderID); err != nil {
 		return 0, err
 	}
-	res, err := s.DB.Exec(`INSERT INTO practices(title,description,tags_json,folder_id) VALUES(?,?,?,?)`,
-		title, description, encodeTags(tags), nullInt64(folderID))
+	u, err := NewUUIDv7()
+	if err != nil {
+		return 0, err
+	}
+	res, err := s.DB.Exec(`INSERT INTO practices(uuid,title,description,tags_json,folder_id) VALUES(?,?,?,?,?)`,
+		u, title, description, encodeTags(tags), nullInt64(folderID))
 	if err != nil {
 		return 0, err
 	}
@@ -23,7 +27,7 @@ func (s *Store) CreatePractice(title, description string, tags []string, folderI
 
 // ListPractices 列出练习（含题目数）。
 func (s *Store) ListPractices() ([]model.Practice, error) {
-	rows, err := s.DB.Query(`SELECT id,title,description,tags_json,created_at,folder_id,
+	rows, err := s.DB.Query(`SELECT id,uuid,title,description,tags_json,created_at,folder_id,
 		(SELECT COUNT(*) FROM practice_items pi WHERE pi.practice_id=practices.id)
 		FROM practices ORDER BY id DESC`)
 	if err != nil {
@@ -36,7 +40,7 @@ func (s *Store) ListPractices() ([]model.Practice, error) {
 		var tagsJSON string
 		var count int
 		var folder sql.NullInt64
-		if err := rows.Scan(&p.ID, &p.Title, &p.Description, &tagsJSON, &p.CreatedAt, &folder, &count); err != nil {
+		if err := rows.Scan(&p.ID, &p.UUID, &p.Title, &p.Description, &tagsJSON, &p.CreatedAt, &folder, &count); err != nil {
 			return nil, err
 		}
 		p.Tags = decodeTags(tagsJSON)

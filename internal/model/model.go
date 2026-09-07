@@ -78,6 +78,7 @@ type BookletDirectory struct {
 // Training 训练计划：章节化的题目编组。
 type Training struct {
 	ID           int64     `json:"id"`
+	UUID         string    `json:"uuid,omitempty"`
 	Title        string    `json:"title"`
 	Description  string    `json:"description"`
 	Tags         []string  `json:"tags"`
@@ -108,6 +109,7 @@ type Item struct {
 // Practice 练习：平铺题目编组（含分值）。
 type Practice struct {
 	ID           int64     `json:"id"`
+	UUID         string    `json:"uuid,omitempty"`
 	Title        string    `json:"title"`
 	Description  string    `json:"description"`
 	Tags         []string  `json:"tags"`

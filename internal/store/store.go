@@ -95,6 +95,7 @@ func (s *Store) migrate() error {
 		);`,
 		`CREATE TABLE IF NOT EXISTS trainings (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			uuid TEXT NOT NULL DEFAULT '',
 			title TEXT NOT NULL,
 			description TEXT NOT NULL DEFAULT '',
 			tags_json TEXT NOT NULL DEFAULT '[]',
@@ -114,6 +115,7 @@ func (s *Store) migrate() error {
 		);`,
 		`CREATE TABLE IF NOT EXISTS practices (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			uuid TEXT NOT NULL DEFAULT '',
 			title TEXT NOT NULL,
 			description TEXT NOT NULL DEFAULT '',
 			tags_json TEXT NOT NULL DEFAULT '[]',
@@ -173,6 +175,15 @@ func (s *Store) migrate() error {
 	// 空间内容（空间训练/练习/刷题结构；学生作答见 quizstore）
 	if err := s.migrateSpaceContent(); err != nil {
 		return err
+	}
+	// 训练/练习/刷题 uuidv7（表建齐后补列/回填——空间表在 migrateSpaceContent 才建）
+	for _, tbl := range []string{"trainings", "practices", "space_trainings", "space_practices", "space_quizzes"} {
+		if err := s.ensureColumn(tbl, "uuid", `uuid TEXT NOT NULL DEFAULT ''`); err != nil {
+			return err
+		}
+		if err := s.backfillUUIDs(tbl); err != nil {
+			return err
+		}
 	}
 	// 题目归属域：存量题归入默认域
 	if err := s.ensureColumn("problems", "domain_id", `domain_id INTEGER REFERENCES domains(id) ON DELETE CASCADE`); err != nil {
@@ -293,6 +304,34 @@ func (s *Store) backfillProblemUUIDs() error {
 			return err
 		}
 		if _, err := s.DB.Exec(`UPDATE problems SET uuid=? WHERE id=?`, u, id); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// backfillUUIDs 为指定表无 uuid 的行生成 UUIDv7（训练/练习/刷题等通用）。
+func (s *Store) backfillUUIDs(table string) error {
+	rows, err := s.DB.Query(`SELECT id FROM ` + table + ` WHERE uuid IS NULL OR uuid=''`)
+	if err != nil {
+		return err
+	}
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return err
+		}
+		ids = append(ids, id)
+	}
+	rows.Close()
+	for _, id := range ids {
+		u, err := NewUUIDv7()
+		if err != nil {
+			return err
+		}
+		if _, err := s.DB.Exec(`UPDATE `+table+` SET uuid=? WHERE id=?`, u, id); err != nil {
 			return err
 		}
 	}

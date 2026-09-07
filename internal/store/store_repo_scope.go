@@ -11,7 +11,7 @@ import (
 
 // ListTrainingsInDomain 返回含至少一道该域题目的训练模板（仓库页按域选模板用）。
 func (s *Store) ListTrainingsInDomain(domainID int64) ([]model.Training, error) {
-	rows, err := s.DB.Query(`SELECT DISTINCT t.id,t.title,t.description,t.tags_json,t.created_at,
+	rows, err := s.DB.Query(`SELECT DISTINCT t.id,t.uuid,t.title,t.description,t.tags_json,t.created_at,
 		COALESCE(t.folder_id,0)
 		FROM trainings t
 		WHERE EXISTS (
@@ -28,7 +28,7 @@ func (s *Store) ListTrainingsInDomain(domainID int64) ([]model.Training, error) 
 		var t model.Training
 		var tags string
 		var folder sql.NullInt64
-		if err := rows.Scan(&t.ID, &t.Title, &t.Description, &tags, &t.CreatedAt, &folder); err != nil {
+		if err := rows.Scan(&t.ID, &t.UUID, &t.Title, &t.Description, &tags, &t.CreatedAt, &folder); err != nil {
 			return nil, err
 		}
 		t.Tags = decodeTags(tags)
@@ -43,7 +43,7 @@ func (s *Store) ListTrainingsInDomain(domainID int64) ([]model.Training, error) 
 
 // ListPracticesInDomain 含至少一道该域题目的练习模板。
 func (s *Store) ListPracticesInDomain(domainID int64) ([]model.Practice, error) {
-	rows, err := s.DB.Query(`SELECT DISTINCT p.id,p.title,p.description,p.tags_json,p.created_at,
+	rows, err := s.DB.Query(`SELECT DISTINCT p.id,p.uuid,p.title,p.description,p.tags_json,p.created_at,
 		COALESCE(p.folder_id,0)
 		FROM practices p
 		WHERE EXISTS (
@@ -59,7 +59,7 @@ func (s *Store) ListPracticesInDomain(domainID int64) ([]model.Practice, error) 
 		var p model.Practice
 		var tags string
 		var folder sql.NullInt64
-		if err := rows.Scan(&p.ID, &p.Title, &p.Description, &tags, &p.CreatedAt, &folder); err != nil {
+		if err := rows.Scan(&p.ID, &p.UUID, &p.Title, &p.Description, &tags, &p.CreatedAt, &folder); err != nil {
 			return nil, err
 		}
 		p.Tags = decodeTags(tags)
