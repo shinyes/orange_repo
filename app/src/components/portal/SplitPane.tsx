@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils'
 export function SplitPane({
   left,
   right,
-  initialRightPct = 42,
+  initialRightPct = 50,
   minRightPct = 28,
   maxRightPct = 72,
 }: {

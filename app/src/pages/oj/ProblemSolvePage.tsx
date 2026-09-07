@@ -409,8 +409,7 @@ function ProgrammingSolve({ problem, backTo }: { problem: OjProblem; backTo: str
           </div>
         </div>
       }
-      initialRightPct={52}
-    />
+          />
     {/* 自定义输入对话框（运行用） */}
     <CustomInputDialog
       open={showCustomInput}

@@ -215,7 +215,6 @@ function TrainingFlow({ sid, tid, data }: {
                       </div>
                     </div>
                   }
-                  initialRightPct={45}
                 />
               ))}
           </div>
