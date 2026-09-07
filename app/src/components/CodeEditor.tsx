@@ -25,20 +25,23 @@ export function CodeEditor({
   // 确保本地 monaco 配置就绪（幂等，早于 Editor 实例化）
   setupMonaco()
 
-  // Alt+= / Alt+- / Alt+Z 缩放：编辑器聚焦时生效（捕获阶段，addCommand 不可靠）
+  // Alt+= / Alt+- / Alt+Z：触发 Monaco 内置 fontZoom 命令——与 Ctrl+滚轮(mouseWheelZoom)
+  // 同走 EditorZoom 缩放系统，行为完全一致（每档字号 ×(1+zoom*0.1)，全局档位 -5..20）。
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       const ctx = editorRef.current
       if (!ctx || !ctx.editor.hasTextFocus()) return
       if (!e.altKey || e.ctrlKey || e.metaKey) return
       const k = e.key
-      const zoom = (delta: number) => {
-        const cur = ctx.editor.getOption(ctx.monaco.editor.EditorOption.fontSize)
-        ctx.editor.updateOptions({ fontSize: Math.min(32, Math.max(9, cur + delta)) })
+      const cmd =
+        k === '=' || k === '+' ? 'editor.action.fontZoomIn'
+          : k === '-' || k === '_' ? 'editor.action.fontZoomOut'
+            : k === 'z' || k === 'Z' ? 'editor.action.fontZoomReset'
+              : null
+      if (cmd) {
+        e.preventDefault()
+        ctx.editor.trigger('keyboard', cmd, null)
       }
-      if (k === '=' || k === '+') { e.preventDefault(); zoom(1) }
-      else if (k === '-' || k === '_') { e.preventDefault(); zoom(-1) }
-      else if (k === 'z' || k === 'Z') { e.preventDefault(); ctx.editor.updateOptions({ fontSize: BASE_FONT }) }
     }
     document.addEventListener('keydown', onKeyDown, true)
     return () => document.removeEventListener('keydown', onKeyDown, true)
