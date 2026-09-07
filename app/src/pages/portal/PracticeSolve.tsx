@@ -435,7 +435,24 @@ function PaperNav({ sections, verdictOf, answeredCount, objectiveTotal, onJump }
           </div>
         </div>
       ))}
+      {/* 答题卡图例 */}
+      <div className="flex flex-wrap gap-x-3 gap-y-1 border-t pt-2.5">
+        <LegendItem cls="border-sky-300 bg-sky-100" label="已答" />
+        <LegendItem cls="border-border bg-white" label="未答" />
+        <LegendItem cls="border-emerald-300 bg-emerald-100" label="答对" />
+        <LegendItem cls="border-orange-400 bg-orange-50" label="答错/缺" />
+        <LegendItem cls="border-dashed border-border" label="编程" />
+      </div>
     </div>
+  )
+}
+
+function LegendItem({ cls, label }: { cls: string; label: string }) {
+  return (
+    <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
+      <span className={cn('size-3 rounded border', cls)} />
+      {label}
+    </span>
   )
 }
 
