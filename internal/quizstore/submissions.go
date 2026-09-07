@@ -34,8 +34,8 @@ type Submission struct {
 }
 
 // CreateProgrammingSubmission 事务内写入 submissions(queued) + judge_jobs(queued)。
-// 返回 submission id；runner 未配置（judge-token 空）时由调用方决定拒绝。
-func (s *Store) CreateProgrammingSubmission(userID, problemID int64, qtype, language, sourceCode, inputData string, submitType judge.SubmitType) (int64, error) {
+// trainingID>0 表示训练内提交（历史按训练×题过滤；0=非训练/全局）。返回 submission id。
+func (s *Store) CreateProgrammingSubmission(userID, problemID, trainingID int64, qtype, language, sourceCode, inputData string, submitType judge.SubmitType) (int64, error) {
 	tx, err := s.DB.Begin()
 	if err != nil {
 		return 0, err
@@ -43,9 +43,9 @@ func (s *Store) CreateProgrammingSubmission(userID, problemID int64, qtype, lang
 	defer tx.Rollback()
 
 	res, err := tx.Exec(`INSERT INTO submissions
-		(user_id, problem_id, question_type, language, source_code, input_data, submit_type, status, verdict)
-		VALUES(?,?,?,?,?,?,?,'queued','PENDING')`,
-		userID, problemID, qtype, language, sourceCode, inputData, string(submitType))
+		(user_id, problem_id, training_id, question_type, language, source_code, input_data, submit_type, status, verdict)
+		VALUES(?,?,?,?,?,?,?,?,'queued','PENDING')`,
+		userID, problemID, trainingID, qtype, language, sourceCode, inputData, string(submitType))
 	if err != nil {
 		return 0, err
 	}
@@ -122,10 +122,19 @@ func (s *Store) LoadSubmission(ctx context.Context, submissionID int64) (*judge.
 }
 
 // ListSubmissions 某学生某题的提交历史（倒序，上限 50）。
-func (s *Store) ListSubmissions(userID, problemID int64) ([]Submission, error) {
-	rows, err := s.DB.Query(`SELECT id,problem_id,question_type,language,input_data,submit_type,status,verdict,
-		time_ms,memory_kib,score,stdout,stderr,case_details_json,created_at,finished_at
-		FROM submissions WHERE user_id=? AND problem_id=? ORDER BY id DESC LIMIT 50`, userID, problemID)
+// trainingId>0 时仅返回该训练内的提交（训练内编程题按训练×题隔离历史）。
+func (s *Store) ListSubmissions(userID, problemID, trainingId int64) ([]Submission, error) {
+	var rows *sql.Rows
+	var err error
+	if trainingId > 0 {
+		rows, err = s.DB.Query(`SELECT id,problem_id,question_type,language,input_data,submit_type,status,verdict,
+			time_ms,memory_kib,score,stdout,stderr,case_details_json,created_at,finished_at
+			FROM submissions WHERE user_id=? AND problem_id=? AND training_id=? ORDER BY id DESC LIMIT 50`, userID, problemID, trainingId)
+	} else {
+		rows, err = s.DB.Query(`SELECT id,problem_id,question_type,language,input_data,submit_type,status,verdict,
+			time_ms,memory_kib,score,stdout,stderr,case_details_json,created_at,finished_at
+			FROM submissions WHERE user_id=? AND problem_id=? ORDER BY id DESC LIMIT 50`, userID, problemID)
+	}
 	if err != nil {
 		return nil, err
 	}

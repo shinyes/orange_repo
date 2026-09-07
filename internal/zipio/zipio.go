@@ -29,7 +29,7 @@ var imageRefPattern = regexp.MustCompile(`/api/uploads/([a-zA-Z0-9_-]+\.(?:png|j
 var imagesPathPattern = regexp.MustCompile(`\(images/`)
 
 // ExportProblem 与上游 problemExportEntry 字段一致（额外 uuid 字段供跨库去重/稳定引用，
-// 上游/旧版导入器不识别则自然忽略）。
+// starter 字段为编程题起始代码模板——上游/旧版导入器不识别则自然忽略）。
 type ExportProblem struct {
 	UUID           string          `json:"uuid,omitempty"`
 	Type           string          `json:"type"`
@@ -39,6 +39,8 @@ type ExportProblem struct {
 	BodyJSON       json.RawMessage `json:"bodyJson"`
 	AnswerJSON     json.RawMessage `json:"answerJson"`
 	Solutions      json.RawMessage `json:"solutions,omitempty"`
+	StarterCpp     string          `json:"starterCpp,omitempty"`
+	StarterPy      string          `json:"starterPy,omitempty"`
 	TimeLimitMS    int             `json:"timeLimitMs,omitempty"`
 	MemoryLimitMiB int             `json:"memoryLimitMiB,omitempty"`
 }
@@ -68,6 +70,8 @@ type ProblemPayload struct {
 	BodyJSON       json.RawMessage `json:"bodyJson"`
 	AnswerJSON     json.RawMessage `json:"answerJson"`
 	Solutions      json.RawMessage `json:"solutions"`
+	StarterCpp     string          `json:"starterCpp,omitempty"`
+	StarterPy      string          `json:"starterPy,omitempty"`
 	TimeLimitMS    int             `json:"timeLimitMs"`
 	MemoryLimitMiB int             `json:"memoryLimitMiB"`
 }
@@ -364,6 +368,8 @@ func (p *ProblemPayload) ToExportProblem() ExportProblem {
 		BodyJSON:       p.BodyJSON,
 		AnswerJSON:     p.AnswerJSON,
 		Solutions:      p.Solutions,
+		StarterCpp:     p.StarterCpp,
+		StarterPy:      p.StarterPy,
 		TimeLimitMS:    p.TimeLimitMS,
 		MemoryLimitMiB: p.MemoryLimitMiB,
 	}

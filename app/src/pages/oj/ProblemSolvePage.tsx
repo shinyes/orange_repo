@@ -28,7 +28,8 @@ import {
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
-import { langLabel, starterCode, typeLabel, verdictCls, verdictText } from './oj-utils'
+import { langLabel, typeLabel, verdictCls, verdictText } from './oj-utils'
+import { resolveStarter, saveDraftDebounced, useCloudDraft } from '@/lib/use-programming-workspace'
 
 const DRAFT_KEY = 'oj-draft'
 
@@ -199,7 +200,8 @@ function ObjectiveSolve({ problem, backTo }: { problem: OjProblem; backTo: strin
 function ProgrammingSolve({ problem, backTo }: { problem: OjProblem; backTo: string }) {
   const samples = (problem.bodyJson.samples as { input?: string; output?: string }[] | undefined) ?? []
   const [lang, setLang] = useState<CodeLang>(() => (localStorage.getItem(DRAFT_KEY + `-lang-${problem.id}`) as CodeLang) || 'python')
-  const [code, setCode] = useState(() => localStorage.getItem(DRAFT_KEY + `-${problem.id}-${lang}`) ?? starterCode(lang))
+  // 初始 code：本地草稿 →（异步）云草稿 → 题目模板（starterPy/starterCpp）→ 通用模板。
+  const [code, setCode] = useState(() => localStorage.getItem(DRAFT_KEY + `-${problem.id}-${lang}`) ?? resolveStarter(lang, problem))
   const [consoleText, setConsoleText] = useState('控制台已就绪')
   const [consoleVariant, setConsoleVariant] = useState<'default' | 'error' | 'success'>('default')
   const [busyAction, setBusyAction] = useState<string | null>(null) // run/test/submit 进行中
@@ -208,17 +210,39 @@ function ProgrammingSolve({ problem, backTo }: { problem: OjProblem; backTo: str
   const [customInput, setCustomInput] = useState('')
   const [historyOpen, setHistoryOpen] = useState(false)
 
+  // 云端草稿（按 题×语言 GET）：加载完成后回填——本地已有草稿（含本会话已输入/此前已回填）则保留本地。
+  const cloudDraft = useCloudDraft(problem.id, lang)
+  // 本会话内当前语言是否已被用户手动编辑（一旦输入，云端草稿不再覆盖；切语言时重置）。
+  const touchedRef = useRef(false)
+  function enterLang() {
+    touchedRef.current = false
+  }
+
+  // 云端草稿到达后回填：仅当用户未输入且本地无草稿时，用云端内容覆盖题目/通用模板并写入本地草稿。
   useEffect(() => {
-    localStorage.setItem(DRAFT_KEY + `-${problem.id}-${lang}`, code)
-  }, [code, lang, problem.id])
+    if (!cloudDraft.cloudLoaded || touchedRef.current) return
+    const local = localStorage.getItem(DRAFT_KEY + `-${problem.id}-${lang}`)
+    if (local != null && local.trim() !== '') return
+    if (!cloudDraft.initialCode || cloudDraft.initialCode.trim() === '') return // 云端无草稿：停留当前模板
+    setCode(cloudDraft.initialCode)
+    localStorage.setItem(DRAFT_KEY + `-${problem.id}-${lang}`, cloudDraft.initialCode)
+  }, [cloudDraft.cloudLoaded, cloudDraft.initialCode, lang, problem.id])
+
+  // 编辑器输入：实时写本地草稿（既有 oj-draft key）+ 云端 debounce 自动保存（静默失败，本地已缓存）。
+  function handleCodeChange(next: string) {
+    touchedRef.current = true
+    setCode(next)
+    localStorage.setItem(DRAFT_KEY + `-${problem.id}-${lang}`, next)
+    saveDraftDebounced(problem.id, lang, next)
+  }
 
   function switchLang(l: CodeLang) {
     if (l === lang) return
-    const prev = lang
     setLang(l)
-    setCode(localStorage.getItem(DRAFT_KEY + `-${problem.id}-${l}`) ?? starterCode(l))
+    setCode(localStorage.getItem(DRAFT_KEY + `-${problem.id}-${l}`) ?? resolveStarter(l, problem))
+    enterLang()
     localStorage.setItem(DRAFT_KEY + `-lang-${problem.id}`, l)
-    setConsoleText(prev ? '语言已切换，代码草稿分别保存' : '控制台已就绪')
+    setConsoleText('语言已切换，代码草稿分别保存')
   }
 
   const codeRef = useRef(code)
@@ -362,7 +386,7 @@ function ProgrammingSolve({ problem, backTo }: { problem: OjProblem; backTo: str
         )}
 
         <div className="min-h-[260px] flex-1 border-y bg-background">
-          <CodeEditor language={lang} value={code} onChange={setCode} />
+          <CodeEditor language={lang} value={code} onChange={handleCodeChange} />
         </div>
 
         {/* 控制台 */}

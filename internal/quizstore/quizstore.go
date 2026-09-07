@@ -109,6 +109,7 @@ func (s *Store) migrate() error {
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
 			problem_id INTEGER NOT NULL,
+			training_id INTEGER NOT NULL DEFAULT 0, -- 训练内提交（0=非训练/全局；按训练×题过滤历史）
 			question_type TEXT NOT NULL,
 			language TEXT NOT NULL DEFAULT '',
 			source_code TEXT NOT NULL DEFAULT '',
@@ -146,6 +147,15 @@ func (s *Store) migrate() error {
 			updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			PRIMARY KEY(user_id, problem_id)
 		);`,
+		// ---------- 云端代码草稿（按 用户×题目×语言；跨端恢复） ----------
+		`CREATE TABLE IF NOT EXISTS code_drafts (
+			user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			problem_id INTEGER NOT NULL,
+			language TEXT NOT NULL,
+			code TEXT NOT NULL DEFAULT '',
+			updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			PRIMARY KEY(user_id, problem_id, language)
+		);`,
 		// ---------- 空间训练/练习学生作答（主库仅存空间内容结构；作答与 users 同库） ----------
 		// training_id/practice_id 指主库空间训练/练习 id，无跨库外键；
 		// user_id 与 users 同库可级联删除。
@@ -177,6 +187,18 @@ func (s *Store) migrate() error {
 	for _, stmt := range stmts {
 		if _, err := s.DB.Exec(stmt); err != nil {
 			return fmt.Errorf("quiz migrate failed: %w; stmt: %s", err, stmt)
+		}
+	}
+	// 存量库兼容补列：submissions.training_id（新列；CREATE IF NOT EXISTS 不改旧表）
+	{
+		var n int
+		if err := s.DB.QueryRow(`SELECT COUNT(1) FROM pragma_table_info('submissions') WHERE name='training_id'`).Scan(&n); err != nil {
+			return err
+		}
+		if n == 0 {
+			if _, err := s.DB.Exec(`ALTER TABLE submissions ADD COLUMN training_id INTEGER NOT NULL DEFAULT 0`); err != nil {
+				return fmt.Errorf("quiz migrate add submissions.training_id: %w", err)
+			}
 		}
 	}
 	return nil

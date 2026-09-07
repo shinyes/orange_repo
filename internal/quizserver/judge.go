@@ -71,13 +71,15 @@ func (s *Server) problemVisibleViaSpaces(userID, problemID int64) (bool, error) 
 
 // ---------- 题目正文与判题动作 ----------
 
-// ojProblemView 下发题目正文（隐藏判题密钥）。
+// ojProblemView 下发题目正文（隐藏判题密钥；starter 为学生起始代码模板）。
 type ojProblemView struct {
 	ID             int64           `json:"id"`
 	Type           string          `json:"type"`
 	Title          string          `json:"title"`
 	StatementMD    string          `json:"statementMd"`
 	BodyJSON       json.RawMessage `json:"bodyJson"`
+	StarterCpp     string          `json:"starterCpp,omitempty"`
+	StarterPy      string          `json:"starterPy,omitempty"`
 	TimeLimitMS    int             `json:"timeLimitMs"`
 	MemoryLimitMiB int             `json:"memoryLimitMiB"`
 }
@@ -134,7 +136,8 @@ func (s *Server) handleOJProblem(c *fiber.Ctx) error {
 	}
 	return respondData(c, fiber.StatusOK, ojProblemView{
 		ID: p.ID, Type: p.Type, Title: p.Title, StatementMD: p.StatementMD,
-		BodyJSON: sanitizeOJBody(p), TimeLimitMS: p.TimeLimitMS, MemoryLimitMiB: p.MemoryLimitMiB,
+		BodyJSON: sanitizeOJBody(p), StarterCpp: p.StarterCpp, StarterPy: p.StarterPy,
+		TimeLimitMS: p.TimeLimitMS, MemoryLimitMiB: p.MemoryLimitMiB,
 	})
 }
 
@@ -153,6 +156,7 @@ type codeSubmitRequest struct {
 	Language   string `json:"language"`
 	SourceCode string `json:"sourceCode"`
 	InputData  string `json:"inputData"`
+	TrainingID int64  `json:"trainingId"` // >0=训练内提交（历史按训练×题隔离）
 }
 
 // judgeEnabled 是否配置了 judge-runtime。
@@ -191,7 +195,7 @@ func (s *Server) handleOJCodeAction(c *fiber.Ctx, submitType judge.SubmitType) e
 	if len(req.SourceCode) > 256*1024 {
 		return respondError(c, fiber.StatusBadRequest, "代码过长")
 	}
-	submissionID, err := s.QS.CreateProgrammingSubmission(user.ID, p.ID, p.Type, lang, req.SourceCode, req.InputData, submitType)
+	submissionID, err := s.QS.CreateProgrammingSubmission(user.ID, p.ID, req.TrainingID, p.Type, lang, req.SourceCode, req.InputData, submitType)
 	if err != nil {
 		return respondError(c, fiber.StatusInternalServerError, err.Error())
 	}
@@ -313,7 +317,14 @@ func (s *Server) handleOJSubmissions(c *fiber.Ctx) error {
 	if !visible {
 		return respondError(c, fiber.StatusNotFound, "题目不存在或不可见")
 	}
-	list, err := s.QS.ListSubmissions(user.ID, problemID)
+	// 训练内历史隔离：?trainingId=N 仅返回该训练内的提交
+	var trainingID int64
+	if raw := strings.TrimSpace(c.Query("trainingId")); raw != "" {
+		if tid, perr := strconv.ParseInt(raw, 10, 64); perr == nil && tid > 0 {
+			trainingID = tid
+		}
+	}
+	list, err := s.QS.ListSubmissions(user.ID, problemID, trainingID)
 	if err != nil {
 		return respondError(c, fiber.StatusInternalServerError, err.Error())
 	}
@@ -375,4 +386,63 @@ func (s *Server) handleOJSubmissionPoll(c *fiber.Ctx) error {
 		"caseDetails":  sub.CaseDetails,
 		"pollAfterMs":  1000,
 	})
+}
+
+// handleOJGetDraft GET /api/oj/problem/:id/draft?lang=python|cpp → 云端草稿（无=空串）。
+func (s *Server) handleOJGetDraft(c *fiber.Ctx) error {
+	user := currentUser(c)
+	problemID, err := paramID(c, "id")
+	if err != nil {
+		return respondError(c, fiber.StatusBadRequest, "invalid id")
+	}
+	lang, ok := normalizeLanguage(c.Query("lang"))
+	if !ok {
+		return respondError(c, fiber.StatusBadRequest, "仅支持 Python 与 C++")
+	}
+	visible, err := s.problemVisibleToUser(user, problemID)
+	if err != nil {
+		return respondError(c, fiber.StatusInternalServerError, err.Error())
+	}
+	if !visible {
+		return respondError(c, fiber.StatusNotFound, "题目不存在或不可见")
+	}
+	code, err := s.QS.GetDraft(user.ID, problemID, lang)
+	if err != nil {
+		return respondError(c, fiber.StatusInternalServerError, err.Error())
+	}
+	return respondData(c, fiber.StatusOK, fiber.Map{"code": code, "language": lang})
+}
+
+// handleOJSaveDraft PUT /api/oj/problem/:id/draft {language, code} → 保存云端草稿。
+func (s *Server) handleOJSaveDraft(c *fiber.Ctx) error {
+	user := currentUser(c)
+	problemID, err := paramID(c, "id")
+	if err != nil {
+		return respondError(c, fiber.StatusBadRequest, "invalid id")
+	}
+	var req struct {
+		Language string `json:"language"`
+		Code     string `json:"code"`
+	}
+	if err := c.BodyParser(&req); err != nil {
+		return respondError(c, fiber.StatusBadRequest, "invalid request")
+	}
+	lang, ok := normalizeLanguage(req.Language)
+	if !ok {
+		return respondError(c, fiber.StatusBadRequest, "仅支持 Python 与 C++")
+	}
+	if len(req.Code) > 512*1024 {
+		return respondError(c, fiber.StatusBadRequest, "草稿过大")
+	}
+	visible, err := s.problemVisibleToUser(user, problemID)
+	if err != nil {
+		return respondError(c, fiber.StatusInternalServerError, err.Error())
+	}
+	if !visible {
+		return respondError(c, fiber.StatusNotFound, "题目不存在或不可见")
+	}
+	if err := s.QS.SaveDraft(user.ID, problemID, lang, req.Code); err != nil {
+		return respondError(c, fiber.StatusInternalServerError, err.Error())
+	}
+	return c.SendStatus(fiber.StatusNoContent)
 }

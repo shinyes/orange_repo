@@ -250,6 +250,7 @@ func (s *Server) importBackup(manifest *backupManifest, problems []zipio.ExportP
 		payload := zipio.ProblemPayload{
 			UUID: p.UUID, Type: p.Type, Title: p.Title, Tags: p.Tags, StatementMD: p.StatementMD,
 			BodyJSON: p.BodyJSON, AnswerJSON: p.AnswerJSON, Solutions: p.Solutions,
+			StarterCpp: p.StarterCpp, StarterPy: p.StarterPy,
 			TimeLimitMS: p.TimeLimitMS, MemoryLimitMiB: p.MemoryLimitMiB,
 		}
 		if err := zipio.NormalizeProblemPayload(&payload); err != nil {
@@ -265,6 +266,8 @@ func (s *Server) importBackup(manifest *backupManifest, problems []zipio.ExportP
 			BodyJSON:       payload.BodyJSON,
 			AnswerJSON:     payload.AnswerJSON,
 			Solutions:      payload.Solutions,
+			StarterCpp:     payload.StarterCpp,
+			StarterPy:      payload.StarterPy,
 			TimeLimitMS:    payload.TimeLimitMS,
 			MemoryLimitMiB: payload.MemoryLimitMiB,
 		}

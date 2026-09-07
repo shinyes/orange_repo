@@ -115,6 +115,9 @@ interface EditState {
   answerIndex: number
   tfAnswer: boolean
   solutions: Solution[]
+  /** 学生起始代码（python/cpp，可空串=留空则学生用通用模板） */
+  starterPy: string
+  starterCpp: string
 }
 
 function fromProblem(p: Problem): EditState {
@@ -134,6 +137,8 @@ function fromProblem(p: Problem): EditState {
     answerIndex: typeof answer.answerIndex === 'number' ? answer.answerIndex : 0,
     tfAnswer: answer.answer === true,
     solutions: p.solutions ?? [],
+    starterPy: p.starterPy ?? '',
+    starterCpp: p.starterCpp ?? '',
   }
 }
 
@@ -173,6 +178,8 @@ export function ProblemEditor({ problem, onSaved }: { problem: Problem; onSaved:
       solutions: s.solutions,
       timeLimitMs: s.type === 'programming' ? s.limits.time : undefined,
       memoryLimitMiB: s.type === 'programming' ? s.limits.memory : undefined,
+      starterPy: s.type === 'programming' ? s.starterPy : undefined,
+      starterCpp: s.type === 'programming' ? s.starterCpp : undefined,
     }
   }
 
@@ -189,6 +196,8 @@ export function ProblemEditor({ problem, onSaved }: { problem: Problem; onSaved:
       solutions: j.solutions as Solution[] | undefined,
       timeLimitMs: j.timeLimitMs as number | undefined,
       memoryLimitMiB: j.memoryLimitMiB as number | undefined,
+      starterPy: j.starterPy as string | undefined,
+      starterCpp: j.starterCpp as string | undefined,
     }
   }
 
@@ -231,6 +240,9 @@ export function ProblemEditor({ problem, onSaved }: { problem: Problem; onSaved:
       solutions: arr(data.solutions, s.solutions) as Solution[],
       timeLimitMs: s.type === 'programming' ? num(data.timeLimitMs, s.limits.time) : undefined,
       memoryLimitMiB: s.type === 'programming' ? num(data.memoryLimitMiB, s.limits.memory) : undefined,
+      // 起始代码（编程题）：JSON 显式给出用之；缺省沿用当前表单值
+      starterPy: s.type === 'programming' ? str(data.starterPy, s.starterPy) : undefined,
+      starterCpp: s.type === 'programming' ? str(data.starterCpp, s.starterCpp) : undefined,
     })
   }
 
@@ -426,7 +438,6 @@ export function ProblemEditor({ problem, onSaved }: { problem: Problem; onSaved:
       <SolutionsEditor solutions={s.solutions} onChange={(solutions) => patch({ solutions })} />
         </>
       )}
-
       {/* 保存（表单 / JSON 共用底条） */}
       <div className="sticky bottom-0 flex justify-end gap-2 border-t bg-background py-3">
         {editorTab === 'json' ? (
@@ -478,6 +489,28 @@ function ProgrammingEditor({ s, patch }: { s: EditState; patch: (p: Partial<Edit
         <div className="w-40 space-y-1.5">
           <Label>内存（MiB）</Label>
           <Input type="number" min={16} value={s.limits.memory} onChange={(e) => patch({ limits: { ...s.limits, memory: Number(e.target.value) || 256 } })} />
+        </div>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <Label>Python 起始代码（学生进入编辑器默认内容；留空=通用模板）</Label>
+          <Textarea
+            value={s.starterPy}
+            onChange={(e) => patch({ starterPy: e.target.value })}
+            className="min-h-28 font-mono text-xs"
+            placeholder={'# TODO\n'}
+            spellCheck={false}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label>C++ 起始代码（学生进入编辑器默认内容；留空=通用模板）</Label>
+          <Textarea
+            value={s.starterCpp}
+            onChange={(e) => patch({ starterCpp: e.target.value })}
+            className="min-h-28 font-mono text-xs"
+            placeholder={'// C++\n#include <bits/stdc++.h>\nusing namespace std;\n\nint main() {\n    \n    return 0;\n}\n'}
+            spellCheck={false}
+          />
         </div>
       </div>
     </div>

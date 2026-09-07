@@ -87,6 +87,8 @@ func (s *Store) migrate() error {
 			body_json TEXT NOT NULL DEFAULT '{}',
 			answer_json TEXT NOT NULL DEFAULT '{}',
 			solutions_json TEXT NOT NULL DEFAULT '[]',
+			starter_cpp TEXT NOT NULL DEFAULT '',
+			starter_py TEXT NOT NULL DEFAULT '',
 			time_limit_ms INTEGER NOT NULL DEFAULT 1000,
 			memory_limit_mib INTEGER NOT NULL DEFAULT 256,
 			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -152,6 +154,13 @@ func (s *Store) migrate() error {
 	}
 	// 题目 UUIDv7 稳定标识（跨库去重/引用）；存量行补 uuid
 	if err := s.ensureColumn("problems", "uuid", `uuid TEXT`); err != nil {
+		return err
+	}
+	// 编程题起始代码模板（v2：starter_cpp/starter_py；存量列空=前端通用模板）
+	if err := s.ensureColumn("problems", "starter_cpp", `starter_cpp TEXT NOT NULL DEFAULT ''`); err != nil {
+		return err
+	}
+	if err := s.ensureColumn("problems", "starter_py", `starter_py TEXT NOT NULL DEFAULT ''`); err != nil {
 		return err
 	}
 	if err := s.backfillProblemUUIDs(); err != nil {
@@ -608,10 +617,11 @@ func (s *Store) CreateProblem(p model.Problem) (int64, error) {
 		return 0, err
 	}
 	res, err := s.DB.Exec(`INSERT INTO problems
-		(uuid,domain_id,type,title,tags_json,statement_md,body_json,answer_json,solutions_json,time_limit_ms,memory_limit_mib)
-		VALUES(?,?,?,?,?,?,?,?,?,?,?)`,
+		(uuid,domain_id,type,title,tags_json,statement_md,body_json,answer_json,solutions_json,starter_cpp,starter_py,time_limit_ms,memory_limit_mib)
+		VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		p.UUID, nullInt64(p.DomainID), string(p.Type), p.Title, encodeTags(p.Tags), p.StatementMD,
 		string(p.BodyJSON), string(p.AnswerJSON), string(p.Solutions),
+		p.StarterCpp, p.StarterPy,
 		p.TimeLimitMS, p.MemoryLimitMiB)
 	if err != nil {
 		return 0, err
@@ -625,8 +635,9 @@ func (s *Store) GetProblem(id int64) (*model.Problem, error) {
 	var tagsJSON, body, answer, solutions string
 	var domain sql.NullInt64
 	err := s.DB.QueryRow(`SELECT id,uuid,domain_id,type,title,tags_json,statement_md,body_json,answer_json,solutions_json,
-		time_limit_ms,memory_limit_mib,created_at FROM problems WHERE id=?`, id).
+		starter_cpp,starter_py,time_limit_ms,memory_limit_mib,created_at FROM problems WHERE id=?`, id).
 		Scan(&p.ID, &p.UUID, &domain, &p.Type, &p.Title, &tagsJSON, &p.StatementMD, &body, &answer, &solutions,
+			&p.StarterCpp, &p.StarterPy,
 			&p.TimeLimitMS, &p.MemoryLimitMiB, &p.CreatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
@@ -648,9 +659,10 @@ func (s *Store) GetProblem(id int64) (*model.Problem, error) {
 // UpdateProblem 全量更新题目（按 id）。
 func (s *Store) UpdateProblem(p model.Problem) error {
 	res, err := s.DB.Exec(`UPDATE problems SET type=?,title=?,tags_json=?,statement_md=?,body_json=?,
-		answer_json=?,solutions_json=?,time_limit_ms=?,memory_limit_mib=? WHERE id=?`,
+		answer_json=?,solutions_json=?,starter_cpp=?,starter_py=?,time_limit_ms=?,memory_limit_mib=? WHERE id=?`,
 		string(p.Type), p.Title, encodeTags(p.Tags), p.StatementMD,
 		string(p.BodyJSON), string(p.AnswerJSON), string(p.Solutions),
+		p.StarterCpp, p.StarterPy,
 		p.TimeLimitMS, p.MemoryLimitMiB, p.ID)
 	if err != nil {
 		return err

@@ -118,6 +118,8 @@ func (s *Server) RegisterRoutes(app *fiber.App) {
 	oj.Post("/problem/:id/submit", s.handleOJSubmit)
 	oj.Post("/problem/:id/objective-submit", s.handleOJObjectiveSubmit)
 	oj.Get("/problem/:id/submissions", s.handleOJSubmissions)
+	oj.Get("/problem/:id/draft", s.handleOJGetDraft)
+	oj.Put("/problem/:id/draft", s.handleOJSaveDraft)
 	oj.Get("/submission/:id/poll", s.handleOJSubmissionPoll)
 
 	// ---- OrangeOJ 门户（空间化）：空间切换 / 训练 / 练习 / 刷题 / 排行榜 ----

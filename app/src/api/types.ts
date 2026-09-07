@@ -237,6 +237,9 @@ export interface Problem {
   timeLimitMs: number
   memoryLimitMiB: number
   createdAt: string
+  /** 学生起始代码（python/cpp，可空串=空；编程题编辑器兜底用通用模板） */
+  starterPy?: string
+  starterCpp?: string
 }
 
 export interface ProblemPayload {
@@ -249,6 +252,8 @@ export interface ProblemPayload {
   solutions?: Solution[]
   timeLimitMs?: number
   memoryLimitMiB?: number
+  starterPy?: string
+  starterCpp?: string
 }
 
 // 标签树节点：tag 为完整路径（如 数学/几何），label 为最后一段。
@@ -441,6 +446,15 @@ export interface OjProblem {
   bodyJson: { options?: string[]; samples?: { input?: string; output?: string }[] } & Record<string, unknown>
   timeLimitMs: number
   memoryLimitMiB: number
+  /** 题目级起始模板（学生做题页/训练卡兜底用，可空串）；无值=可空 */
+  starterPy?: string
+  starterCpp?: string
+}
+
+/** 云端草稿内容（GET /api/oj/problem/:id/draft）。 */
+export interface OjDraft {
+  code: string
+  language: string
 }
 
 export type Verdict = 'PENDING' | 'OK' | 'AC' | 'WA' | 'CE' | 'RE' | 'TLE' | 'MLE'

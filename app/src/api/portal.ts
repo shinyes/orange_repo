@@ -7,6 +7,7 @@ import { req, json } from './client'
 import type {
   CodeLang,
   ObjectiveAnswer,
+  OjDraft,
   OjProblem,
   PortalSpace,
   PracticeDetail,
@@ -65,16 +66,25 @@ export const portalApi = {
 
   // ---- OrangeOJ：题目做题（/api/oj/problem/:id 保留——做题页/空间内跳转复用） ----
   ojProblem: (id: number) => req<OjProblem>(`/api/oj/problem/${id}`),
+  ojDraft: (id: number, lang: CodeLang) => req<OjDraft>(`/api/oj/problem/${id}/draft?lang=${lang}`),
+  ojSaveDraft: (id: number, lang: CodeLang, code: string) =>
+    req<void>(`/api/oj/problem/${id}/draft`, json({ method: 'PUT', body: JSON.stringify({ language: lang, code }) })),
   ojRun: (id: number, language: CodeLang, sourceCode: string, inputData: string) =>
     req<{ submissionId: number; status: string }>(`/api/oj/problem/${id}/run`, json({ method: 'POST', body: JSON.stringify({ language, sourceCode, inputData }) })),
   ojTest: (id: number, language: CodeLang, sourceCode: string) =>
     req<{ submissionId: number; status: string }>(`/api/oj/problem/${id}/test`, json({ method: 'POST', body: JSON.stringify({ language, sourceCode }) })),
-  ojSubmit: (id: number, language: CodeLang, sourceCode: string) =>
-    req<{ submissionId: number; status: string }>(`/api/oj/problem/${id}/submit`, json({ method: 'POST', body: JSON.stringify({ language, sourceCode }) })),
+  /** 提交：trainingId 可选——省略=全局（做题页/练习）；>0=训练内提交（服务端落 submissions.training_id）。 */
+  ojSubmit: (id: number, language: CodeLang, sourceCode: string, trainingId?: number) =>
+    req<{ submissionId: number; status: string }>(`/api/oj/problem/${id}/submit`, json({
+      method: 'POST',
+      body: JSON.stringify({ language, sourceCode, ...(trainingId ? { trainingId } : {}) }),
+    })),
   ojObjectiveSubmit: (id: number, answer: ObjectiveAnswer) =>
     req<{ submissionId: number; verdict: Verdict; score: number; correct: boolean; correctAnswer: { answerIndex?: number; answer?: boolean } }>(
       `/api/oj/problem/${id}/objective-submit`, json({ method: 'POST', body: JSON.stringify({ answer }) })),
   ojPoll: (submissionId: number, trainingId?: number) =>
     req<SubmissionPoll>(`/api/oj/submission/${submissionId}/poll${trainingId ? `?trainingId=${trainingId}` : ''}`),
-  ojSubmissions: (id: number) => req<{ submissions: Submission[] }>(`/api/oj/problem/${id}/submissions`),
+  /** 提交历史：trainingId 可选——省略=全局；>0=仅该训练内提交。 */
+  ojSubmissions: (id: number, trainingId?: number) =>
+    req<{ submissions: Submission[] }>(`/api/oj/problem/${id}/submissions${trainingId ? `?trainingId=${trainingId}` : ''}`),
 }

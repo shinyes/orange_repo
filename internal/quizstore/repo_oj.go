@@ -16,18 +16,20 @@ type OJProblem struct {
 	Title          string          `json:"title"`
 	StatementMD    string          `json:"statementMd"`
 	BodyJSON       json.RawMessage `json:"bodyJson"`
+	StarterCpp     string          `json:"starterCpp,omitempty"`
+	StarterPy      string          `json:"starterPy,omitempty"`
 	TimeLimitMS    int             `json:"timeLimitMs"`
 	MemoryLimitMiB int             `json:"memoryLimitMiB"`
 	Tags           []string        `json:"tags"`
 }
 
-// GetOJProblem 取题目做题正文（含编程题 inputFormat/outputFormat/samples；不含 testCases/answerJson/solutions）。
+// GetOJProblem 取题目做题正文（含编程题 inputFormat/outputFormat/samples 与起始代码模板；不含 testCases/answerJson/solutions）。
 func (r *RepoReader) GetOJProblem(id int64) (*OJProblem, error) {
 	p := &OJProblem{ID: id}
 	var tags, body string
-	err := r.DB.QueryRow(`SELECT type,title,tags_json,statement_md,body_json,time_limit_ms,memory_limit_mib
+	err := r.DB.QueryRow(`SELECT type,title,tags_json,statement_md,body_json,starter_cpp,starter_py,time_limit_ms,memory_limit_mib
 		FROM problems WHERE id=?`, id).
-		Scan(&p.Type, &p.Title, &tags, &p.StatementMD, &body, &p.TimeLimitMS, &p.MemoryLimitMiB)
+		Scan(&p.Type, &p.Title, &tags, &p.StatementMD, &body, &p.StarterCpp, &p.StarterPy, &p.TimeLimitMS, &p.MemoryLimitMiB)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}

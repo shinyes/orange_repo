@@ -28,6 +28,8 @@ func problemToExport(p *model.Problem) zipio.ExportProblem {
 		BodyJSON:       p.BodyJSON,
 		AnswerJSON:     p.AnswerJSON,
 		Solutions:      p.Solutions,
+		StarterCpp:     p.StarterCpp,
+		StarterPy:      p.StarterPy,
 		TimeLimitMS:    p.TimeLimitMS,
 		MemoryLimitMiB: p.MemoryLimitMiB,
 	}
@@ -160,6 +162,7 @@ func (s *Server) ImportZipData(data []byte, mode, nameHint string, folderID, dom
 		payload := zipio.ProblemPayload{
 			UUID: p.UUID, Type: p.Type, Title: p.Title, Tags: p.Tags, StatementMD: p.StatementMD,
 			BodyJSON: p.BodyJSON, AnswerJSON: p.AnswerJSON, Solutions: p.Solutions,
+			StarterCpp: p.StarterCpp, StarterPy: p.StarterPy,
 			TimeLimitMS: p.TimeLimitMS, MemoryLimitMiB: p.MemoryLimitMiB,
 		}
 		if err := zipio.NormalizeProblemPayload(&payload); err != nil {

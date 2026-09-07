@@ -35,6 +35,7 @@ type Solution struct {
 // Problem 题目完整实体。BodyJSON/AnswerJSON/Solutions 以原始 JSON 存储，
 // 结构约束由 zipio 的归一化逻辑负责。UUID 为跨库稳定标识（UUIDv7，导入缺则生成）。
 // DomainID 为题目归属域（nil=未归域，仅迁移期存量；新建一律须带）。
+// StarterCpp/StarterPy 为编程题起始代码模板（按语言；空=前端用通用模板）。
 type Problem struct {
 	ID             int64           `json:"id"`
 	UUID           string          `json:"uuid,omitempty"`
@@ -46,6 +47,8 @@ type Problem struct {
 	BodyJSON       json.RawMessage `json:"bodyJson"`
 	AnswerJSON     json.RawMessage `json:"answerJson"`
 	Solutions      json.RawMessage `json:"solutions"`
+	StarterCpp     string          `json:"starterCpp,omitempty"`
+	StarterPy      string          `json:"starterPy,omitempty"`
 	TimeLimitMS    int             `json:"timeLimitMs"`
 	MemoryLimitMiB int             `json:"memoryLimitMiB"`
 	CreatedAt      time.Time       `json:"createdAt"`

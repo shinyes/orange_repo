@@ -95,6 +95,8 @@ func (s *Server) handleCreateProblem(c *fiber.Ctx) error {
 		BodyJSON:       req.BodyJSON,
 		AnswerJSON:     req.AnswerJSON,
 		Solutions:      req.Solutions,
+		StarterCpp:     req.StarterCpp,
+		StarterPy:      req.StarterPy,
 		TimeLimitMS:    req.TimeLimitMS,
 		MemoryLimitMiB: req.MemoryLimitMiB,
 	}
@@ -171,6 +173,8 @@ func (s *Server) handleUpdateProblem(c *fiber.Ctx) error {
 		BodyJSON:       req.BodyJSON,
 		AnswerJSON:     req.AnswerJSON,
 		Solutions:      req.Solutions,
+		StarterCpp:     req.StarterCpp,
+		StarterPy:      req.StarterPy,
 		TimeLimitMS:    req.TimeLimitMS,
 		MemoryLimitMiB: req.MemoryLimitMiB,
 	}
