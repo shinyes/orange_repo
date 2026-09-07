@@ -98,13 +98,13 @@ export function PracticeQuickEditDialog(props: {
     )
   }
 
-  // 排序：交换两条目标顺序（服务端按 itemIds 全量排序）
+  // 排序：交换两条目标顺序（服务端按 itemIds 全量排序——须含全部条目）
   function moveItem(idx: number, dir: -1 | 1) {
     const target = idx + dir
     if (target < 0 || target >= items.length) return
     const ids = items.map((i) => i.id)
     ;[ids[idx], ids[target]] = [ids[target], ids[idx]]
-    void run(() => api.reorderPracticeItems(practiceId, ids), '已调整顺序')
+    void run(() => api.reorderSpacePracticeItems(practiceId, ids), '已调整顺序')
   }
 
   return (

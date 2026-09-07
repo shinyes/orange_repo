@@ -172,6 +172,7 @@ func (s *Server) registerManagement(app *fiber.App) {
 	ga("PUT", "/space/:id/practices/:pid", s.handleUpdateSpacePractice)
 	ga("DELETE", "/space/:id/practices/:pid", s.handleDeleteSpacePractice)
 	ga("POST", "/space/:id/practices/:pid/items", s.handleAddSpacePracticeItems)
+	ga("PUT", "/space/practices/:pid/items/order", s.handleReorderSpacePracticeItems)
 	ga("DELETE", "/space-items/:itemId", s.handleDeleteSpaceItem)
 	ga("GET", "/space/:id/quizzes", s.handleListSpaceQuizzes)
 	ga("POST", "/space/:id/quizzes", s.handleCreateSpaceQuiz)

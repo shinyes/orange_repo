@@ -220,8 +220,7 @@ func (s *Store) ReorderSpaceChapters(trainingID int64, chapterIDs []int64) error
 }
 
 // ReorderSpaceChapterItems 按给定条目 id 顺序重写章节内条目 order_no（题目排序）。
-func (s *Store) ReorderSpaceChapterItems(chapterID int64, itemIDs []int64) error {
-	tx, err := s.DB.Begin()
+func (s *Store) ReorderSpaceChapterItems(chapterID int64, itemIDs []int64) error {	tx, err := s.DB.Begin()
 	if err != nil {
 		return err
 	}
@@ -242,6 +241,42 @@ func (s *Store) ReorderSpaceChapterItems(chapterID int64, itemIDs []int64) error
 	}
 	for i, iid := range itemIDs {
 		if _, err := tx.Exec(`UPDATE space_training_items SET order_no=? WHERE id=?`, i+1, iid); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// ReorderSpacePracticeItems 空间练习条目全量排序（itemIDs 须覆盖该练习全部条目且归属正确）。
+func (s *Store) ReorderSpacePracticeItems(practiceID int64, itemIDs []int64) error {
+	tx, err := s.DB.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for _, iid := range itemIDs {
+		var pid int64
+		err := tx.QueryRow(`SELECT practice_id FROM space_practice_items WHERE id=?`, iid).Scan(&pid)
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrNotFound
+		}
+		if err != nil {
+			return err
+		}
+		if pid != practiceID {
+			return ErrNotFound
+		}
+	}
+	// 必须覆盖全部条目（防止遗漏导致部分条目 order 丢失）
+	var total int
+	if err := tx.QueryRow(`SELECT COUNT(1) FROM space_practice_items WHERE practice_id=?`, practiceID).Scan(&total); err != nil {
+		return err
+	}
+	if len(itemIDs) != total {
+		return errors.New("itemIds must cover all items of the practice")
+	}
+	for i, iid := range itemIDs {
+		if _, err := tx.Exec(`UPDATE space_practice_items SET order_no=? WHERE id=?`, i+1, iid); err != nil {
 			return err
 		}
 	}

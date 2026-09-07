@@ -244,6 +244,9 @@ export const adminApi = {
   deleteSpacePractice: (spaceId: number, pid: number) => req<void>(`/api/space/${spaceId}/practices/${pid}`, { method: 'DELETE' }),
   addSpacePracticeItems: (spaceId: number, pid: number, problemIds: number[]) =>
     req<void>(`/api/space/${spaceId}/practices/${pid}/items`, json({ method: 'POST', body: JSON.stringify({ problemIds }) })),
+  /** 空间练习条目全量排序（itemIds 须覆盖全部条目） */
+  reorderSpacePracticeItems: (pid: number, itemIds: number[]) =>
+    req<void>(`/api/space/practices/${pid}/items/order`, json({ method: 'PUT', body: JSON.stringify({ itemIds }) })),
   deleteSpaceItem: (itemId: number) => req<void>(`/api/space/space-items/${itemId}`, { method: 'DELETE' }),
   spaceQuizzes: (spaceId: number) => req<{ quizzes: SpaceQuiz[] }>(`/api/space/${spaceId}/quizzes`),
   createSpaceQuiz: (spaceId: number, body: { title: string; tags?: string[]; sourceType: string; repoKind?: string; repoId?: number }) =>

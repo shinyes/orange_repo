@@ -907,3 +907,33 @@ func (s *Server) handleSetVisibleUsers(c *fiber.Ctx) error {
 	}
 	return c.SendStatus(fiber.StatusNoContent)
 }
+
+// handleReorderSpacePracticeItems PUT /api/space/practices/:pid/items/order {itemIds}
+// → 空间练习条目全量排序（itemIds 须覆盖全部条目）。
+func (s *Server) handleReorderSpacePracticeItems(c *fiber.Ctx) error {
+	pid, err := paramID(c, "pid")
+	if err != nil {
+		return respondError(c, fiber.StatusBadRequest, "invalid practice id")
+	}
+	spaceID, err := s.Store.SpaceIDOfPractice(pid)
+	if err != nil {
+		if err == store.ErrNotFound {
+			return respondError(c, fiber.StatusNotFound, "练习不存在")
+		}
+		return err
+	}
+	user := currentUser(c)
+	if aerr := s.requireSpaceAccess(c, user, spaceID); aerr != nil {
+		return aerr
+	}
+	var req struct {
+		ItemIDs []int64 `json:"itemIds"`
+	}
+	if err := c.BodyParser(&req); err != nil {
+		return respondError(c, fiber.StatusBadRequest, "invalid request")
+	}
+	if err := s.Store.ReorderSpacePracticeItems(pid, req.ItemIDs); err != nil {
+		return respondError(c, fiber.StatusBadRequest, err.Error())
+	}
+	return c.SendStatus(fiber.StatusNoContent)
+}
