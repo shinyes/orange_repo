@@ -235,14 +235,36 @@ function NavCard({ items, correct, wrong, missing, createdAt, onJump, onOpenProg
   )
 }
 
-// 编程题回顾卡：点击进入做题页只读回顾（题目/代码/测评记录，不可作答）
+// 编程题回顾卡：状态圆（该题账号提交记录：AC=通过绿 / 有提交未AC=未通过红 / 无=未作答灰）
+// + 题号，与客观题一致；点击进入做题页只读回顾
 function ProgrammingReviewCard({ item, onOpen }: { item: PracticeRecordItem; onOpen: () => void }) {
+  const subsQ = useQuery({
+    queryKey: ['oj-submissions', item.problemId],
+    queryFn: () => api.ojSubmissions(item.problemId),
+  })
+  const subs = subsQ.data?.submissions ?? []
+  // 仅正式提交（submit）计入作答状态：run/test（运行/自测/评测基准）不算"做过"
+  const submits = subs.filter((s) => s.submitType === 'submit')
+  const passed = submits.some((s) => s.verdict === 'AC' || s.verdict === 'OK')
+  const attempted = !passed && submits.some((s) => s.status === 'done')
+  const stateMeta = passed
+    ? { cls: 'bg-emerald-500', mark: '✓', label: '已通过' }
+    : attempted
+      ? { cls: 'bg-red-500', mark: '✗', label: '未通过' }
+      : { cls: 'bg-muted-foreground/50', mark: '–', label: '未作答' }
   return (
     <div id={`r-${item.problemId}`} className="scroll-mt-24 rounded-xl border bg-card p-4 shadow-sm">
       <div className="flex items-center gap-2">
-        <span className="flex size-5 shrink-0 items-center justify-center rounded-full border border-dashed border-muted-foreground/40 text-[10px] font-bold text-muted-foreground/60">
-          {item.no}
+        <span
+          title={stateMeta.label}
+          className={cn(
+            'flex size-5 shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-white',
+            stateMeta.cls,
+          )}
+        >
+          {stateMeta.mark}
         </span>
+        <span className="text-sm font-bold tabular-nums">{item.no}.</span>
         <span className="min-w-0 flex-1 truncate text-sm font-semibold">{item.title || `题目 #${item.problemId}`}</span>
         <button
           type="button"
