@@ -265,9 +265,6 @@ function ProgrammingReviewCard({ item, onOpen }: { item: PracticeRecordItem; onO
           {memMiB ? <>内存限制: {memMiB} MB</> : null}
         </p>
       )}
-      <p className="mt-2 text-xs text-muted-foreground/80">
-        编程题在独立做题页作答。本记录仅展示题目信息，可进入查看题面与该题历史测评（回顾模式不可作答）。
-      </p>
     </div>
   )
 }
