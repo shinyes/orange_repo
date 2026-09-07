@@ -1,7 +1,7 @@
 // 空间管理（/admin/spaces；domain_admin / global_admin 选中域后，全宽页）：
 // 空间 CRUD + 展开详情（成员管理 / 内容管理：空间训练·练习·刷题项目）。
 // 迁移适配：返回按钮从 view.kind 状态机（goHome）改为 URL 导航回 /admin/problems。
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
@@ -10,6 +10,7 @@ import {
   BookOpenIcon,
   ChevronRightIcon,
   ClipboardListIcon,
+  EyeIcon,
   FileStackIcon,
   LayoutGridIcon,
   LoaderCircleIcon,
@@ -366,6 +367,7 @@ function TrainingsPanel({ spaceId }: { spaceId: number }) {
   const trainings = listQ.data?.trainings ?? []
   const [creating, setCreating] = useState(false)
   const [openId, setOpenId] = useState<number | null>(null)
+  const [visibleFor, setVisibleFor] = useState<{ id: number; title: string } | null>(null)
   const invalidate = () => {
     void qc.invalidateQueries({ queryKey: ['space', spaceId, 'trainings'] })
   }
@@ -400,6 +402,14 @@ function TrainingsPanel({ spaceId }: { spaceId: number }) {
                 <Button
                   size="icon-xs"
                   variant="ghost"
+                  title="分配可见成员（默认无成员可见）"
+                  onClick={() => setVisibleFor({ id: t.id, title: t.title })}
+                >
+                  <EyeIcon />
+                </Button>
+                <Button
+                  size="icon-xs"
+                  variant="ghost"
                   className="text-destructive"
                   title="删除训练"
                   onClick={() => {
@@ -426,6 +436,17 @@ function TrainingsPanel({ spaceId }: { spaceId: number }) {
         onOpenChange={setCreating}
         onCreated={() => invalidate()}
       />
+      {visibleFor && (
+        <VisibleMembersDialog
+          spaceId={spaceId}
+          kind="training"
+          itemId={visibleFor.id}
+          title={visibleFor.title}
+          open
+          onClose={() => setVisibleFor(null)}
+          onSaved={invalidate}
+        />
+      )}
     </div>
   )
 }
@@ -566,6 +587,7 @@ function PracticesPanel({ spaceId }: { spaceId: number }) {
   const practices = listQ.data?.practices ?? []
   const [creating, setCreating] = useState(false)
   const [openId, setOpenId] = useState<number | null>(null)
+  const [visibleFor, setVisibleFor] = useState<{ id: number; title: string } | null>(null)
   const invalidate = () => {
     void qc.invalidateQueries({ queryKey: ['space', spaceId, 'practices'] })
   }
@@ -599,6 +621,14 @@ function PracticesPanel({ spaceId }: { spaceId: number }) {
                 <Button
                   size="icon-xs"
                   variant="ghost"
+                  title="分配可见成员（默认无成员可见）"
+                  onClick={() => setVisibleFor({ id: p.id, title: p.title })}
+                >
+                  <EyeIcon />
+                </Button>
+                <Button
+                  size="icon-xs"
+                  variant="ghost"
                   className="text-destructive"
                   title="删除练习"
                   onClick={() => {
@@ -624,6 +654,17 @@ function PracticesPanel({ spaceId }: { spaceId: number }) {
         onOpenChange={setCreating}
         onCreated={() => invalidate()}
       />
+      {visibleFor && (
+        <VisibleMembersDialog
+          spaceId={spaceId}
+          kind="practice"
+          itemId={visibleFor.id}
+          title={visibleFor.title}
+          open
+          onClose={() => setVisibleFor(null)}
+          onSaved={invalidate}
+        />
+      )}
     </div>
   )
 }
@@ -706,6 +747,7 @@ function QuizzesPanel({ spaceId }: { spaceId: number }) {
     queryKey: ['space', spaceId, 'quizzes'],
     queryFn: () => api.spaceQuizzes(spaceId),
   })
+  const [visibleFor, setVisibleFor] = useState<{ id: number; title: string } | null>(null)
   const quizzes = listQ.data?.quizzes ?? []
   const [creating, setCreating] = useState(false)
   const invalidate = () => {
@@ -735,6 +777,14 @@ function QuizzesPanel({ spaceId }: { spaceId: number }) {
               <Button
                 size="icon-xs"
                 variant="ghost"
+                title="分配可见成员（默认无成员可见）"
+                onClick={() => setVisibleFor({ id: qz.id, title: qz.title })}
+              >
+                <EyeIcon />
+              </Button>
+              <Button
+                size="icon-xs"
+                variant="ghost"
                 className="text-destructive"
                 title="删除"
                 onClick={() => {
@@ -752,6 +802,17 @@ function QuizzesPanel({ spaceId }: { spaceId: number }) {
         </div>
       )}
       <CreateSpaceQuizDialog spaceId={spaceId} open={creating} onOpenChange={setCreating} onCreated={() => invalidate()} />
+      {visibleFor && (
+        <VisibleMembersDialog
+          spaceId={spaceId}
+          kind="quiz"
+          itemId={visibleFor.id}
+          title={visibleFor.title}
+          open
+          onClose={() => setVisibleFor(null)}
+          onSaved={invalidate}
+        />
+      )}
     </div>
   )
 }
@@ -1116,6 +1177,92 @@ function RenameSpaceDialog(props: { space: Space | null; onOpenChange: (v: boole
           <Button variant="outline" onClick={() => props.onOpenChange(false)}>取消</Button>
           <Button onClick={() => void save()} disabled={!name.trim() || busy}>
             {busy ? '保存中…' : '保存'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ---------- 可见成员分配（训练/练习/刷题：默认无成员可见） ----------
+
+function VisibleMembersDialog(props: {
+  spaceId: number
+  kind: 'training' | 'practice' | 'quiz'
+  itemId: number
+  title: string
+  open: boolean
+  onClose: () => void
+  onSaved: () => void
+}) {
+  const [selected, setSelected] = useState<Set<number>>(new Set())
+  const [busy, setBusy] = useState(false)
+  const membersQ = useQuery({
+    queryKey: ['space', props.spaceId, 'members'],
+    queryFn: () => api.spaceMembers(props.spaceId),
+  })
+  const visQ = useQuery({
+    queryKey: ['space-visible', props.kind, props.itemId],
+    queryFn: () => api.visibleUsers(props.kind, props.spaceId, props.itemId),
+    enabled: props.open,
+  })
+  useEffect(() => {
+    if (props.open && visQ.data) {
+      setSelected(new Set(visQ.data.userIds))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.open, props.itemId, visQ.data])
+
+  const members = membersQ.data?.members ?? []
+
+  async function save() {
+    setBusy(true)
+    try {
+      await api.setVisibleUsers(props.kind, props.spaceId, props.itemId, [...selected])
+      toast.success(selected.size === 0 ? '已设为无成员可见（仅管理员）' : `已分配 ${selected.size} 位成员可见`)
+      props.onSaved()
+      props.onClose()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : '保存失败')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const toggle = (uid: number) => {
+    setSelected((prev) => {
+      const n = new Set(prev)
+      if (n.has(uid)) n.delete(uid)
+      else n.add(uid)
+      return n
+    })
+  }
+
+  return (
+    <Dialog open={props.open} onOpenChange={(v) => !v && props.onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>可见成员 · {props.title}</DialogTitle>
+          <DialogDescription>
+            仅被分配的成员能在门户看到并进入该项目；默认无成员可见（管理员始终可见）。
+          </DialogDescription>
+        </DialogHeader>
+        <div className="max-h-72 space-y-1 overflow-y-auto">
+          {members.length === 0 ? (
+            <p className="py-6 text-center text-xs text-muted-foreground">该空间暂无成员，请先添加成员。</p>
+          ) : (
+            members.map((m) => (
+              <label key={m.userId} className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted">
+                <input type="checkbox" className="size-4 accent-[var(--primary)]" checked={selected.has(m.userId)} onChange={() => toggle(m.userId)} />
+                <span className="min-w-0 flex-1 truncate">{m.username}</span>
+              </label>
+            ))
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={props.onClose}>取消</Button>
+          <Button onClick={() => void save()} disabled={busy}>
+            {busy ? '保存中…' : '保存分配'}
           </Button>
         </DialogFooter>
       </DialogContent>

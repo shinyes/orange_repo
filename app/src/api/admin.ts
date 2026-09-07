@@ -211,6 +211,12 @@ export const adminApi = {
   updateSpaceTraining: (spaceId: number, tid: number, body: { title?: string; description?: string; tags?: string[]; maxAttempts?: number }) =>
     req<void>(`/api/space/${spaceId}/trainings/${tid}`, json({ method: 'PUT', body: JSON.stringify(body) })),
   deleteSpaceTraining: (spaceId: number, tid: number) => req<void>(`/api/space/${spaceId}/trainings/${tid}`, { method: 'DELETE' }),
+  /** 可见成员名单（训练/练习/刷题；kind=training|practice|quiz） */
+  visibleUsers: (kind: 'training' | 'practice' | 'quiz', spaceId: number, itemId: number) =>
+    req<{ userIds: number[] }>(`/api/space/${spaceId}/${kind === 'training' ? 'trainings' : kind === 'practice' ? 'practices' : 'quizzes'}/${itemId}/visible`),
+  /** 覆盖式设置可见成员（空=无成员可见） */
+  setVisibleUsers: (kind: 'training' | 'practice' | 'quiz', spaceId: number, itemId: number, userIds: number[]) =>
+    req<void>(`/api/space/${spaceId}/${kind === 'training' ? 'trainings' : kind === 'practice' ? 'practices' : 'quizzes'}/${itemId}/visible`, json({ method: 'PUT', body: JSON.stringify({ userIds }) })),
   createSpaceChapter: (spaceId: number, tid: number, title: string) =>
     req<{ id: number }>(`/api/space/${spaceId}/trainings/${tid}/chapters`, json({ method: 'POST', body: JSON.stringify({ title }) })),
   addSpaceChapterItems: (spaceId: number, chapterId: number, problemIds: number[]) =>
