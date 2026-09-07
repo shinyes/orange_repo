@@ -13,10 +13,13 @@ export function CodeEditor({
   language,
   value,
   onChange,
+  readOnly,
 }: {
   language: CodeLang
   value: string
   onChange: (v: string) => void
+  /** 只读回顾模式（不可编辑） */
+  readOnly?: boolean
 }) {
   const onChangeRef = useRef(onChange)
   onChangeRef.current = onChange
@@ -79,6 +82,7 @@ export function CodeEditor({
         lineNumbersMinChars: 2,
         // Ctrl+鼠标滚轮 缩放字号（Monaco 原生）
         mouseWheelZoom: true,
+        ...(readOnly ? { readOnly: true, domReadOnly: true } : {}),
       }}
       loading={<div className="p-4 text-xs text-muted-foreground">编辑器加载中…</div>}
     />

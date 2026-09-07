@@ -2,9 +2,9 @@
 // 布局模仿练习作答页：桌面 左 sticky 题目导航（题号方块：对=绿/错=红）+ 右逐题回顾；
 // 移动端 题目导航收进弹层。路由 /s/:spaceId/practice/:practiceId/record/:submissionId。
 import { useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { LayoutGridIcon, Loader2Icon } from 'lucide-react'
+import { Code2Icon, LayoutGridIcon, Loader2Icon } from 'lucide-react'
 
 import { api } from '@/api'
 import type { ObjectiveAnswer, PracticeRecordItem } from '@/api/types'
@@ -74,10 +74,17 @@ function RecordSheet({ sid, pid, data }: {
   const wrongCount = answeredItems.length - correctCount
   const missingCount = objItems.length - answeredItems.length
   const [navOpen, setNavOpen] = useState(false)
+  const navigate = useNavigate()
 
   const jumpTo = (problemId: number) => {
     setNavOpen(false)
     document.getElementById(`r-${problemId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }
+
+  // 编程题：进入做题页回顾（只读，不可作答）
+  const openProgReview = (problemId: number) => {
+    setNavOpen(false)
+    navigate(`/problem/${problemId}?review=1&back=${encodeURIComponent(`/s/${sid}/practice/${pid}/record/${data.submissionId}`)}`)
   }
 
   const nav = (
@@ -88,6 +95,7 @@ function RecordSheet({ sid, pid, data }: {
       missing={missingCount}
       createdAt={data.createdAt}
       onJump={jumpTo}
+      onOpenProg={openProgReview}
     />
   )
 
@@ -133,15 +141,19 @@ function RecordSheet({ sid, pid, data }: {
           {nav}
         </aside>
 
-        {/* 右栏：逐题回顾（唯一内容滚动区；显示练习全部客观题） */}
+        {/* 右栏：逐题回顾（唯一内容滚动区；显示练习全部题目） */}
         <div className="min-h-0 flex-1 overflow-y-auto">
           <div className="space-y-3 p-3">
-            {objItems.map((it) => (
-              <ReviewCard key={it.problemId} item={it} />
-            ))}
-            {objItems.length === 0 && (
+            {items.map((it) =>
+              it.type === 'programming' ? (
+                <ProgrammingReviewCard key={it.problemId} item={it} onOpen={() => openProgReview(it.problemId)} />
+              ) : (
+                <ReviewCard key={it.problemId} item={it} />
+              ),
+            )}
+            {items.length === 0 && (
               <div className="rounded-xl border border-dashed p-12 text-center text-sm text-muted-foreground">
-                本练习无客观题
+                本练习无题目
               </div>
             )}
           </div>
@@ -162,13 +174,14 @@ function RecordSheet({ sid, pid, data }: {
 }
 
 // 左栏导航卡（答题卡网格：对=绿 错=红 未答=白 编程=虚线灰）
-function NavCard({ items, correct, wrong, missing, createdAt, onJump }: {
+function NavCard({ items, correct, wrong, missing, createdAt, onJump, onOpenProg }: {
   items: PracticeRecordItem[]
   correct: number
   wrong: number
   missing: number
   createdAt: string
   onJump: (problemId: number) => void
+  onOpenProg: (problemId: number) => void
 }) {
   return (
     <div className="rounded-xl border bg-card p-3 shadow-sm">
@@ -200,8 +213,8 @@ function NavCard({ items, correct, wrong, missing, createdAt, onJump }: {
             <button
               key={it.problemId}
               type="button"
-              onClick={() => onJump(it.problemId)}
-              title={`第 ${it.no} 题${isProg ? '（编程）' : answered ? (it.correct ? ' · 答对' : ' · 答错') : ' · 未作答'}`}
+              onClick={() => (isProg ? onOpenProg(it.problemId) : onJump(it.problemId))}
+              title={`第 ${it.no} 题${isProg ? '（编程，点击进入回顾）' : answered ? (it.correct ? ' · 答对' : ' · 答错') : ' · 未作答'}`}
               className={cn(
                 'flex h-8 items-center justify-center rounded-md border text-xs font-semibold tabular-nums transition-colors',
                 isProg
@@ -218,6 +231,43 @@ function NavCard({ items, correct, wrong, missing, createdAt, onJump }: {
           )
         })}
       </div>
+    </div>
+  )
+}
+
+// 编程题回顾卡：点击进入做题页只读回顾（题目/代码/测评记录，不可作答）
+function ProgrammingReviewCard({ item, onOpen }: { item: PracticeRecordItem; onOpen: () => void }) {
+  const contentQ = useQuery({
+    queryKey: ['oj-problem', item.problemId],
+    queryFn: () => api.ojProblem(item.problemId),
+  })
+  const timeMs = contentQ.data?.timeLimitMs
+  const memMiB = contentQ.data?.memoryLimitMiB
+  return (
+    <div id={`r-${item.problemId}`} className="scroll-mt-24 rounded-xl border bg-card p-4 shadow-sm">
+      <div className="flex items-center gap-2">
+        <span className="flex size-5 shrink-0 items-center justify-center rounded-full border border-dashed border-muted-foreground/40 text-[10px] font-bold text-muted-foreground/60">
+          {item.no}
+        </span>
+        <span className="min-w-0 flex-1 truncate text-sm font-semibold">{item.title || `题目 #${item.problemId}`}</span>
+        <button
+          type="button"
+          onClick={onOpen}
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-orange-300 bg-orange-50 px-3 py-1.5 text-xs font-semibold text-orange-600 transition-colors hover:bg-orange-100"
+        >
+          <Code2Icon className="size-3.5" /> 查看题目与记录
+        </button>
+      </div>
+      {(timeMs || memMiB) && (
+        <p className="mt-2 text-xs tabular-nums text-muted-foreground">
+          {timeMs ? <>时间限制: {timeMs % 1000 === 0 ? `${Math.round(timeMs / 1000)}s` : `${timeMs} ms`}</> : null}
+          {timeMs && memMiB ? <span className="mx-1.5 text-muted-foreground/60">|</span> : null}
+          {memMiB ? <>内存限制: {memMiB} MB</> : null}
+        </p>
+      )}
+      <p className="mt-2 text-xs text-muted-foreground/80">
+        编程题在独立做题页作答。本记录仅展示题目信息，可进入查看题面与该题历史测评（回顾模式不可作答）。
+      </p>
     </div>
   )
 }

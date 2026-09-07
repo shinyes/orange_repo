@@ -41,6 +41,7 @@ export function ProblemSolvePage() {
   const navigate = useNavigate()
   const pid = Number(problemId)
   const backTo = searchParams.get('back') ?? '/'
+  const review = searchParams.get('review') === '1'
 
   const problemQ = useQuery({
     queryKey: ['oj-problem', pid],
@@ -59,7 +60,7 @@ export function ProblemSolvePage() {
     )
   }
   return problem.type === 'programming' ? (
-    <ProgrammingSolve key={pid} problem={problem} backTo={backTo} />
+    <ProgrammingSolve key={pid} problem={problem} backTo={backTo} review={review} />
   ) : (
     <ObjectiveSolve key={pid} problem={problem} backTo={backTo} />
   )
@@ -198,7 +199,7 @@ function ObjectiveSolve({ problem, backTo }: { problem: OjProblem; backTo: strin
 
 // ---------------- 编程题 ----------------
 
-function ProgrammingSolve({ problem, backTo }: { problem: OjProblem; backTo: string }) {
+function ProgrammingSolve({ problem, backTo, review }: { problem: OjProblem; backTo: string; review?: boolean }) {
   const samples = (problem.bodyJson.samples as { input?: string; output?: string }[] | undefined) ?? []
   const [lang, setLang] = useState<CodeLang>(() => (localStorage.getItem(DRAFT_KEY + `-lang-${problem.id}`) as CodeLang) || 'python')
   // 初始 code：本地草稿 →（异步）云草稿 → 题目模板（starterPy/starterCpp）→ 通用模板。
@@ -231,6 +232,7 @@ function ProgrammingSolve({ problem, backTo }: { problem: OjProblem; backTo: str
 
   // 编辑器输入：实时写本地草稿（既有 oj-draft key）+ 云端 debounce 自动保存（静默失败，本地已缓存）。
   function handleCodeChange(next: string) {
+    if (review) return // 回顾只读，不写草稿
     touchedRef.current = true
     setCode(next)
     localStorage.setItem(DRAFT_KEY + `-${problem.id}-${lang}`, next)
@@ -357,7 +359,12 @@ function ProgrammingSolve({ problem, backTo }: { problem: OjProblem; backTo: str
       right={
         <div className="flex h-full min-h-[420px] min-w-0 flex-col rounded-2xl border bg-card">
           <div className="flex flex-wrap items-center gap-1.5 border-b p-2">
-            <Select value={lang} onValueChange={(v) => switchLang(v as CodeLang)}>
+            {review && (
+              <span className="mr-1 inline-flex items-center rounded-md border border-sky-300 bg-sky-50 px-2 py-0.5 text-[11px] font-semibold text-sky-700">
+                回顾模式（只读，不可作答）
+              </span>
+            )}
+            <Select value={lang} onValueChange={(v) => switchLang(v as CodeLang)} disabled={review}>
               <SelectTrigger className="h-8 w-[130px] text-xs">
                 <SelectValue />
               </SelectTrigger>
@@ -366,13 +373,13 @@ function ProgrammingSolve({ problem, backTo }: { problem: OjProblem; backTo: str
                 <SelectItem value="cpp">C++ (g++ 11)</SelectItem>
               </SelectContent>
             </Select>
-            <Button size="sm" className="h-8 bg-emerald-600 text-xs hover:bg-emerald-700" disabled={!!busyAction} onClick={() => setShowCustomInput(true)}>
+            <Button size="sm" className="h-8 bg-emerald-600 text-xs hover:bg-emerald-700" disabled={!!busyAction || review} title={review ? '回顾模式不可运行' : undefined} onClick={() => setShowCustomInput(true)}>
               {busyAction === 'run' ? <Loader2Icon className="size-3.5 animate-spin" /> : <PlayIcon className="size-3.5" />} 运行
             </Button>
-            <Button size="sm" variant="secondary" className="h-8 text-xs" disabled={!!busyAction} onClick={() => void action('test')}>
+            <Button size="sm" variant="secondary" className="h-8 text-xs" disabled={!!busyAction || review} title={review ? '回顾模式不可测试' : undefined} onClick={() => void action('test')}>
               {busyAction === 'test' ? <Loader2Icon className="size-3.5 animate-spin" /> : <FlaskConicalIcon className="size-3.5" />} 测试
             </Button>
-            <Button size="sm" className="h-8 text-xs" disabled={!!busyAction} onClick={() => void action('submit')}>
+            <Button size="sm" className="h-8 text-xs" disabled={!!busyAction || review} title={review ? '回顾模式不可提交' : undefined} onClick={() => void action('submit')}>
               {busyAction === 'submit' ? <Loader2Icon className="size-3.5 animate-spin" /> : <SendIcon className="size-3.5" />} 提交
             </Button>
             <div className="flex-1" />
@@ -390,7 +397,7 @@ function ProgrammingSolve({ problem, backTo }: { problem: OjProblem; backTo: str
           )}
 
           <div className="min-h-[260px] flex-1 border-y bg-background">
-            <CodeEditor language={lang} value={code} onChange={handleCodeChange} />
+            <CodeEditor language={lang} value={code} onChange={handleCodeChange} readOnly={review} />
           </div>
 
           {/* 控制台 */}
