@@ -755,23 +755,25 @@ function HistoryCard({ sid, pid }: { sid: number; pid: number }) {
         <p className="py-2.5 text-[11px] text-muted-foreground">暂无提交记录，交卷后显示在此</p>
       )}
       {list.length > 0 && (
-        <div className={cn('mt-1', list.length > 3 && 'max-h-[200px] overflow-y-auto pr-0.5')}>
-          {list.map((s) => (
-            <Link
-              key={s.id}
-              to={`/s/${sid}/practice/${pid}/record/${s.id}`}
-              title="点击查看该次答题卡"
-              className="flex items-center gap-2 rounded-md py-1.5 pr-1 text-xs transition-colors hover:bg-orange-50/60"
-            >
-              <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-orange-50 text-[10px] font-bold tabular-nums text-orange-600">
-                {s.objectiveCorrect}
-              </span>
-              <span className="min-w-0 truncate text-muted-foreground">答对 {s.objectiveCorrect} 题</span>
-              <span className="ml-auto shrink-0 tabular-nums text-muted-foreground/80">{formatTime(s.createdAt)}</span>
-            </Link>
-          ))}
+        <>
+          <div className={cn('mt-1', list.length > 3 && 'max-h-[96px] overflow-y-auto pr-0.5')}>
+            {list.map((s) => (
+              <Link
+                key={s.id}
+                to={`/s/${sid}/practice/${pid}/record/${s.id}`}
+                title="点击查看该次答题卡"
+                className="flex h-8 items-center gap-2 rounded-md py-1.5 pr-1 text-xs transition-colors hover:bg-orange-50/60"
+              >
+                <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-orange-50 text-[10px] font-bold tabular-nums text-orange-600">
+                  {s.objectiveCorrect}
+                </span>
+                <span className="min-w-0 truncate text-muted-foreground">答对 {s.objectiveCorrect} 题</span>
+                <span className="ml-auto shrink-0 tabular-nums text-muted-foreground/80">{formatTime(s.createdAt)}</span>
+              </Link>
+            ))}
+          </div>
           <p className="mt-1 text-[10px] text-muted-foreground/70">点击记录查看答题卡</p>
-        </div>
+        </>
       )}
     </div>
   )
