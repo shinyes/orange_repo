@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { createContext, useContext, useState, type ReactNode } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
@@ -45,24 +45,69 @@ export function PracticeSolve() {
   if (space === null || q.isError || !data) return <Center text="练习不存在或无权访问" />
 
   return (
-    <SpacePageShell spaceId={sid} backTo={`/s/${sid}/practice`} backLabel="返回练习列表">
-      <div className="min-h-full bg-[#eef2f7]">
-        <PracticePaper key={pid} sid={sid} pid={pid} data={data} />
-      </div>
-    </SpacePageShell>
+    <PracticeProvider key={pid} sid={sid} pid={pid} data={data}>
+      <SpacePageShell
+        spaceId={sid}
+        backTo={`/s/${sid}/practice`}
+        backLabel="返回练习列表"
+        headerExtra={<HeaderActionBar />}
+      >
+        <div className="min-h-full bg-[#eef2f7]">
+          <PracticePaper sid={sid} pid={pid} data={data} />
+        </div>
+      </SpacePageShell>
+    </PracticeProvider>
   )
 }
 
-const CN_NUM = ['一', '二', '三', '四', '五', '六', '七', '八']
+// ---------- 练习整卷共享状态（外壳顶栏按钮 + 卷面/导航/对话框共用） ----------
 
-function PracticePaper({ sid, pid, data }: {
+type PracticeResult = {
+  submissionId: number
+  results: PracticeResultItem[]
+  objectiveCorrect: number
+  objectiveTotal: number
+}
+
+type PracticeCtxValue = {
+  answers: Record<number, ObjectiveAnswer>
+  toggleAnswer: (problemId: number, a: ObjectiveAnswer) => void
+  answeredCount: number
+  submitting: boolean
+  result: PracticeResult | null
+  submitPaper: () => void
+  canSubmit: boolean
+  dismissResult: () => void
+  confirmOpen: boolean
+  setConfirmOpen: (v: boolean) => void
+  navOpen: boolean
+  setNavOpen: (v: boolean) => void
+  historyAllOpen: boolean
+  setHistoryAllOpen: (v: boolean) => void
+  openConfirm: () => void
+  openHistory: () => void
+  openNav: () => void
+}
+
+const PracticeCtx = createContext<PracticeCtxValue | null>(null)
+
+function usePracticeCtx(): PracticeCtxValue {
+  const v = useContext(PracticeCtx)
+  if (!v) throw new Error('usePracticeCtx must be used within PracticeProvider')
+  return v
+}
+
+function PracticeProvider({ sid, pid, data, children }: {
   sid: number
   pid: number
   data: PracticeDetail
+  children: ReactNode
 }) {
-  const { practice, items: rawItems } = data
+  const { items: rawItems } = data
   const items = rawItems ?? []
-  const objectiveItems = items.filter((i) => i.problemType === 'single_choice' || i.problemType === 'true_false')
+  const objectiveItems = items.filter(
+    (i) => i.problemType === 'single_choice' || i.problemType === 'true_false',
+  )
   const qc = useQueryClient()
 
   // 每客观题已选题（单选=number，判断=boolean）
@@ -71,7 +116,7 @@ function PracticePaper({ sid, pid, data }: {
   const [navOpen, setNavOpen] = useState(false)
   const [historyAllOpen, setHistoryAllOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
-  const [result, setResult] = useState<{ submissionId: number; results: PracticeResultItem[]; objectiveCorrect: number; objectiveTotal: number } | null>(null)
+  const [result, setResult] = useState<PracticeResult | null>(null)
 
   function toggleAnswer(problemId: number, a: ObjectiveAnswer) {
     setAnswers((prev) => {
@@ -82,7 +127,7 @@ function PracticePaper({ sid, pid, data }: {
     })
   }
 
-  async function submitPaper() {
+  async function doSubmit() {
     setSubmitting(true)
     try {
       const payload = objectiveItems.map((it) => ({
@@ -103,6 +148,92 @@ function PracticePaper({ sid, pid, data }: {
   }
 
   const answeredCount = Object.keys(answers).length
+  const canSubmit = !submitting && answeredCount > 0 && !result
+
+  const value: PracticeCtxValue = {
+    answers,
+    toggleAnswer,
+    answeredCount,
+    submitting,
+    result,
+    submitPaper: () => void doSubmit(),
+    canSubmit,
+    dismissResult: () => setResult(null),
+    confirmOpen,
+    setConfirmOpen,
+    navOpen,
+    setNavOpen,
+    historyAllOpen,
+    setHistoryAllOpen,
+    openConfirm: () => setConfirmOpen(true),
+    openHistory: () => setHistoryAllOpen(true),
+    openNav: () => setNavOpen(true),
+  }
+
+  return <PracticeCtx.Provider value={value}>{children}</PracticeCtx.Provider>
+}
+
+// ---------- 外壳顶栏右侧操作按钮（全部提交记录 / 保存 / 提交；移动端含「导航」） ----------
+
+function HeaderActionBar() {
+  const { submitting, canSubmit, openConfirm, openHistory, openNav } = usePracticeCtx()
+  return (
+    <div className="flex shrink-0 items-center gap-1.5">
+      <Button
+        variant="outline"
+        size="sm"
+        className="md:hidden"
+        onClick={openNav}
+      >
+        <LayoutGridIcon className="size-3.5" />
+        导航
+      </Button>
+      <Button
+        variant="outline"
+        size="sm"
+        className="text-muted-foreground"
+        onClick={openHistory}
+      >
+        <HistoryIcon className="size-3.5" />
+        <span className="hidden md:inline">全部提交记录</span>
+      </Button>
+      <Button
+        variant="secondary"
+        size="sm"
+        className="text-muted-foreground"
+        title="当前答案已保存在本地，提交前可随时修改"
+      >
+        <SaveIcon className="size-3.5" />
+        <span className="hidden sm:inline">保存</span>
+      </Button>
+      <Button
+        size="sm"
+        className="min-w-[4.75rem] bg-orange-500 text-white hover:bg-orange-600 focus-visible:ring-orange-500/30"
+        disabled={!canSubmit}
+        onClick={openConfirm}
+      >
+        {submitting ? <Loader2Icon className="size-3.5 animate-spin" /> : <SendIcon className="size-3.5" />}
+        {submitting ? '提交中' : '提交'}
+      </Button>
+    </div>
+  )
+}
+
+const CN_NUM = ['一', '二', '三', '四', '五', '六', '七', '八']
+
+function PracticePaper({ sid, pid, data }: {
+  sid: number
+  pid: number
+  data: PracticeDetail
+}) {
+  const { practice, items: rawItems } = data
+  const items = rawItems ?? []
+  const objectiveItems = items.filter((i) => i.problemType === 'single_choice' || i.problemType === 'true_false')
+  const {
+    answers, toggleAnswer, answeredCount, result, submitPaper, dismissResult,
+    confirmOpen, setConfirmOpen, navOpen, setNavOpen,
+    historyAllOpen, setHistoryAllOpen,
+  } = usePracticeCtx()
 
   // 按题型分组（固定顺序：单选→判断→编程，只渲染非空组），跨组连续编号
   const grouped = ([
@@ -147,59 +278,18 @@ function PracticePaper({ sid, pid, data }: {
 
   return (
     <div className="mx-auto w-full max-w-6xl">
-      {/* 页内头部（sticky 顶栏条，位于 SpacePageShell children 内） */}
-      <div className="sticky top-0 z-30 border-b bg-white/95 backdrop-blur shadow-sm">
-        <div className="mx-auto flex h-14 w-full max-w-6xl items-center gap-3 px-3">
-          <h1 className="flex min-w-0 items-center gap-2 text-base font-bold">
-            <ClipboardListIcon className="size-4 shrink-0 text-orange-500" />
-            <span className="min-w-0 truncate">{practice.title}</span>
-          </h1>
-          <div className="flex-1" />
-          <div className="flex shrink-0 items-center gap-1.5">
-            <Button
-              variant="outline"
-              size="sm"
-              className="md:hidden"
-              onClick={() => setNavOpen(true)}
-            >
-              <LayoutGridIcon className="size-3.5" />
-              导航
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="text-muted-foreground"
-              onClick={() => setHistoryAllOpen(true)}
-            >
-              <HistoryIcon className="size-3.5" />
-              <span className="hidden md:inline">全部提交记录</span>
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              className="text-muted-foreground"
-              title="当前答案已保存在本地，提交前可随时修改"
-            >
-              <SaveIcon className="size-3.5" />
-              <span className="hidden sm:inline">保存</span>
-            </Button>
-            <Button
-              size="sm"
-              className="min-w-[4.75rem] bg-orange-500 text-white hover:bg-orange-600 focus-visible:ring-orange-500/30"
-              disabled={submitting || answeredCount === 0 || !!result}
-              onClick={() => setConfirmOpen(true)}
-            >
-              {submitting ? <Loader2Icon className="size-3.5 animate-spin" /> : <SendIcon className="size-3.5" />}
-              {submitting ? '提交中' : '提交'}
-            </Button>
-          </div>
-        </div>
+      {/* 练习标题（移到卷面顶部，随内容滚动） */}
+      <div className="px-3 pt-4">
+        <h1 className="flex min-w-0 items-center gap-2 text-lg font-bold">
+          <ClipboardListIcon className="size-5 shrink-0 text-orange-500" />
+          <span className="min-w-0 truncate">{practice.title}</span>
+        </h1>
       </div>
 
-      <div className="mx-auto flex w-full max-w-6xl items-start gap-4 px-3 pt-4">
+      <div className="mx-auto flex w-full max-w-6xl items-start gap-4 px-3 pt-3">
         {/* 左栏：我的提交记录 + 题号导航（整体 sticky 固定，不随滚动） */}
         <aside className="hidden w-56 shrink-0 md:block">
-          <div className="sticky top-[5.5rem] flex max-h-[calc(100vh-11.5rem)] flex-col gap-3 overflow-y-auto pr-0.5">
+          <div className="sticky top-16 flex max-h-[calc(100dvh-5rem)] flex-col gap-3 overflow-y-auto pr-0.5">
             <div className="rounded-xl border bg-card p-3 shadow-sm">
               <HistoryCard sid={sid} pid={pid} onViewAll={() => setHistoryAllOpen(true)} />
             </div>
@@ -222,7 +312,7 @@ function PracticePaper({ sid, pid, data }: {
             <ResultPanel
               result={result}
               items={objectiveItems}
-              onDismiss={() => setResult(null)}
+              onDismiss={dismissResult}
             />
           )}
 

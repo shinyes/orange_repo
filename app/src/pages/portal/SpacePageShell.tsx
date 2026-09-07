@@ -12,6 +12,7 @@ export function SpacePageShell({
   backTo,
   backLabel,
   spaceName,
+  headerExtra,
   children,
 }: {
   spaceId: number
@@ -20,6 +21,8 @@ export function SpacePageShell({
   /** 返回按钮文字（如 返回训练列表 / 返回空间） */
   backLabel: string
   spaceName?: string
+  /** 顶栏右端扩展区域（在「我的」入口前；供练习页放 提交/保存/全部记录 等按钮） */
+  headerExtra?: React.ReactNode
   children: React.ReactNode
 }) {
   const { user } = usePortalSession()
@@ -44,6 +47,7 @@ export function SpacePageShell({
             </Link>
           )}
           <div className="flex-1" />
+          {headerExtra}
           <NavLink
             to="/mine"
             className={({ isActive }) =>
