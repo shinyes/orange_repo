@@ -336,7 +336,6 @@ function PracticePaper({ sid, pid, data }: {
                 <section key={g.key} className="overflow-hidden rounded-xl border bg-card shadow-sm">
                   <div className="border-b px-4 pt-3 pb-2 text-xs font-bold text-muted-foreground">
                     {sectionTitles[gi]}
-                    <span className="ml-2 font-normal opacity-70">{g.items.length} 题</span>
                   </div>
                   <div className="divide-y divide-border">{children}</div>
                 </section>
