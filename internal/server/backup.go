@@ -11,6 +11,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
@@ -236,13 +238,100 @@ func (s *Server) backupScope(c *fiber.Ctx) *int64 {
 	return scope
 }
 
-// importBackup 全库恢复：题目按 uuid 去重（已存在则引用，否则新建）→ 目录树 → 训练/练习。
-func (s *Server) importBackup(manifest *backupManifest, problems []zipio.ExportProblem, domainID *int64) error {
+// importBackup 全库恢复（严格模式）：预校验全部数据 → 逐段写入并记录创建资源；
+// 任何一步失败立即报错并补偿回滚（删除本次已建题目/目录/训练/练习与落盘图片），
+// 不留半导入状态。
+func (s *Server) importBackup(manifest *backupManifest, problems []zipio.ExportProblem, domainID *int64) (err error) {
 	if manifest.Version != 1 {
 		return errors.New("不支持的备份版本")
 	}
 
-	// 1) 题目：uuid 去重；createdIDs 按下标映射最终题 id，训练/练习引用不错位
+	// ---------- 阶段 0：严格预校验（失败不写任何数据） ----------
+	for i := range problems {
+		p := problems[i]
+		payload := zipio.ProblemPayload{
+			UUID: p.UUID, Type: p.Type, Title: p.Title, Tags: p.Tags, StatementMD: p.StatementMD,
+			BodyJSON: p.BodyJSON, AnswerJSON: p.AnswerJSON, Solutions: p.Solutions,
+			StarterCpp: p.StarterCpp, StarterPy: p.StarterPy,
+			TimeLimitMS: p.TimeLimitMS, MemoryLimitMiB: p.MemoryLimitMiB,
+		}
+		if err := zipio.NormalizeProblemPayload(&payload); err != nil {
+			return fmt.Errorf("题目 %d（%q）不符合要求: %v", i+1, payload.Title, err)
+		}
+	}
+	referRange := func(owner string, ids []int) error {
+		for _, idx := range ids {
+			if idx < 0 || idx >= len(problems) {
+				return fmt.Errorf("%s 引用不存在的题目下标 %d（共 %d 题）", owner, idx, len(problems))
+			}
+		}
+		return nil
+	}
+	for _, bt := range manifest.Trainings {
+		if strings.TrimSpace(bt.Title) == "" {
+			return fmt.Errorf("训练 %q 标题为空", bt.Title)
+		}
+		for _, bc := range bt.Chapters {
+			if err := referRange(fmt.Sprintf("训练 %q 的章节 %q", bt.Title, bc.Title), bc.ProblemIDs); err != nil {
+				return err
+			}
+		}
+	}
+	for _, bp := range manifest.Practices {
+		if strings.TrimSpace(bp.Title) == "" {
+			return fmt.Errorf("练习 %q 标题为空", bp.Title)
+		}
+		if err := referRange(fmt.Sprintf("练习 %q", bp.Title), bp.ProblemIDs); err != nil {
+			return err
+		}
+	}
+	for _, d := range manifest.Directories {
+		if strings.TrimSpace(d.Name) == "" || strings.Contains(d.Name, "/") {
+			return fmt.Errorf("题册目录名非法: %q", d.Name)
+		}
+	}
+
+	// 回滚补偿：记录本次创建的资源（图片回删由调用方 handleImportBackup 负责）
+	type rollback struct {
+		problemIDs  []int64
+		trainingIDs []int64
+		practiceIDs []int64
+	}
+	rb := &rollback{}
+	// 导入前目录 id 集合（回滚时清理本次新建的空目录）
+	initialDirs, err := s.Store.ListBookletDirectories()
+	if err != nil {
+		return err
+	}
+	initialDirIDs := map[int64]bool{}
+	for _, d := range initialDirs {
+		initialDirIDs[d.ID] = true
+	}
+	commit := false
+	defer func() {
+		if commit || err == nil {
+			return
+		}
+		// 补偿回滚：题目（级联模板条目）→ 训练 → 练习 → 新建目录（尽力删空目录）
+		for _, id := range rb.problemIDs {
+			_ = s.Store.DeleteProblem(id)
+		}
+		for _, id := range rb.trainingIDs {
+			_ = s.Store.DeleteTraining(id)
+		}
+		for _, id := range rb.practiceIDs {
+			_ = s.Store.DeletePractice(id)
+		}
+		if dirs, lerr := s.Store.ListBookletDirectories(); lerr == nil {
+			for i := len(dirs) - 1; i >= 0; i-- {
+				if !initialDirIDs[dirs[i].ID] {
+					_ = s.Store.DeleteBookletDirectory(dirs[i].ID, false) // 非空目录删除失败则跳过
+				}
+			}
+		}
+	}()
+
+	// ---------- 1) 题目 ----------
 	createdIDs := make([]int64, len(problems))
 	for i := range problems {
 		p := problems[i]
@@ -252,9 +341,6 @@ func (s *Server) importBackup(manifest *backupManifest, problems []zipio.ExportP
 			BodyJSON: p.BodyJSON, AnswerJSON: p.AnswerJSON, Solutions: p.Solutions,
 			StarterCpp: p.StarterCpp, StarterPy: p.StarterPy,
 			TimeLimitMS: p.TimeLimitMS, MemoryLimitMiB: p.MemoryLimitMiB,
-		}
-		if err := zipio.NormalizeProblemPayload(&payload); err != nil {
-			return fmt.Errorf("题目 %q: %v", payload.Title, err)
 		}
 		prob := model.Problem{
 			UUID:           payload.UUID,
@@ -286,6 +372,7 @@ func (s *Server) importBackup(manifest *backupManifest, problems []zipio.ExportP
 			return err
 		}
 		createdIDs[i] = id
+		rb.problemIDs = append(rb.problemIDs, id)
 	}
 
 	// 2) 目录树（manifest.Directories 顺序即创建序——父先于子）
@@ -314,6 +401,7 @@ func (s *Server) importBackup(manifest *backupManifest, problems []zipio.ExportP
 		if err != nil {
 			return err
 		}
+		rb.trainingIDs = append(rb.trainingIDs, trID)
 		for _, bc := range bt.Chapters {
 			chID, err := s.Store.CreateChapter(trID, bc.Title)
 			if err != nil {
@@ -321,9 +409,7 @@ func (s *Server) importBackup(manifest *backupManifest, problems []zipio.ExportP
 			}
 			var pids []int64
 			for _, idx := range bc.ProblemIDs {
-				if idx >= 0 && idx < len(createdIDs) {
-					pids = append(pids, createdIDs[idx])
-				}
+				pids = append(pids, createdIDs[idx])
 			}
 			if len(pids) > 0 {
 				if _, err := s.Store.AddChapterItems(chID, pids); err != nil {
@@ -343,11 +429,10 @@ func (s *Server) importBackup(manifest *backupManifest, problems []zipio.ExportP
 		if err != nil {
 			return err
 		}
+		rb.practiceIDs = append(rb.practiceIDs, prID)
 		var pids []int64
 		for _, idx := range bp.ProblemIDs {
-			if idx >= 0 && idx < len(createdIDs) {
-				pids = append(pids, createdIDs[idx])
-			}
+			pids = append(pids, createdIDs[idx])
 		}
 		if len(pids) > 0 {
 			if _, err := s.Store.AddPracticeItems(prID, pids); err != nil {
@@ -355,6 +440,7 @@ func (s *Server) importBackup(manifest *backupManifest, problems []zipio.ExportP
 			}
 		}
 	}
+	commit = true
 	return nil
 }
 
@@ -390,6 +476,26 @@ func (s *Server) handleImportBackup(c *fiber.Ctx) error {
 		return respondError(c, fiber.StatusBadRequest, "备份清单解析失败: "+err.Error())
 	}
 
+	// 严格校验：题目文本引用的图片必须存在于包内（缺失=不完整备份，拒绝导入）
+	{
+		available := map[string]bool{}
+		for name := range images {
+			available[name] = true
+		}
+		for i := range problems {
+			refs := zipio.CollectImageRefs(
+				problems[i].StatementMD, string(problems[i].BodyJSON),
+				string(problems[i].AnswerJSON), string(problems[i].Solutions),
+			)
+			for _, r := range refs {
+				if !available[r] {
+					return respondError(c, fiber.StatusBadRequest,
+						fmt.Sprintf("题目 %d（%q）引用图片 %q 但备份包内缺失——备份不完整，已拒绝导入", i+1, problems[i].Title, r))
+				}
+			}
+		}
+	}
+
 	// 落盘图片（nano 命名 + 引用重写，与 ImportZipData 一致）
 	imageRename := map[string]string{}
 	for name, content := range images {
@@ -414,7 +520,11 @@ func (s *Server) handleImportBackup(c *fiber.Ctx) error {
 	}
 
 	if err := s.importBackup(manifest, problems, s.backupScope(c)); err != nil {
-		return respondError(c, fiber.StatusBadRequest, err.Error())
+		// 回滚本次已落盘的图片（库侧资源已由 importBackup 补偿删除）
+		for _, newName := range imageRename {
+			_ = os.Remove(filepath.Join(s.UploadsDir, newName))
+		}
+		return respondError(c, fiber.StatusBadRequest, "导入失败，已全部回滚: "+err.Error())
 	}
 	return respondData(c, fiber.StatusCreated, fiber.Map{
 		"imported":  len(problems),
