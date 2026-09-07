@@ -18,6 +18,7 @@ import { toast } from 'sonner'
 import { api } from '@/api'
 import type { CorrectAnswer, ObjectiveAnswer, TrainingItemView } from '@/api/types'
 import { TrainingProgrammingCard } from '@/components/portal/TrainingProgrammingCard'
+import { SplitPane } from '@/components/portal/SplitPane'
 import { ObjectiveQuestion } from '@/components/portal/objective'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
@@ -159,65 +160,64 @@ function TrainingFlow({ sid, tid, data }: {
             </p>
           </aside>
 
-          {/* 中央：题目内容区（客观题：题面卡；编程题：题面与编辑器分栏占满） */}
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:flex-row">
-            {item && (
-              <>
-                {/* 题目（题面+作答）——客观题与编程题都完整展示题面，可滚动 */}
-                <div className="min-h-0 flex-1 overflow-y-auto border-b lg:border-r lg:border-b-0">
+          {/* 中央：题目区（客观题整宽；编程题=可拖拽分栏：左题面/右编辑器） */}
+          <div className="min-h-0 min-w-0 flex-1">
+            {item &&
+              (itemObjective ? (
+                <div className="h-full overflow-y-auto">
                   <PageContainer className="py-4">
                     {/* 题目头 */}
                     <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                       <span className="rounded bg-muted px-1.5 py-0.5 font-medium">{item.chapterTitle}</span>
                       <span>第 {activeIdx + 1} / {all.length} 题</span>
-                      {itemObjective && (
-                        <>
-                          <span>{training.maxAttempts > 0 ? `限答 ${training.maxAttempts} 次` : '不限次'}</span>
-                          {!item.solved && item.locked && (
-                            <span className="inline-flex items-center gap-1 text-red-600">已达上限，可回顾</span>
-                          )}
-                        </>
+                      <span>{training.maxAttempts > 0 ? `限答 ${training.maxAttempts} 次` : '不限次'}</span>
+                      {!item.solved && item.locked && (
+                        <span className="inline-flex items-center gap-1 text-red-600">已达上限，可回顾</span>
                       )}
                     </div>
-
-                    {itemObjective ? (
-                      // 客观题：题面+选项 完整居中卡
-                      <ObjectiveCard
-                        key={`${item.problemId}`}
-                        sid={sid} tid={tid} item={item} maxAttempts={training.maxAttempts}
-                        onAnswered={invalidate}
-                      />
-                    ) : (
-                      // 编程题题面：题干 + 输入/输出格式 + 样例（完整可滚动）
-                      <ProgrammingStatement problemId={item.problemId} itemSolved={itemSolved} />
-                    )}
+                    <ObjectiveCard
+                      key={`${item.problemId}`}
+                      sid={sid} tid={tid} item={item} maxAttempts={training.maxAttempts}
+                      onAnswered={invalidate}
+                    />
                   </PageContainer>
                 </div>
-
-                {/* 编程题编辑器（lg 右分栏占满高度；移动端在题面下方） */}
-                {!itemObjective && (
-                  <div className="flex min-h-0 flex-col bg-background lg:w-[42%] lg:shrink-0">
-                    <div className="border-b px-3 py-2 text-xs font-medium text-muted-foreground">
-                      {itemSolved && (
-                        <span className="mr-2 inline-flex items-center gap-1 text-emerald-600">
-                          <CircleCheckBigIcon className="size-3.5" /> 已通过
-                        </span>
-                      )}
-                      代码编辑器
+              ) : (
+                <SplitPane
+                  left={
+                    <PageContainer className="py-4">
+                      {/* 题目头 */}
+                      <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                        <span className="rounded bg-muted px-1.5 py-0.5 font-medium">{item.chapterTitle}</span>
+                        <span>第 {activeIdx + 1} / {all.length} 题</span>
+                      </div>
+                      <ProgrammingStatement problemId={item.problemId} itemSolved={itemSolved} />
+                    </PageContainer>
+                  }
+                  right={
+                    <div className="flex h-full min-h-0 flex-col bg-background p-3">
+                      <div className="mb-2 flex shrink-0 items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                        {itemSolved && (
+                          <span className="inline-flex items-center gap-1 text-emerald-600">
+                            <CircleCheckBigIcon className="size-3.5" /> 已通过
+                          </span>
+                        )}
+                        代码编辑器
+                      </div>
+                      <div className="min-h-0 flex-1">
+                        <TrainingProgrammingCard
+                          key={`${item.problemId}`}
+                          problemId={item.problemId}
+                          trainingId={tid}
+                          solved={itemSolved}
+                          onSolved={invalidate}
+                        />
+                      </div>
                     </div>
-                    <div className="min-h-0 flex-1 overflow-y-auto p-3">
-                      <TrainingProgrammingCard
-                        key={`${item.problemId}`}
-                        problemId={item.problemId}
-                        trainingId={tid}
-                        solved={itemSolved}
-                        onSolved={invalidate}
-                      />
-                    </div>
-                  </div>
-                )}
-              </>
-            )}
+                  }
+                  initialRightPct={45}
+                />
+              ))}
           </div>
         </div>
 

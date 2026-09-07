@@ -19,6 +19,7 @@ import type { CaseDetail, CodeLang, OjProblem, Submission, SubmissionPoll } from
 import { Markdown, preserveLineBreaks } from '@/lib/markdown'
 import { CodeBlock } from '@/lib/code-highlight'
 import { CodeEditor } from '@/components/CodeEditor'
+import { SplitPane } from '@/components/portal/SplitPane'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Textarea } from '@/components/ui/textarea'
@@ -317,108 +318,114 @@ function ProgrammingSolve({ problem, backTo }: { problem: OjProblem; backTo: str
   const problemBody = problem.bodyJson as { inputFormat?: string; outputFormat?: string }
 
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 px-3 py-3 lg:h-full lg:flex-row lg:overflow-hidden lg:px-5 lg:py-4 2xl:max-w-7xl">
-      {/* 左：题面 */}
-      <div className="min-w-0 flex-1 overflow-y-auto rounded-2xl border bg-card p-4">
-        <TopBar backTo={backTo} problem={problem} />
-        <div className="mt-3 space-y-3">
-          <div className="rounded-xl bg-muted/50 p-3 text-sm leading-relaxed">
-            <Markdown text={preserveLineBreaks(problem.statementMd || '（暂无题面）')} className="markdown-body" />
-          </div>
-          {problemBody.inputFormat && (
-            <Section title="输入格式"><Markdown text={problemBody.inputFormat} className="markdown-body text-sm" /></Section>
-          )}
-          {problemBody.outputFormat && (
-            <Section title="输出格式"><Markdown text={problemBody.outputFormat} className="markdown-body text-sm" /></Section>
-          )}
-          {samples.length > 0 && (
-            <div>
-              <div className="mb-1.5 text-sm font-semibold">样例</div>
-              <div className="space-y-2">
-                {samples.map((s, i) => (
-                  <div key={i} className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                    <SampleBox label={`输入样例 ${i + 1}`} text={s.input ?? ''} onUse={() => { setCustomInput(s.input ?? ''); setShowCustomInput(true) }} />
-                    <SampleBox label={`输出样例 ${i + 1}`} text={s.output ?? ''} />
-                  </div>
-                ))}
+    <div className="mx-auto flex h-full w-full max-w-7xl flex-col px-3 py-3 2xl:max-w-[96rem]">
+    <div className="min-h-0 flex-1">
+    <>
+    <SplitPane
+      left={
+        <div className="min-w-0 h-full overflow-y-auto rounded-2xl border bg-card p-4">
+          <TopBar backTo={backTo} problem={problem} />
+          <div className="mt-3 space-y-3">
+            <div className="rounded-xl bg-muted/50 p-3 text-sm leading-relaxed">
+              <Markdown text={preserveLineBreaks(problem.statementMd || '（暂无题面）')} className="markdown-body" />
+            </div>
+            {problemBody.inputFormat && (
+              <Section title="输入格式"><Markdown text={problemBody.inputFormat} className="markdown-body text-sm" /></Section>
+            )}
+            {problemBody.outputFormat && (
+              <Section title="输出格式"><Markdown text={problemBody.outputFormat} className="markdown-body text-sm" /></Section>
+            )}
+            {samples.length > 0 && (
+              <div>
+                <div className="mb-1.5 text-sm font-semibold">样例</div>
+                <div className="space-y-2">
+                  {samples.map((s, i) => (
+                    <div key={i} className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      <SampleBox label={`输入样例 ${i + 1}`} text={s.input ?? ''} onUse={() => { setCustomInput(s.input ?? ''); setShowCustomInput(true) }} />
+                      <SampleBox label={`输出样例 ${i + 1}`} text={s.output ?? ''} />
+                    </div>
+                  ))}
+                </div>
               </div>
+            )}
+            <div className="text-xs text-muted-foreground">
+              时间限制：{problem.timeLimitMs} ms · 内存限制：{problem.memoryLimitMiB} MiB
+            </div>
+          </div>
+        </div>
+      }
+      right={
+        <div className="flex h-full min-h-[420px] min-w-0 flex-col rounded-2xl border bg-card">
+          <div className="flex flex-wrap items-center gap-1.5 border-b p-2">
+            <Select value={lang} onValueChange={(v) => switchLang(v as CodeLang)}>
+              <SelectTrigger className="h-8 w-[130px] text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="python">Python 3</SelectItem>
+                <SelectItem value="cpp">C++ (g++ 11)</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button size="sm" className="h-8 bg-emerald-600 text-xs hover:bg-emerald-700" disabled={!!busyAction} onClick={() => setShowCustomInput(true)}>
+              {busyAction === 'run' ? <Loader2Icon className="size-3.5 animate-spin" /> : <PlayIcon className="size-3.5" />} 运行
+            </Button>
+            <Button size="sm" variant="secondary" className="h-8 text-xs" disabled={!!busyAction} onClick={() => void action('test')}>
+              {busyAction === 'test' ? <Loader2Icon className="size-3.5 animate-spin" /> : <FlaskConicalIcon className="size-3.5" />} 测试
+            </Button>
+            <Button size="sm" className="h-8 text-xs" disabled={!!busyAction} onClick={() => void action('submit')}>
+              {busyAction === 'submit' ? <Loader2Icon className="size-3.5 animate-spin" /> : <SendIcon className="size-3.5" />} 提交
+            </Button>
+            <div className="flex-1" />
+            <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={() => setHistoryOpen(true)}>
+              <HistoryIcon className="size-3.5" /> 测评记录
+            </Button>
+          </div>
+
+          {verdictBanner && (
+            <div className={cn('flex items-center gap-2 border-b px-3 py-2 text-sm font-medium', isAcceptedVerdict(verdictBanner.verdict) ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-red-200 bg-red-50 text-red-700')}>
+              {isAcceptedVerdict(verdictBanner.verdict) ? <CheckCircle2Icon className="size-4" /> : <XCircleIcon className="size-4" />}
+              <span>{verdictText(verdictBanner.verdict)}（得分 {verdictBanner.score}）</span>
+              <span className="text-xs font-normal opacity-70">耗时 {verdictBanner.timeMs} ms</span>
             </div>
           )}
-          <div className="text-xs text-muted-foreground">
-            时间限制：{problem.timeLimitMs} ms · 内存限制：{problem.memoryLimitMiB} MiB
+
+          <div className="min-h-[260px] flex-1 border-y bg-background">
+            <CodeEditor language={lang} value={code} onChange={handleCodeChange} />
+          </div>
+
+          {/* 控制台 */}
+          <div className="shrink-0 border-t p-2">
+            <div className="mb-1 text-[11px] font-medium text-muted-foreground">控制台输出</div>
+            <pre
+              className={cn(
+                'min-h-[90px] overflow-auto rounded-lg border p-2.5 font-mono text-xs whitespace-pre-wrap',
+                consoleVariant === 'error' && 'border-red-200 bg-red-50 text-red-700',
+                consoleVariant === 'success' && 'border-emerald-200 bg-emerald-50 text-emerald-700',
+                consoleVariant === 'default' && 'bg-muted',
+              )}
+            >
+              {consoleText}
+            </pre>
           </div>
         </div>
-      </div>
-
-      {/* 右：编辑器 */}
-      <div className="flex min-h-[420px] min-w-0 flex-1 flex-col rounded-2xl border bg-card lg:h-full xl:flex-[1.15]">
-        <div className="flex flex-wrap items-center gap-1.5 border-b p-2">
-          <Select value={lang} onValueChange={(v) => switchLang(v as CodeLang)}>
-            <SelectTrigger className="h-8 w-[130px] text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="python">Python 3</SelectItem>
-              <SelectItem value="cpp">C++ (g++ 11)</SelectItem>
-            </SelectContent>
-          </Select>
-          <Button size="sm" className="h-8 bg-emerald-600 text-xs hover:bg-emerald-700" disabled={!!busyAction} onClick={() => setShowCustomInput(true)}>
-            {busyAction === 'run' ? <Loader2Icon className="size-3.5 animate-spin" /> : <PlayIcon className="size-3.5" />} 运行
-          </Button>
-          <Button size="sm" variant="secondary" className="h-8 text-xs" disabled={!!busyAction} onClick={() => void action('test')}>
-            {busyAction === 'test' ? <Loader2Icon className="size-3.5 animate-spin" /> : <FlaskConicalIcon className="size-3.5" />} 测试
-          </Button>
-          <Button size="sm" className="h-8 text-xs" disabled={!!busyAction} onClick={() => void action('submit')}>
-            {busyAction === 'submit' ? <Loader2Icon className="size-3.5 animate-spin" /> : <SendIcon className="size-3.5" />} 提交
-          </Button>
-          <div className="flex-1" />
-          <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={() => setHistoryOpen(true)}>
-            <HistoryIcon className="size-3.5" /> 测评记录
-          </Button>
-        </div>
-
-        {verdictBanner && (
-          <div className={cn('flex items-center gap-2 border-b px-3 py-2 text-sm font-medium', isAcceptedVerdict(verdictBanner.verdict) ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-red-200 bg-red-50 text-red-700')}>
-            {isAcceptedVerdict(verdictBanner.verdict) ? <CheckCircle2Icon className="size-4" /> : <XCircleIcon className="size-4" />}
-            <span>{verdictText(verdictBanner.verdict)}（得分 {verdictBanner.score}）</span>
-            <span className="text-xs font-normal opacity-70">耗时 {verdictBanner.timeMs} ms</span>
-          </div>
-        )}
-
-        <div className="min-h-[260px] flex-1 border-y bg-background">
-          <CodeEditor language={lang} value={code} onChange={handleCodeChange} />
-        </div>
-
-        {/* 控制台 */}
-        <div className="border-t p-2">
-          <div className="mb-1 text-[11px] font-medium text-muted-foreground">控制台输出</div>
-          <pre
-            className={cn(
-              'min-h-[90px] overflow-auto rounded-lg border p-2.5 font-mono text-xs whitespace-pre-wrap',
-              consoleVariant === 'error' && 'border-red-200 bg-red-50 text-red-700',
-              consoleVariant === 'success' && 'border-emerald-200 bg-emerald-50 text-emerald-700',
-              consoleVariant === 'default' && 'bg-muted',
-            )}
-          >
-            {consoleText}
-          </pre>
-        </div>
-      </div>
-
-      {/* 自定义输入对话框（运行用） */}
-      <CustomInputDialog
-        open={showCustomInput}
-        onOpenChange={setShowCustomInput}
-        value={customInput}
-        onChange={setCustomInput}
-        onSubmit={() => { setShowCustomInput(false); void action('run', customInput) }}
-        busy={busyAction === 'run'}
-      />
-      <SubmissionHistoryDialog problemId={problem.id} open={historyOpen} onOpenChange={setHistoryOpen} />
+      }
+      initialRightPct={52}
+    />
+    {/* 自定义输入对话框（运行用） */}
+    <CustomInputDialog
+      open={showCustomInput}
+      onOpenChange={setShowCustomInput}
+      value={customInput}
+      onChange={setCustomInput}
+      onSubmit={() => { setShowCustomInput(false); void action('run', customInput) }}
+      busy={busyAction === 'run'}
+    />
+    <SubmissionHistoryDialog problemId={problem.id} open={historyOpen} onOpenChange={setHistoryOpen} />
+    </>
+    </div>
     </div>
   )
 }
-
 function isAcceptedVerdict(v: string) { return v === 'AC' || v === 'OK' }
 
 function TopBar({ backTo, problem }: { backTo: string; problem: OjProblem }) {
