@@ -2,7 +2,7 @@ import { createContext, useContext, useState, type ReactNode } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  Code2Icon, HistoryIcon, LayoutGridIcon, Loader2Icon, SaveIcon, SendIcon,
+  HistoryIcon, LayoutGridIcon, Loader2Icon, SaveIcon, SendIcon,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -11,7 +11,6 @@ import type {
   ObjectiveAnswer, PracticeDetail, PracticeResultItem,
 } from '@/api/types'
 import { OPTION_LABELS } from '@/components/portal/objective'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
@@ -644,9 +643,6 @@ function ProgrammingBlock({ item, no, sid, pid }: {
         <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
           <span className="text-sm font-bold tabular-nums text-foreground">{no}.</span>
           <span className="text-sm font-semibold">{item.problemTitle || `题目 #${item.problemId}`}</span>
-          <Badge variant="secondary" className="px-1.5 py-0 text-[10px] font-medium">
-            <Code2Icon className="size-3" /> 编程
-          </Badge>
         </div>
         <Link
           to={`/problem/${item.problemId}?back=${encodeURIComponent(`/s/${sid}/practice/${pid}`)}`}
