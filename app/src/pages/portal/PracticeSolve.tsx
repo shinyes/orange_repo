@@ -2,7 +2,7 @@ import { createContext, useContext, useState, type ReactNode } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  ClipboardListIcon, Code2Icon, HistoryIcon, LayoutGridIcon, Loader2Icon, SaveIcon, SendIcon,
+  Code2Icon, HistoryIcon, LayoutGridIcon, Loader2Icon, SaveIcon, SendIcon,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -226,7 +226,7 @@ function PracticePaper({ sid, pid, data }: {
   pid: number
   data: PracticeDetail
 }) {
-  const { practice, items: rawItems } = data
+  const { items: rawItems } = data
   const items = rawItems ?? []
   const objectiveItems = items.filter((i) => i.problemType === 'single_choice' || i.problemType === 'true_false')
   const {
@@ -278,17 +278,9 @@ function PracticePaper({ sid, pid, data }: {
 
   return (
     <div className="mx-auto w-full max-w-6xl">
-      {/* 练习标题（移到卷面顶部，随内容滚动） */}
-      <div className="px-3 pt-4">
-        <h1 className="flex min-w-0 items-center gap-2 text-lg font-bold">
-          <ClipboardListIcon className="size-5 shrink-0 text-orange-500" />
-          <span className="min-w-0 truncate">{practice.title}</span>
-        </h1>
-      </div>
-
       <div className="mx-auto flex w-full max-w-6xl items-start gap-4 px-3 pt-3">
         {/* 左栏：我的提交记录 + 题号导航（整体 sticky 固定，不随滚动） */}
-        <aside className="hidden w-56 shrink-0 md:block">
+        <aside className="hidden w-56 shrink-0 self-start md:block">
           <div className="sticky top-16 flex max-h-[calc(100dvh-5rem)] flex-col gap-3 overflow-y-auto pr-0.5">
             <div className="rounded-xl border bg-card p-3 shadow-sm">
               <HistoryCard sid={sid} pid={pid} onViewAll={() => setHistoryAllOpen(true)} />
@@ -474,13 +466,9 @@ function ObjectiveBlock({ item, no, verdict, resultItem, selected, onToggle }: {
       <div className="flex items-start gap-2">
         <span className="mt-0.5 min-w-[1.6rem] text-right text-sm font-bold tabular-nums text-foreground">{no}.</span>
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <span className="text-sm font-semibold">{item.problemTitle || `题目 #${item.problemId}`}</span>
-            <Badge variant="secondary" className="px-1.5 py-0 text-[10px] font-medium">
-              {item.problemType === 'single_choice' ? '单选' : '判断'}
-            </Badge>
-            {verdict !== 'idle' && verdict !== 'answered' && <VerdictChip verdict={verdict} />}
-          </div>
+          {verdict !== 'idle' && verdict !== 'answered' && (
+            <div className="mb-1.5"><VerdictChip verdict={verdict} /></div>
+          )}
           {contentQ.isLoading && <p className="py-4 text-center text-xs text-muted-foreground">题目加载中…</p>}
           {contentQ.isError && (
             <p className="py-4 text-center text-xs text-muted-foreground">
@@ -551,7 +539,7 @@ function PracticeRadioOption({ type, label, text, disabled, selected, correct, w
   onSelect: () => void
 }) {
   const ringCls = cn(
-    'flex size-4 shrink-0 items-center justify-center rounded-full border-2 transition-colors',
+    'mt-[3px] flex size-4 shrink-0 items-center justify-center rounded-full border-2 transition-colors',
     correct
       ? 'border-emerald-500 bg-emerald-50'
       : wrongPick
@@ -585,15 +573,15 @@ function PracticeRadioOption({ type, label, text, disabled, selected, correct, w
         )}
       </span>
       {type === 'choice' && (
-        <span className={cn('mt-0.5 flex w-[1.5em] flex-none items-center justify-center text-sm font-semibold', txtCls(correct, wrongPick, selected))}>
+        <span className={cn('flex w-[1.5em] flex-none items-center justify-center text-sm font-semibold leading-normal', txtCls(correct, wrongPick, selected))}>
           {label}.
         </span>
       )}
-      <span className="min-w-0 flex-1 py-px">
+      <span className="min-w-0 flex-1">
         {type === 'judge' ? (
-          <span className={cn('font-medium', txtCls(correct, wrongPick, selected))}>{text}</span>
+          <span className={cn('font-medium leading-normal', txtCls(correct, wrongPick, selected))}>{text}</span>
         ) : (
-          <Markdown text={preserveLineBreaks(text)} className="markdown-body text-sm" />
+          <Markdown text={preserveLineBreaks(text)} className="markdown-body text-sm leading-normal" />
         )}
       </span>
     </button>
