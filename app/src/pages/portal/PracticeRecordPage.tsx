@@ -203,7 +203,10 @@ function ReviewCard({ item }: { item: PracticeRecordItem }) {
   })
   const wrong = !item.correct
   const selected = item.answer as ObjectiveAnswer | null | undefined
-  const correctVal = item.correctAnswer as ObjectiveAnswer | undefined
+  // 答对：用户所选即正确项（绿色显示）；答错：用服务端下发的正确项
+  const correctVal: ObjectiveAnswer | undefined = wrong
+    ? (item.correctAnswer as ObjectiveAnswer | undefined)
+    : (selected as ObjectiveAnswer | undefined)
 
   return (
     <div id={`r-${item.problemId}`} className="scroll-mt-24 rounded-xl border bg-card p-4 shadow-sm">
@@ -241,8 +244,8 @@ function ReviewCard({ item }: { item: PracticeRecordItem }) {
                     key={i}
                     className={cn(
                       'flex items-start gap-2 rounded-md px-2 py-1 text-sm',
+                      isCorrect && 'bg-emerald-50 text-emerald-700',
                       isSel && !isCorrect && 'bg-red-50 text-red-600',
-                      isCorrect && !isSel && 'text-emerald-700',
                       !isSel && !isCorrect && 'opacity-60',
                     )}
                   >
@@ -250,8 +253,9 @@ function ReviewCard({ item }: { item: PracticeRecordItem }) {
                     <span className="min-w-0 flex-1">
                       <Markdown text={preserveLineBreaks(opt)} className="markdown-body text-sm md-clean" />
                     </span>
-                    {isSel && <span className="shrink-0 text-xs">你的选择</span>}
+                    {isCorrect && isSel && <span className="shrink-0 text-xs font-medium">✓ 你的选择</span>}
                     {isCorrect && !isSel && <span className="shrink-0 text-xs">正确项</span>}
+                    {isSel && !isCorrect && <span className="shrink-0 text-xs">你的选择</span>}
                   </div>
                 )
               })
@@ -263,14 +267,15 @@ function ReviewCard({ item }: { item: PracticeRecordItem }) {
                     key={String(v)}
                     className={cn(
                       'flex items-center gap-2 rounded-md px-2 py-1 text-sm',
+                      isCorrect && 'bg-emerald-50 text-emerald-700',
                       isSel && !isCorrect && 'bg-red-50 text-red-600',
-                      isCorrect && !isSel && 'text-emerald-700',
                       !isSel && !isCorrect && 'opacity-60',
                     )}
                   >
                     <span className="min-w-0 flex-1 font-medium">{v ? '正确' : '错误'}</span>
-                    {isSel && <span className="text-xs">你的选择</span>}
+                    {isCorrect && isSel && <span className="text-xs font-medium">✓ 你的选择</span>}
                     {isCorrect && !isSel && <span className="text-xs">正确项</span>}
+                    {isSel && !isCorrect && <span className="text-xs">你的选择</span>}
                   </div>
                 )
               })}
