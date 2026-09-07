@@ -123,17 +123,12 @@ function RecordSheet({ sid, pid, data }: {
           {nav}
         </aside>
 
-        {/* 右栏：错题回顾（唯一内容滚动区；只显示答错的题） */}
+        {/* 右栏：逐题回顾（唯一内容滚动区；显示本次全部作答题目） */}
         <div className="min-h-0 flex-1 overflow-y-auto">
           <div className="space-y-3 p-3">
-            {items.filter((i) => !i.correct).map((it) => (
+            {items.map((it) => (
               <ReviewCard key={it.problemId} item={it} />
             ))}
-            {items.length > 0 && wrongCount === 0 && (
-              <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-10 text-center text-sm text-emerald-700">
-                本次全部答对 🎉 无错题需要回顾
-              </div>
-            )}
             {items.length === 0 && (
               <div className="rounded-xl border border-dashed p-12 text-center text-sm text-muted-foreground">
                 该次交卷无客观题作答记录
