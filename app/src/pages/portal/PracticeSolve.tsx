@@ -640,23 +640,21 @@ function ProgrammingBlock({ item, no, sid, pid }: {
   const hasMemory = !!memoryLimitMiB && memoryLimitMiB > 0
   return (
     <div id={`pq-${item.problemId}`} className="scroll-mt-36 p-4">
-      <div className="flex items-start gap-2">
-        <span className="min-w-[1.6rem] text-right text-sm font-bold leading-5 tabular-nums text-foreground">{no}.</span>
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
-            <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-              <span className="text-sm font-semibold leading-5">{item.problemTitle || `题目 #${item.problemId}`}</span>
-              <Badge variant="secondary" className="px-1.5 py-0 text-[10px] font-medium">
-                <Code2Icon className="size-3" /> 编程
-              </Badge>
-            </div>
-            <Link
-              to={`/problem/${item.problemId}?back=${encodeURIComponent(`/s/${sid}/practice/${pid}`)}`}
-              className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-orange-500 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-orange-600"
-            >
-              进入编程
-            </Link>
-          </div>
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+          <span className="text-sm font-bold tabular-nums text-foreground">{no}.</span>
+          <span className="text-sm font-semibold">{item.problemTitle || `题目 #${item.problemId}`}</span>
+          <Badge variant="secondary" className="px-1.5 py-0 text-[10px] font-medium">
+            <Code2Icon className="size-3" /> 编程
+          </Badge>
+        </div>
+        <Link
+          to={`/problem/${item.problemId}?back=${encodeURIComponent(`/s/${sid}/practice/${pid}`)}`}
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-orange-500 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-orange-600"
+        >
+          进入编程
+        </Link>
+      </div>
           {(hasTime || hasMemory) ? (
             <p className="mt-1.5 text-xs text-muted-foreground tabular-nums">
               {hasTime && <>时间限制: {msToLimit(timeLimitMs)}</>}
@@ -666,8 +664,6 @@ function ProgrammingBlock({ item, no, sid, pid }: {
           ) : (
             <p className="mt-1.5 text-xs text-muted-foreground">在编程页编写代码并提交判题</p>
           )}
-        </div>
-      </div>
     </div>
   )
 }
