@@ -1,7 +1,7 @@
 // 编程题代码编辑器：Monaco Editor（本地资源加载，见 monaco-setup.ts）。
 // 支持字体缩放：Ctrl+鼠标滚轮（mouseWheelZoom 原生）、Alt+= / Alt+- / Alt+Z 放大/缩小/重置。
 import Editor, { type OnMount } from '@monaco-editor/react'
-import { useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import type { CodeLang } from '@/api/types'
 import { setupMonaco } from '@/lib/monaco-setup'
 
@@ -20,20 +20,32 @@ export function CodeEditor({
 }) {
   const onChangeRef = useRef(onChange)
   onChangeRef.current = onChange
+  const editorRef = useRef<{ editor: Parameters<OnMount>[0]; monaco: Parameters<OnMount>[1] } | null>(null)
 
   // 确保本地 monaco 配置就绪（幂等，早于 Editor 实例化）
   setupMonaco()
 
-  const handleMount: OnMount = (editor, monaco) => {
-    const zoom = (delta: number) => {
-      const cur = editor.getOption(monaco.editor.EditorOption.fontSize)
-      const next = Math.min(32, Math.max(9, cur + delta))
-      editor.updateOptions({ fontSize: next })
+  // Alt+= / Alt+- / Alt+Z 缩放：编辑器聚焦时生效（捕获阶段，addCommand 不可靠）
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const ctx = editorRef.current
+      if (!ctx || !ctx.editor.hasTextFocus()) return
+      if (!e.altKey || e.ctrlKey || e.metaKey) return
+      const k = e.key
+      const zoom = (delta: number) => {
+        const cur = ctx.editor.getOption(ctx.monaco.editor.EditorOption.fontSize)
+        ctx.editor.updateOptions({ fontSize: Math.min(32, Math.max(9, cur + delta)) })
+      }
+      if (k === '=' || k === '+') { e.preventDefault(); zoom(1) }
+      else if (k === '-' || k === '_') { e.preventDefault(); zoom(-1) }
+      else if (k === 'z' || k === 'Z') { e.preventDefault(); ctx.editor.updateOptions({ fontSize: BASE_FONT }) }
     }
-    // Alt + = / - 缩放；Alt + Z 重置
-    editor.addCommand(monaco.KeyMod.Alt | monaco.KeyCode.Equal, () => zoom(1))
-    editor.addCommand(monaco.KeyMod.Alt | monaco.KeyCode.Minus, () => zoom(-1))
-    editor.addCommand(monaco.KeyMod.Alt | monaco.KeyCode.KeyZ, () => editor.updateOptions({ fontSize: BASE_FONT }))
+    document.addEventListener('keydown', onKeyDown, true)
+    return () => document.removeEventListener('keydown', onKeyDown, true)
+  }, [])
+
+  const handleMount: OnMount = (editor, monaco) => {
+    editorRef.current = { editor, monaco }
   }
 
   return (
