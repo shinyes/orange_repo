@@ -1,14 +1,16 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { ClipboardListIcon, Code2Icon, LayoutGridIcon, Loader2Icon, SendIcon } from 'lucide-react'
+import {
+  ClipboardListIcon, Code2Icon, HistoryIcon, LayoutGridIcon, Loader2Icon, SaveIcon, SendIcon,
+} from 'lucide-react'
 import { toast } from 'sonner'
 
 import { api } from '@/api'
 import type {
   ObjectiveAnswer, PracticeDetail, PracticeResultItem,
 } from '@/api/types'
-import { ObjectiveQuestion } from '@/components/portal/objective'
+import { OPTION_LABELS } from '@/components/portal/objective'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -18,6 +20,7 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
+import { Markdown, preserveLineBreaks } from '@/lib/markdown'
 import { useSpaceById } from '@/pages/portal/portal-context'
 import { SpacePageShell } from '@/pages/portal/SpacePageShell'
 import { cn } from '@/lib/utils'
@@ -130,6 +133,11 @@ function PracticePaper({ sid, pid, data }: {
     document.getElementById(`pq-${problemId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
   }
 
+  function jumpToHistory() {
+    setNavOpen(false)
+    document.getElementById('practice-history')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
   const navSections = grouped.map((g, gi) => ({
     title: sectionTitles[gi],
     items: g.items.map((it) => ({
@@ -139,64 +147,99 @@ function PracticePaper({ sid, pid, data }: {
     })),
   }))
 
+  const progCount = items.length - objectiveItems.length
+  const fineHint = result
+    ? '本次已交卷，可收起结果修改答案后再次提交'
+    : '交卷后统一评分，可重复交卷'
+
   return (
-    <div className="mx-auto w-full max-w-6xl px-3 py-4">
-      <div className="flex items-start gap-4">
-        {/* 左：题号导航（桌面） */}
+    <div className="mx-auto w-full max-w-6xl">
+      {/* 页内头部（sticky 顶栏条，位于 SpacePageShell children 内） */}
+      <div className="sticky top-0 z-30 border-b bg-white/95 backdrop-blur shadow-sm">
+        <div className="mx-auto flex h-14 w-full max-w-6xl items-center gap-3 px-3">
+          <h1 className="flex min-w-0 items-center gap-2 text-base font-bold">
+            <ClipboardListIcon className="size-4 shrink-0 text-orange-500" />
+            <span className="min-w-0 truncate">{practice.title}</span>
+            <span className="hidden shrink-0 items-center rounded-full border border-orange-200 bg-orange-50 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-orange-600 sm:inline-flex">
+              试卷模式
+            </span>
+          </h1>
+          <div className="flex-1" />
+          <div className="flex shrink-0 items-center gap-1.5">
+            <Button
+              variant="outline"
+              size="sm"
+              className="md:hidden"
+              onClick={() => setNavOpen(true)}
+            >
+              <LayoutGridIcon className="size-3.5" />
+              导航
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-muted-foreground"
+              onClick={jumpToHistory}
+            >
+              <HistoryIcon className="size-3.5" />
+              <span className="hidden md:inline">全部提交记录</span>
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              className="text-muted-foreground"
+              title="当前答案已保存在本地，提交前可随时修改"
+            >
+              <SaveIcon className="size-3.5" />
+              <span className="hidden sm:inline">保存</span>
+            </Button>
+            <Button
+              size="sm"
+              className="min-w-[4.75rem] bg-orange-500 text-white hover:bg-orange-600 focus-visible:ring-orange-500/30"
+              disabled={submitting || answeredCount === 0 || !!result}
+              onClick={() => setConfirmOpen(true)}
+            >
+              {submitting ? <Loader2Icon className="size-3.5 animate-spin" /> : <SendIcon className="size-3.5" />}
+              {submitting ? '提交中' : '提交'}
+            </Button>
+          </div>
+        </div>
+        <div className="border-t border-border/50 px-3">
+          <div className="mx-auto flex h-7 w-full max-w-6xl items-center gap-3 text-[11px] text-muted-foreground">
+            <span className="truncate tabular-nums">
+              客观题已答 <span className="font-semibold text-orange-600">{answeredCount}/{objectiveItems.length}</span>
+              {objectiveItems.length > 0 && <> · 共 {objectiveItems.length} 道客观题</>}
+              {progCount > 0 && <> · {progCount} 道编程题（在编程页提交）</>}
+            </span>
+            {!result && <span className="hidden truncate sm:inline">{fineHint}</span>}
+            {practice.description && (
+              <span className="hidden truncate text-muted-foreground/80 lg:inline">· {practice.description}</span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="mx-auto flex w-full max-w-6xl items-start gap-4 px-3 pt-4">
+        {/* 左栏：题号导航 + 我的提交记录 */}
         <aside className="hidden w-56 shrink-0 md:block">
-          <div className="sticky top-4 max-h-[calc(100vh-140px)] overflow-y-auto rounded-2xl border bg-card p-3">
-            <PaperNav
-              sections={navSections}
-              verdictOf={verdictOf}
-              answeredCount={answeredCount}
-              objectiveTotal={objectiveItems.length}
-              onJump={jumpTo}
-            />
+          <div className="sticky top-[5.5rem] flex max-h-[calc(100vh-11.5rem)] flex-col gap-3 overflow-y-auto pr-0.5">
+            <div className="rounded-xl border bg-card p-3 shadow-sm">
+              <PaperNav
+                sections={navSections}
+                verdictOf={verdictOf}
+                answeredCount={answeredCount}
+                objectiveTotal={objectiveItems.length}
+                onJump={jumpTo}
+              />
+            </div>
+            <div className="rounded-xl border bg-card p-3 shadow-sm">
+              <HistoryCard sid={sid} pid={pid} onViewAll={jumpToHistory} />
+            </div>
           </div>
         </aside>
 
         {/* 右：卷面 */}
         <div className="min-w-0 flex-1">
-          {/* 头部卡：标题 + 交卷 */}
-          <div className="rounded-2xl border bg-card p-4">
-            <div className="flex items-center justify-between gap-3">
-              <h1 className="flex min-w-0 items-center gap-2 text-base font-bold">
-                <ClipboardListIcon className="size-4 shrink-0 text-primary" />
-                <span className="min-w-0 truncate">{practice.title}</span>
-                <Badge variant="secondary" className="shrink-0">{items.length} 题</Badge>
-              </h1>
-              <div className="flex shrink-0 items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="md:hidden"
-                  onClick={() => setNavOpen(true)}
-                >
-                  <LayoutGridIcon className="size-3.5" />
-                  题目导航
-                </Button>
-                <Button
-                  size="sm"
-                  className="min-w-20"
-                  disabled={submitting || answeredCount === 0 || !!result}
-                  onClick={() => setConfirmOpen(true)}
-                >
-                  {submitting ? <Loader2Icon className="size-4 animate-spin" /> : <SendIcon className="size-4" />}
-                  {submitting ? '提交中' : '交卷'}
-                </Button>
-              </div>
-            </div>
-            {practice.description && (
-              <p className="mt-1.5 truncate text-xs text-muted-foreground">{practice.description}</p>
-            )}
-            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-              <span>客观题已答 <span className="font-semibold text-foreground">{answeredCount}/{objectiveItems.length}</span></span>
-              {objectiveItems.length > 0 && <span>{objectiveItems.length} 道客观题</span>}
-              {grouped.some((g) => g.key === 'programming') && <span>{items.length - objectiveItems.length} 道编程题（做题页提交）</span>}
-              {!result && <span className="text-primary">交卷后统一评分，可重复交卷</span>}
-            </div>
-          </div>
-
           {/* 交卷结果（横向通栏） */}
           {result && (
             <ResultPanel
@@ -207,7 +250,7 @@ function PracticePaper({ sid, pid, data }: {
           )}
 
           {/* 题目分组节卡 */}
-          <div className="mt-3 space-y-3">
+          <div className={cn('space-y-3', result && 'mt-3')}>
             {grouped.map((g, gi) => {
               const isProgramming = g.key === 'programming'
               const children = isProgramming
@@ -232,8 +275,8 @@ function PracticePaper({ sid, pid, data }: {
                   />
                 ))
               return (
-                <section key={g.key} className="overflow-hidden rounded-2xl border bg-card">
-                  <div className="border-b border-border/70 px-4 pt-3 pb-2 text-xs font-bold text-muted-foreground">
+                <section key={g.key} className="overflow-hidden rounded-xl border bg-card shadow-sm">
+                  <div className="border-b px-4 pt-3 pb-2 text-xs font-bold text-muted-foreground">
                     {sectionTitles[gi]}
                     <span className="ml-2 font-normal opacity-70">{g.items.length} 题</span>
                   </div>
@@ -248,25 +291,10 @@ function PracticePaper({ sid, pid, data }: {
             )}
           </div>
 
+          {/* 全部提交记录（通栏底部；左栏另有快捷卡） */}
           <HistoryList sid={sid} pid={pid} />
         </div>
       </div>
-
-      {/* 交卷确认 */}
-      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-        <AlertDialogContent size="default">
-          <AlertDialogHeader>
-            <AlertDialogTitle>确认交卷？</AlertDialogTitle>
-            <AlertDialogDescription>
-              已作答客观题 {answeredCount}/{objectiveItems.length} 题（{objectiveItems.length - answeredCount > 0 ? `尚有 ${objectiveItems.length - answeredCount} 题未作答；` : ''}{grouped.some((g) => g.key === 'programming') ? '编程题请到做题页提交，不计入本次卷面；' : ''}交卷后立即评分并记录，可再次交卷重做）。
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setConfirmOpen(false)}>再检查一下</AlertDialogCancel>
-            <AlertDialogAction onClick={() => void submitPaper()}>确认交卷</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
 
       {/* 移动端：题目导航抽屉 */}
       <Dialog open={navOpen} onOpenChange={setNavOpen}>
@@ -283,6 +311,22 @@ function PracticePaper({ sid, pid, data }: {
           />
         </DialogContent>
       </Dialog>
+
+      {/* 交卷确认 */}
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <AlertDialogContent size="default">
+          <AlertDialogHeader>
+            <AlertDialogTitle>确认提交？</AlertDialogTitle>
+            <AlertDialogDescription>
+              已作答客观题 {answeredCount}/{objectiveItems.length} 题（{objectiveItems.length - answeredCount > 0 ? `尚有 ${objectiveItems.length - answeredCount} 题未作答；` : ''}{progCount > 0 ? '编程题请到做题页提交，不计入本次卷面；' : ''}提交后立即评分并记录，可再次提交重做）。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setConfirmOpen(false)}>再检查一下</AlertDialogCancel>
+            <AlertDialogAction onClick={() => void submitPaper()}>确认提交</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
@@ -297,10 +341,10 @@ function PaperNav({ sections, verdictOf, answeredCount, objectiveTotal, onJump }
   onJump: (problemId: number) => void
 }) {
   return (
-    <div className="space-y-4">
+    <div className="space-y-3.5">
       <div className="flex items-center justify-between gap-2">
         <span className="text-xs font-bold text-muted-foreground">题目导航</span>
-        <span className="text-[11px] text-muted-foreground">已答 {answeredCount}/{objectiveTotal}</span>
+        <span className="text-[11px] text-muted-foreground tabular-nums">已答 {answeredCount}/{objectiveTotal}</span>
       </div>
       {sections.map((sec) => (
         <div key={sec.title}>
@@ -352,11 +396,17 @@ function ObjectiveBlock({ item, no, verdict, resultItem, selected, onToggle }: {
     queryKey: ['oj-problem', item.problemId],
     queryFn: () => api.ojProblem(item.problemId),
   })
+  const answered = verdict === 'correct' || verdict === 'wrong'
+  const wrong = verdict === 'wrong'
+  // 标准形式正确项：单选=索引，判断=boolean（单选/判断统一比较）
+  const correctVal: ObjectiveAnswer | null = answered && resultItem ? objectiveAnswerOf(resultItem) : null
+  const readOnly = answered
+
   return (
-    <div id={`pq-${item.problemId}`} className="scroll-mt-24 p-4">
+    <div id={`pq-${item.problemId}`} className="scroll-mt-36 p-4">
       <div className="flex items-start gap-2">
         <span className="mt-0.5 min-w-[1.6rem] text-right text-sm font-bold tabular-nums text-foreground">{no}.</span>
-        <div className="min-w-0 flex-1 space-y-2">
+        <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <span className="text-sm font-semibold">{item.problemTitle || `题目 #${item.problemId}`}</span>
             <Badge variant="secondary" className="px-1.5 py-0 text-[10px] font-medium">
@@ -364,9 +414,6 @@ function ObjectiveBlock({ item, no, verdict, resultItem, selected, onToggle }: {
             </Badge>
             {verdict !== 'idle' && verdict !== 'answered' && <VerdictChip verdict={verdict} />}
           </div>
-          {verdict === 'wrong' && resultItem && (
-            <p className="text-xs text-orange-700">正确项：{correctAnswerText(resultItem)}</p>
-          )}
           {contentQ.isLoading && <p className="py-4 text-center text-xs text-muted-foreground">题目加载中…</p>}
           {contentQ.isError && (
             <p className="py-4 text-center text-xs text-muted-foreground">
@@ -374,20 +421,136 @@ function ObjectiveBlock({ item, no, verdict, resultItem, selected, onToggle }: {
             </p>
           )}
           {contentQ.data && (
-            <ObjectiveQuestion
-              problem={{
-                type: contentQ.data.type as 'single_choice' | 'true_false',
-                statementMd: contentQ.data.statementMd,
-                bodyJson: contentQ.data.bodyJson,
-              }}
-              selected={selected}
-              onSelect={(a) => onToggle(a)}
-            />
+            <>
+              <Markdown
+                text={preserveLineBreaks(contentQ.data.statementMd || '（暂无题面）')}
+                className="markdown-body mt-2 text-[16px] leading-relaxed"
+              />
+              <div className="mt-2">
+                {contentQ.data.type === 'single_choice'
+                  ? (contentQ.data.bodyJson.options ?? []).map((opt, i) => (
+                    <PracticeRadioOption
+                      key={i}
+                      type="choice"
+                      label={OPTION_LABELS[i] ?? String(i + 1)}
+                      text={opt}
+                      disabled={readOnly}
+                      selected={selected === i}
+                      correct={answered && correctVal === i}
+                      wrongPick={wrong && selected === i && correctVal !== i}
+                      dimmed={answered && correctVal !== i && selected !== i}
+                      onSelect={() => onToggle(i)}
+                    />
+                  ))
+                  : ([true, false] as const).map((v) => (
+                    <PracticeRadioOption
+                      key={String(v)}
+                      type="judge"
+                      label=""
+                      text={v ? '正确' : '错误'}
+                      disabled={readOnly}
+                      selected={selected === v}
+                      correct={answered && correctVal === v}
+                      wrongPick={wrong && selected === v && correctVal !== v}
+                      dimmed={answered && correctVal !== v && selected !== v}
+                      onSelect={() => onToggle(v)}
+                    />
+                  ))}
+              </div>
+              {wrong && resultItem && (
+                <p className="mt-2.5 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-xs text-orange-700">
+                  本题回答错误，正确答案：{correctAnswerText(resultItem)}
+                </p>
+              )}
+            </>
           )}
         </div>
       </div>
     </div>
   )
+}
+
+// ---------- 客观题 radio 选项（练习页就地作答；单选=字母行，判断=正确/错误行） ----------
+
+function PracticeRadioOption({ type, label, text, disabled, selected, correct, wrongPick, dimmed, onSelect }: {
+  type: 'choice' | 'judge'
+  label: string
+  text: string
+  disabled?: boolean
+  selected?: boolean
+  correct?: boolean
+  wrongPick?: boolean
+  dimmed?: boolean
+  onSelect: () => void
+}) {
+  const ringCls = cn(
+    'flex size-4 shrink-0 items-center justify-center rounded-full border-2 transition-colors',
+    correct
+      ? 'border-emerald-500 bg-emerald-50'
+      : wrongPick
+        ? 'border-red-500 bg-red-50'
+        : selected
+          ? 'border-orange-500 bg-orange-50'
+          : 'border-muted-foreground/40 group-hover:border-orange-400/70',
+  )
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onSelect}
+      aria-checked={!!selected}
+      role="radio"
+      className={cn(
+        'group flex w-full items-start gap-2.5 rounded-md py-1 text-left text-sm transition-colors disabled:pointer-events-none',
+        disabled ? 'cursor-default' : 'hover:bg-orange-50/50',
+        selected && !disabled && 'bg-orange-50/30',
+        dimmed && 'opacity-50',
+      )}
+    >
+      <span className={ringCls}>
+        {(selected || correct || wrongPick) && (
+          <span
+            className={cn(
+              'size-2 rounded-full',
+              correct ? 'bg-emerald-500' : wrongPick ? 'bg-red-500' : 'bg-orange-500',
+            )}
+          />
+        )}
+      </span>
+      {type === 'choice' && (
+        <span className={cn('mt-0.5 flex w-[1.5em] flex-none items-center justify-center text-sm font-semibold', txtCls(correct, wrongPick, selected))}>
+          {label}.
+        </span>
+      )}
+      <span className="min-w-0 flex-1 py-px">
+        {type === 'judge' ? (
+          <span className={cn('font-medium', txtCls(correct, wrongPick, selected))}>{text}</span>
+        ) : (
+          <Markdown text={preserveLineBreaks(text)} className="markdown-body text-sm" />
+        )}
+      </span>
+    </button>
+  )
+}
+
+function txtCls(correct?: boolean, wrongPick?: boolean, selected?: boolean): string {
+  if (correct) return 'text-emerald-700'
+  if (wrongPick) return 'text-red-600'
+  if (selected) return 'text-orange-600'
+  return 'text-foreground'
+}
+
+// 交卷结果里的正确项 → 单选=索引 number / 判断=boolean（整卷统一为标准形式）
+function objectiveAnswerOf(r: PracticeResultItem): ObjectiveAnswer | null {
+  const ca = r.correctAnswer
+  if (r.type === 'true_false') {
+    if (typeof ca === 'boolean') return ca
+    if (ca && typeof ca === 'object' && 'answer' in ca && typeof ca.answer === 'boolean') return ca.answer
+    return null
+  }
+  if (typeof ca === 'number') return ca
+  if (ca && typeof ca === 'object' && 'answerIndex' in ca && typeof ca.answerIndex === 'number') return ca.answerIndex
+  return null
 }
 
 function VerdictChip({ verdict }: { verdict: Extract<Verdict, 'correct' | 'wrong' | 'missing'> }) {
@@ -412,34 +575,51 @@ function ProgrammingBlock({ item, no, sid, pid }: {
   sid: number
   pid: number
 }) {
+  const metaQ = useQuery({
+    queryKey: ['oj-problem', item.problemId],
+    queryFn: () => api.ojProblem(item.problemId),
+  })
+  const timeLimitMs = metaQ.data?.timeLimitMs
+  const memoryLimitMiB = metaQ.data?.memoryLimitMiB
+  const hasTime = !!timeLimitMs && timeLimitMs > 0
+  const hasMemory = !!memoryLimitMiB && memoryLimitMiB > 0
   return (
-    <div id={`pq-${item.problemId}`} className="scroll-mt-24 p-4">
+    <div id={`pq-${item.problemId}`} className="scroll-mt-36 p-4">
       <div className="flex items-start gap-2">
         <span className="mt-0.5 min-w-[1.6rem] text-right text-sm font-bold tabular-nums text-foreground">{no}.</span>
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <span className="text-sm font-semibold">{item.problemTitle || `题目 #${item.problemId}`}</span>
-            <Badge variant="secondary" className="px-1.5 py-0 text-[10px] font-medium">
-              <Code2Icon className="size-3" /> 编程
-            </Badge>
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+            <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+              <span className="text-sm font-semibold">{item.problemTitle || `题目 #${item.problemId}`}</span>
+              <Badge variant="secondary" className="px-1.5 py-0 text-[10px] font-medium">
+                <Code2Icon className="size-3" /> 编程
+              </Badge>
+            </div>
+            <Link
+              to={`/problem/${item.problemId}?back=${encodeURIComponent(`/s/${sid}/practice/${pid}`)}`}
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-orange-500 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-orange-600"
+            >
+              进入编程
+            </Link>
           </div>
-          <p className="mt-1 text-xs text-muted-foreground">
-            编程题请在答题页编写代码并提交（客观题评分与交卷不包含编程题）。
-          </p>
-          <Link
-            to={`/problem/${item.problemId}?back=${encodeURIComponent(`/s/${sid}/practice/${pid}`)}`}
-            className="mt-2.5 inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-1.5 text-xs transition-colors hover:bg-muted"
-          >
-            前往做题页 <ArrowRightInline />
-          </Link>
+          {(hasTime || hasMemory) ? (
+            <p className="mt-1.5 text-xs text-muted-foreground tabular-nums">
+              {hasTime && <>时间限制: {msToLimit(timeLimitMs)}</>}
+              {hasTime && hasMemory && <span className="mx-1.5 text-muted-foreground/60">|</span>}
+              {hasMemory && <>内存限制: {memoryLimitMiB} MB</>}
+            </p>
+          ) : (
+            <p className="mt-1.5 text-xs text-muted-foreground">在编程页编写代码并提交判题</p>
+          )}
         </div>
       </div>
     </div>
   )
 }
 
-function ArrowRightInline() {
-  return <span aria-hidden>→</span>
+function msToLimit(ms: number): string {
+  if (ms % 1000 === 0) return `${Math.round(ms / 1000)}s`
+  return `${ms} ms`
 }
 
 // ---------- 交卷结果 ----------
@@ -460,7 +640,7 @@ function ResultPanel({ result, items, onDismiss }: {
   return (
     <div
       className={cn(
-        'mt-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-2xl border px-4 py-3',
+        'flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-xl border px-4 py-3 shadow-sm',
         perfect ? 'border-emerald-200 bg-emerald-50/60' : 'border-orange-200 bg-orange-50/50',
       )}
     >
@@ -508,18 +688,69 @@ function correctAnswerText(r: PracticeResultItem): string {
 
 // ---------- 交卷历史 ----------
 
+// 左栏「我的提交记录」卡（最近记录；多时内部滚动）
+function HistoryCard({ sid, pid, onViewAll }: { sid: number; pid: number; onViewAll: () => void }) {
+  const q = useQuery({
+    queryKey: ['portal-practice-submissions', sid, pid],
+    queryFn: () => api.portalPracticeSubmissions(sid, pid),
+  })
+  const list = q.data?.submissions ?? []
+  const shown = list.slice(0, 8)
+  return (
+    <div>
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs font-bold text-muted-foreground">我的提交记录</span>
+        {list.length > 0 && <span className="text-[10px] tabular-nums text-muted-foreground/80">共 {list.length} 次</span>}
+      </div>
+      {q.isLoading && <p className="py-2.5 text-center text-[11px] text-muted-foreground">加载中…</p>}
+      {!q.isLoading && shown.length === 0 && (
+        <p className="py-2.5 text-[11px] text-muted-foreground">暂无提交记录，交卷后显示在此</p>
+      )}
+      {shown.length > 0 && (
+        <div className={cn('mt-1', shown.length >= 4 && 'max-h-[260px] overflow-y-auto pr-0.5')}>
+          {shown.map((s) => (
+            <div key={s.id} className="flex items-center gap-2 py-1.5 text-xs">
+              <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-orange-50 text-[10px] font-bold tabular-nums text-orange-600">
+                {s.objectiveCorrect}
+              </span>
+              <span className="min-w-0 truncate text-muted-foreground">答对 {s.objectiveCorrect} 题</span>
+              <span className="ml-auto shrink-0 tabular-nums text-muted-foreground/80">{formatTime(s.createdAt)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {list.length > 8 && (
+        <button
+          type="button"
+          onClick={onViewAll}
+          className="mt-1.5 w-full rounded-md border border-dashed border-border py-1 text-[11px] text-muted-foreground transition-colors hover:border-orange-300 hover:text-orange-600"
+        >
+          查看全部 {list.length} 次记录
+        </button>
+      )}
+    </div>
+  )
+}
+
+// 全部提交记录（通栏底部，最多 10 次）
 function HistoryList({ sid, pid }: { sid: number; pid: number }) {
   const q = useQuery({
     queryKey: ['portal-practice-submissions', sid, pid],
     queryFn: () => api.portalPracticeSubmissions(sid, pid),
   })
   const list = q.data?.submissions ?? []
-  if (!q.isLoading && list.length === 0) return null
+  const empty = !q.isLoading && list.length === 0
   return (
-    <div className="mt-6">
-      <div className="mb-2 text-xs font-medium text-muted-foreground">交卷历史（最近 {Math.min(list.length, 10)} 次）</div>
-      <div className="overflow-hidden rounded-xl border bg-card">
-        {list.slice(0, 10).map((s) => (
+    <div id="practice-history" className="mt-6 scroll-mt-36">
+      <div className="mb-2 text-xs font-medium text-muted-foreground">
+        交卷历史{list.length > 0 ? <>（最近 {Math.min(list.length, 10)} 次）</> : ''}
+      </div>
+      <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
+        {q.isLoading && <p className="px-4 py-3 text-xs text-muted-foreground">加载中…</p>}
+        {!q.isLoading && empty && (
+          <p className="px-4 py-3 text-xs text-muted-foreground">暂无提交记录</p>
+        )}
+        {!empty && list.slice(0, 10).map((s) => (
           <div key={s.id} className="flex items-center gap-3 border-b px-4 py-2.5 text-xs last:border-b-0">
             <span className="text-muted-foreground">#{s.id}</span>
             <span className="font-medium text-emerald-600">答对 {s.objectiveCorrect} 题</span>
