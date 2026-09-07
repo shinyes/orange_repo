@@ -192,3 +192,9 @@ body {
 .markdown-body th, .markdown-body td { border: 1px solid var(--border); padding: 0.4em 0.8em; text-align: left; }
 .markdown-body th { background: var(--muted); font-weight: 600; }
 .markdown-body hr { border: none; border-top: 1px solid var(--border); margin: 1.2em 0; }
+/* 练习页 Markdown 对齐辅助：段落无上下 margin（抵消 .markdown-body p 的 0.6em 边距），
+   使题号与题干/选项首行基线对齐。 */
+.md-clean p { margin: 0; }
+.md-clean p + p { margin-top: 0.5em; }
+.md-line p { margin: 0; line-height: 26px; }
+.md-line p + p { margin-top: 0.5em; }

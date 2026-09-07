@@ -479,7 +479,7 @@ function ObjectiveBlock({ item, no, verdict, resultItem, selected, onToggle }: {
             <>
               <Markdown
                 text={preserveLineBreaks(contentQ.data.statementMd || '（暂无题面）')}
-                className="markdown-body text-[16px] leading-[26px]"
+                className="markdown-body text-[16px] md-line"
               />
               <div className="mt-2">
                 {contentQ.data.type === 'single_choice'
@@ -581,7 +581,7 @@ function PracticeRadioOption({ type, label, text, disabled, selected, correct, w
         {type === 'judge' ? (
           <span className={cn('font-medium leading-normal', txtCls(correct, wrongPick, selected))}>{text}</span>
         ) : (
-          <Markdown text={preserveLineBreaks(text)} className="markdown-body text-sm leading-normal" />
+          <Markdown text={preserveLineBreaks(text)} className="markdown-body text-sm leading-normal md-clean" />
         )}
       </span>
     </button>
