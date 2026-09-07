@@ -69,6 +69,7 @@ function PracticePaper({ sid, pid, data }: {
   const [answers, setAnswers] = useState<Record<number, ObjectiveAnswer>>({})
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [navOpen, setNavOpen] = useState(false)
+  const [historyAllOpen, setHistoryAllOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [result, setResult] = useState<{ submissionId: number; results: PracticeResultItem[]; objectiveCorrect: number; objectiveTotal: number } | null>(null)
 
@@ -133,11 +134,6 @@ function PracticePaper({ sid, pid, data }: {
     document.getElementById(`pq-${problemId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
   }
 
-  function jumpToHistory() {
-    setNavOpen(false)
-    document.getElementById('practice-history')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }
-
   const navSections = grouped.map((g, gi) => ({
     title: sectionTitles[gi],
     items: g.items.map((it) => ({
@@ -148,9 +144,6 @@ function PracticePaper({ sid, pid, data }: {
   }))
 
   const progCount = items.length - objectiveItems.length
-  const fineHint = result
-    ? '本次已交卷，可收起结果修改答案后再次提交'
-    : '交卷后统一评分，可重复交卷'
 
   return (
     <div className="mx-auto w-full max-w-6xl">
@@ -160,9 +153,6 @@ function PracticePaper({ sid, pid, data }: {
           <h1 className="flex min-w-0 items-center gap-2 text-base font-bold">
             <ClipboardListIcon className="size-4 shrink-0 text-orange-500" />
             <span className="min-w-0 truncate">{practice.title}</span>
-            <span className="hidden shrink-0 items-center rounded-full border border-orange-200 bg-orange-50 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-orange-600 sm:inline-flex">
-              试卷模式
-            </span>
           </h1>
           <div className="flex-1" />
           <div className="flex shrink-0 items-center gap-1.5">
@@ -179,7 +169,7 @@ function PracticePaper({ sid, pid, data }: {
               variant="outline"
               size="sm"
               className="text-muted-foreground"
-              onClick={jumpToHistory}
+              onClick={() => setHistoryAllOpen(true)}
             >
               <HistoryIcon className="size-3.5" />
               <span className="hidden md:inline">全部提交记录</span>
@@ -204,25 +194,15 @@ function PracticePaper({ sid, pid, data }: {
             </Button>
           </div>
         </div>
-        <div className="border-t border-border/50 px-3">
-          <div className="mx-auto flex h-7 w-full max-w-6xl items-center gap-3 text-[11px] text-muted-foreground">
-            <span className="truncate tabular-nums">
-              客观题已答 <span className="font-semibold text-orange-600">{answeredCount}/{objectiveItems.length}</span>
-              {objectiveItems.length > 0 && <> · 共 {objectiveItems.length} 道客观题</>}
-              {progCount > 0 && <> · {progCount} 道编程题（在编程页提交）</>}
-            </span>
-            {!result && <span className="hidden truncate sm:inline">{fineHint}</span>}
-            {practice.description && (
-              <span className="hidden truncate text-muted-foreground/80 lg:inline">· {practice.description}</span>
-            )}
-          </div>
-        </div>
       </div>
 
       <div className="mx-auto flex w-full max-w-6xl items-start gap-4 px-3 pt-4">
-        {/* 左栏：题号导航 + 我的提交记录 */}
+        {/* 左栏：我的提交记录 + 题号导航（整体 sticky 固定，不随滚动） */}
         <aside className="hidden w-56 shrink-0 md:block">
           <div className="sticky top-[5.5rem] flex max-h-[calc(100vh-11.5rem)] flex-col gap-3 overflow-y-auto pr-0.5">
+            <div className="rounded-xl border bg-card p-3 shadow-sm">
+              <HistoryCard sid={sid} pid={pid} onViewAll={() => setHistoryAllOpen(true)} />
+            </div>
             <div className="rounded-xl border bg-card p-3 shadow-sm">
               <PaperNav
                 sections={navSections}
@@ -231,9 +211,6 @@ function PracticePaper({ sid, pid, data }: {
                 objectiveTotal={objectiveItems.length}
                 onJump={jumpTo}
               />
-            </div>
-            <div className="rounded-xl border bg-card p-3 shadow-sm">
-              <HistoryCard sid={sid} pid={pid} onViewAll={jumpToHistory} />
             </div>
           </div>
         </aside>
@@ -290,9 +267,6 @@ function PracticePaper({ sid, pid, data }: {
               </div>
             )}
           </div>
-
-          {/* 全部提交记录（通栏底部；左栏另有快捷卡） */}
-          <HistoryList sid={sid} pid={pid} />
         </div>
       </div>
 
@@ -311,6 +285,9 @@ function PracticePaper({ sid, pid, data }: {
           />
         </DialogContent>
       </Dialog>
+
+      {/* 全部提交记录 */}
+      <PracticeHistoryDialog sid={sid} pid={pid} open={historyAllOpen} onClose={() => setHistoryAllOpen(false)} />
 
       {/* 交卷确认 */}
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
@@ -732,33 +709,34 @@ function HistoryCard({ sid, pid, onViewAll }: { sid: number; pid: number; onView
   )
 }
 
-// 全部提交记录（通栏底部，最多 10 次）
-function HistoryList({ sid, pid }: { sid: number; pid: number }) {
+// 全部提交记录（Dialog 全量列表；左栏快捷卡 + 顶栏「全部提交记录」共用）
+function PracticeHistoryDialog({ sid, pid, open, onClose }: { sid: number; pid: number; open: boolean; onClose: () => void }) {
   const q = useQuery({
     queryKey: ['portal-practice-submissions', sid, pid],
     queryFn: () => api.portalPracticeSubmissions(sid, pid),
   })
   const list = q.data?.submissions ?? []
-  const empty = !q.isLoading && list.length === 0
   return (
-    <div id="practice-history" className="mt-6 scroll-mt-36">
-      <div className="mb-2 text-xs font-medium text-muted-foreground">
-        交卷历史{list.length > 0 ? <>（最近 {Math.min(list.length, 10)} 次）</> : ''}
-      </div>
-      <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
-        {q.isLoading && <p className="px-4 py-3 text-xs text-muted-foreground">加载中…</p>}
-        {!q.isLoading && empty && (
-          <p className="px-4 py-3 text-xs text-muted-foreground">暂无提交记录</p>
-        )}
-        {!empty && list.slice(0, 10).map((s) => (
-          <div key={s.id} className="flex items-center gap-3 border-b px-4 py-2.5 text-xs last:border-b-0">
-            <span className="text-muted-foreground">#{s.id}</span>
-            <span className="font-medium text-emerald-600">答对 {s.objectiveCorrect} 题</span>
-            <span className="ml-auto text-muted-foreground">{formatTime(s.createdAt)}</span>
-          </div>
-        ))}
-      </div>
-    </div>
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>全部提交记录</DialogTitle>
+        </DialogHeader>
+        <div className="max-h-[60vh] overflow-y-auto">
+          {q.isLoading && <p className="py-6 text-center text-xs text-muted-foreground">加载中…</p>}
+          {!q.isLoading && list.length === 0 && (
+            <p className="py-6 text-center text-xs text-muted-foreground">暂无提交记录</p>
+          )}
+          {list.map((s) => (
+            <div key={s.id} className="flex items-center gap-3 border-b px-2 py-2.5 text-xs last:border-b-0">
+              <span className="tabular-nums text-muted-foreground">#{s.id}</span>
+              <span className="font-medium text-emerald-600">答对 {s.objectiveCorrect} 题</span>
+              <span className="ml-auto tabular-nums text-muted-foreground">{formatTime(s.createdAt)}</span>
+            </div>
+          ))}
+        </div>
+      </DialogContent>
+    </Dialog>
   )
 }
 
