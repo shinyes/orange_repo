@@ -772,7 +772,6 @@ function HistoryCard({ sid, pid }: { sid: number; pid: number }) {
               </Link>
             ))}
           </div>
-          <p className="mt-1 text-[10px] text-muted-foreground/70">点击记录查看答题卡</p>
         </>
       )}
     </div>
