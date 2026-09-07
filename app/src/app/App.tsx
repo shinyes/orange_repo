@@ -104,6 +104,7 @@ export default function App() {
 
               {/* 独立全屏页（点击具体训练/练习/刷题后进入）：顶栏左上返回列表 */}
               <Route path="/s/:spaceId/training/:trainingId" element={<TrainingDetail />} />
+              <Route path="/s/:spaceId/training/:trainingId/q/:no" element={<TrainingDetail />} />
               <Route path="/s/:spaceId/practice/:practiceId" element={<PracticeSolve />} />
               <Route path="/s/:spaceId/quiz/:quizId" element={<QuizSolve />} />
 

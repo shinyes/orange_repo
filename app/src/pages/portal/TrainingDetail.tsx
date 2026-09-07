@@ -3,7 +3,7 @@
 // 中央题目区（客观题先选后提交即判；编程题页内编辑器 运行/测试/提交/控制台）、
 // 底部上一题/下一题。移动端顶栏「题目」按钮 → 浮窗导航。
 import { useEffect, useMemo, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   ChevronLeftIcon,
@@ -33,7 +33,7 @@ import { cn } from '@/lib/utils'
 type FlatItem = TrainingItemView & { chapterId: number; chapterTitle: string; chapterOrder: number }
 
 export function TrainingDetail() {
-  const { spaceId, trainingId } = useParams()
+  const { spaceId, trainingId, no } = useParams()
   const sid = Number(spaceId)
   const tid = Number(trainingId)
   const space = useSpaceById(sid)
@@ -46,15 +46,18 @@ export function TrainingDetail() {
   if (space === 'loading' || q.isLoading) return <Center text="加载训练中…" />
   if (space === null || q.isError || !data) return <Center text="训练不存在或无权访问" />
 
-  return <TrainingFlow sid={sid} tid={tid} data={data} />
+  return <TrainingFlow sid={sid} tid={tid} data={data} urlNo={no ? Number(no) : undefined} />
 }
 
-function TrainingFlow({ sid, tid, data }: {
+function TrainingFlow({ sid, tid, data, urlNo }: {
   sid: number
   tid: number
   data: { training: { id: number; title: string; description?: string; maxAttempts: number }; chapters: { id: number; title: string; items: TrainingItemView[] }[] }
+  /** URL 中的题号（1 基；无=首次进入待补） */
+  urlNo?: number
 }) {
   const qc = useQueryClient()
+  const navigate = useNavigate()
   const { training, chapters } = data
   const groups = useMemo(() => {
     let base = 0
@@ -68,22 +71,26 @@ function TrainingFlow({ sid, tid, data }: {
     })
   }, [chapters])
   const all = useMemo(() => groups.flatMap((g) => g.items), [groups])
-  const [activeIdx, setActiveIdx] = useState(0)
   const [navOpen, setNavOpen] = useState(false) // 移动端导航浮窗
   // 题面字号缩放（zoom 视觉缩放整块题面）
   const [statementScale, setStatementScale] = useState(1)
+
+  // 当前题号由 URL 派生（1 基；越界 clamp）——刷新/前进后退保持在对应题
+  const activeIdx = urlNo == null ? 0 : Math.min(Math.max(1, urlNo), all.length) - 1
   const item = all[activeIdx] ?? null
 
+  // 首次进入（URL 无题号）→ 补写 ?q 路径（replace，不产生历史记录）
   useEffect(() => {
-    if (all.length === 0) return
-    if (activeIdx >= all.length) setActiveIdx(all.length - 1)
-  }, [all.length, activeIdx])
+    if (urlNo == null && all.length > 0) {
+      navigate(`/s/${sid}/training/${tid}/q/1`, { replace: true })
+    }
+  }, [urlNo, all.length, sid, tid, navigate])
 
   const invalidate = () => void qc.invalidateQueries({ queryKey: ['portal-training', sid, tid] })
   const go = (i: number) => {
     if (i < 0 || i >= all.length) return
-    setActiveIdx(i)
     setNavOpen(false)
+    navigate(`/s/${sid}/training/${tid}/q/${i + 1}`)
   }
 
   if (all.length === 0) {
