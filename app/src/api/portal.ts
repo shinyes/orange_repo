@@ -24,6 +24,7 @@ import type {
   TrainingAnswerResult,
   TrainingDetail,
   Verdict,
+  WrongBookView,
 } from './types'
 
 export const portalApi = {
@@ -69,6 +70,15 @@ export const portalApi = {
     ),
   portalQuizReset: (quizId: number | string) =>
     req<void>(`/api/portal/quiz/${quizId}/reset`, { method: 'POST' }),
+  // 全局错题集
+  portalWrongBook: () => req<WrongBookView>(`/api/portal/wrong-book`),
+  portalWrongNext: (quizId?: number) =>
+    req<QuizProblemResponse>(`/api/portal/wrong-book/next${quizId ? `?quizId=${quizId}` : ''}`),
+  portalWrongAnswer: (problemId: number, answer: ObjectiveAnswer) =>
+    req<QuizAnswerResult>(
+      `/api/portal/wrong-book/answer`,
+      json({ method: 'POST', body: JSON.stringify({ problemId, answer }) }),
+    ),
 
   // ---- OrangeOJ：题目做题（/api/oj/problem/:id 保留——做题页/空间内跳转复用） ----
   ojProblem: (id: number) => req<OjProblem>(`/api/oj/problem/${id}`),

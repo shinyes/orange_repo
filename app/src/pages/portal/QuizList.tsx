@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { BookOpenIcon, EyeIcon, PlusIcon, Trash2Icon } from 'lucide-react'
+import { BookOpenCheckIcon, BookOpenIcon, EyeIcon, PlusIcon, Trash2Icon } from 'lucide-react'
 import { toast } from 'sonner'
 
 import type { QuizBrief } from '@/api/types'
@@ -37,11 +37,19 @@ export function QuizList() {
     <div className="mx-auto w-full max-w-3xl px-4 py-6 lg:px-8">
       <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-lg font-semibold">刷题</h1>
-        {canEdit && (
-          <Button onClick={() => setCreating(true)} className="h-8 text-xs">
-            <PlusIcon data-icon="inline-start" /> 新建刷题项目
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          <Link
+            to={`/s/${space.id}/wrong-book`}
+            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-red-200 bg-red-50 px-3 text-xs font-medium text-red-600 transition-colors hover:bg-red-100"
+          >
+            <BookOpenCheckIcon className="size-3.5" /> 错题集
+          </Link>
+          {canEdit && (
+            <Button onClick={() => setCreating(true)} className="h-8 text-xs">
+              <PlusIcon data-icon="inline-start" /> 新建刷题项目
+            </Button>
+          )}
+        </div>
       </div>
       <p className="mb-4 text-xs text-muted-foreground">
         范围内单选/判断题循环复习：做过少做 · 错题下轮多做 · 同轮不重复

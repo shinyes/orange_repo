@@ -136,6 +136,10 @@ func (s *Server) RegisterRoutes(app *fiber.App) {
 	portal.Get("/quiz/:qid/problem", s.handlePortalQuizProblem)
 	portal.Post("/quiz/:qid/answer", s.handlePortalQuizAnswer)
 	portal.Post("/quiz/:qid/reset", s.handlePortalQuizReset)
+	// 全局错题集
+	portal.Get("/wrong-book", s.handleWrongBook)
+	portal.Get("/wrong-book/next", s.handleWrongNext)
+	portal.Post("/wrong-book/answer", s.handleWrongAnswer)
 	portal.Get("/rank", s.handlePortalRank)
 }
 

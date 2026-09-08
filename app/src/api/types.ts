@@ -205,6 +205,21 @@ export interface QuizAnswerResult {
   wrongCnt?: number
 }
 
+// ---------- 全局错题集 ----------
+
+export interface WrongGroup {
+  quizId: number
+  title: string
+  spaceId: number
+  spaceName: string
+  count: number
+}
+
+export interface WrongBookView {
+  total: number
+  groups: WrongGroup[]
+}
+
 // ---------- 排行榜 ----------
 
 export interface RankRow {

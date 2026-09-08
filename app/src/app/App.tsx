@@ -24,6 +24,7 @@ import { PracticeSolve } from '@/pages/portal/PracticeSolve'
 import { PracticeRecordPage } from '@/pages/portal/PracticeRecordPage'
 import { QuizList } from '@/pages/portal/QuizList'
 import { QuizSolve } from '@/pages/portal/QuizSolve'
+import { WrongBookPage } from '@/pages/portal/WrongBookPage'
 import { RankPage } from '@/pages/portal/RankPage'
 import { AdminLayout } from '@/pages/admin/AdminLayout'
 
@@ -108,7 +109,7 @@ export default function App() {
               <Route path="/s/:spaceId/training/:trainingId/q/:no" element={<TrainingDetail />} />
               <Route path="/s/:spaceId/practice/:practiceId" element={<PracticeSolve />} />
               <Route path="/s/:spaceId/practice/:practiceId/record/:submissionId" element={<PracticeRecordPage />} />
-              <Route path="/s/:spaceId/quiz/:quizId" element={<QuizSolve />} />
+              <Route path="/s/:spaceId/quiz/:quizId" element={<QuizSolve />} />`n              <Route path="/s/:spaceId/wrong-book" element={<WrongBookPage />} />
 
               {/* 管理区：仅管理员（global_admin/domain_admin），member 重定向回门户 */}
               <Route path="/admin" element={<RequireAdmin user={user}><AdminLayout user={user} onLogout={onLogout} /></RequireAdmin>}>

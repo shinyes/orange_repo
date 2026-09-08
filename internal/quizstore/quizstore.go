@@ -197,6 +197,14 @@ func (s *Store) migrate() error {
 			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 			PRIMARY KEY(user_id, quiz_id)
 		);`,
+		// ---------- 全局错题集（按题目去重；来源刷题项目 quiz_id 用于分组） ----------
+		`CREATE TABLE IF NOT EXISTS wrong_book (
+			user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			problem_id INTEGER NOT NULL,
+			quiz_id INTEGER NOT NULL,
+			wrong_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			PRIMARY KEY(user_id, problem_id)
+		);`,
 	}
 	for _, stmt := range stmts {
 		if _, err := s.DB.Exec(stmt); err != nil {

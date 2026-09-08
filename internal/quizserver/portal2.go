@@ -516,9 +516,19 @@ func (s *Server) handlePortalQuizAnswer(c *fiber.Ctx) error {
 				return respondError(c, fiber.StatusInternalServerError, err.Error())
 			}
 		}
-	} else if !quizstore.ContainsInt64(ss.Wrong, req.ProblemID) {
-		ss.Wrong = append(ss.Wrong, req.ProblemID)
-		if err := s.QS.SaveQuizSession(user.ID, qid, ss); err != nil {
+		// 全局错题集同步：答对即移除
+		if err := s.QS.RemoveWrongByProblem(user.ID, req.ProblemID); err != nil {
+			return respondError(c, fiber.StatusInternalServerError, err.Error())
+		}
+	} else {
+		// 会话错题袋（批内优先级）与全局错题集（幂等，独立于袋状态）
+		if !quizstore.ContainsInt64(ss.Wrong, req.ProblemID) {
+			ss.Wrong = append(ss.Wrong, req.ProblemID)
+			if err := s.QS.SaveQuizSession(user.ID, qid, ss); err != nil {
+				return respondError(c, fiber.StatusInternalServerError, err.Error())
+			}
+		}
+		if err := s.QS.AddWrong(user.ID, req.ProblemID, qid); err != nil {
 			return respondError(c, fiber.StatusInternalServerError, err.Error())
 		}
 	}
