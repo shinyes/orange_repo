@@ -301,11 +301,12 @@ func (s *Server) handlePortalSpaceQuizzes(c *fiber.Ctx) error {
 
 // quizPickResult 抽题结果。
 type quizPickResult struct {
-	Problem  *quizstore.OJProblem `json:"problem"`
-	Done     bool                 `json:"done"`
-	NewBatch bool                 `json:"newBatch"` // 开新一轮（错题复习优先）
-	BatchNo  int                  `json:"batchNo"`
-	WrongCnt int                  `json:"wrongCnt"` // 会话中待纠正错题数
+	Problem    *quizstore.OJProblem `json:"problem"`
+	Done       bool                 `json:"done"`
+	EmptyRange bool                 `json:"emptyRange"` // 范围内无客观题可刷
+	NewBatch   bool                 `json:"newBatch"`   // 开新一轮（错题复习优先）
+	BatchNo    int                  `json:"batchNo"`
+	WrongCnt   int                  `json:"wrongCnt"` // 会话中待纠正错题数
 }
 
 // pickQuizProblem 按默认刷题规则抽一题：
@@ -319,7 +320,7 @@ func (s *Server) pickQuizProblem(user *accounts.User, qid int64) (*quizPickResul
 		return nil, err
 	}
 	if len(ids) == 0 {
-		return &quizPickResult{Done: true}, nil
+		return &quizPickResult{Done: true, EmptyRange: true}, nil
 	}
 	solved, err := s.QS.SolvedUUIDs(user.ID)
 	if err != nil {
@@ -414,16 +415,32 @@ func (s *Server) handlePortalQuizProblem(c *fiber.Ctx) error {
 	if !vis {
 		return respondError(c, fiber.StatusNotFound, "刷题项目不存在")
 	}
+	// fresh=1（进入刷题页的首请求）：开新批——清空本批已抽（保留错题袋），
+	// 避免上次会话残留的 drawn 导致一进入就判定“本轮已完成”
+	if c.Query("fresh") == "1" {
+		ss, serr := s.QS.GetQuizSession(user.ID, qid)
+		if serr != nil {
+			return respondError(c, fiber.StatusInternalServerError, err.Error())
+		}
+		if len(ss.Drawn) > 0 {
+			ss.BatchNo++
+			ss.Drawn = []int64{}
+			if err := s.QS.SaveQuizSession(user.ID, qid, ss); err != nil {
+				return respondError(c, fiber.StatusInternalServerError, err.Error())
+			}
+		}
+	}
 	res, err := s.pickQuizProblem(user, qid)
 	if err != nil {
 		return respondError(c, fiber.StatusInternalServerError, err.Error())
 	}
 	return respondData(c, fiber.StatusOK, fiber.Map{
-		"problem":  res.Problem,
-		"done":     res.Done,
-		"newBatch": res.NewBatch,
-		"batchNo":  res.BatchNo,
-		"wrongCnt": res.WrongCnt,
+		"problem":    res.Problem,
+		"done":       res.Done,
+		"emptyRange": res.EmptyRange,
+		"newBatch":   res.NewBatch,
+		"batchNo":    res.BatchNo,
+		"wrongCnt":   res.WrongCnt,
 	})
 }
 

@@ -60,7 +60,8 @@ export const portalApi = {
 
   // ---- 门户：空间刷题 ----
   portalSpaceQuizzes: (spaceId: number | string) => req<{ quizzes: QuizBrief[] }>(`/api/portal/space/${spaceId}/quizzes`),
-  portalQuizProblem: (quizId: number | string) => req<QuizProblemResponse>(`/api/portal/quiz/${quizId}/problem`),
+  portalQuizProblem: (quizId: number | string, fresh?: boolean) =>
+    req<QuizProblemResponse>(`/api/portal/quiz/${quizId}/problem${fresh ? '?fresh=1' : ''}`),
   portalQuizAnswer: (quizId: number | string, problemId: number, answer: ObjectiveAnswer) =>
     req<QuizAnswerResult>(
       `/api/portal/quiz/${quizId}/answer`,

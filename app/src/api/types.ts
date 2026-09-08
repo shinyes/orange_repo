@@ -186,6 +186,8 @@ export interface QuizProblemResponse {
   problem: QuizProblem | null
   /** true = 本轮覆盖完成（无错题），可重新开始 */
   done: boolean
+  /** 范围内没有可刷的客观题 */
+  emptyRange?: boolean
   /** 开新批（错题复习优先） */
   newBatch?: boolean
   /** 当前批号 */

@@ -42,6 +42,7 @@ function QuizRound({ qid, quizName }: { qid: number; quizName: string }) {
   const [fetchError, setFetchError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [done, setDone] = useState(false)
+  const [emptyRange, setEmptyRange] = useState(false)
   const [newBatch, setNewBatch] = useState(false) // 本轮开始时提示
   const [batchNo, setBatchNo] = useState(1)
   const [wrongCnt, setWrongCnt] = useState(0)
@@ -49,15 +50,20 @@ function QuizRound({ qid, quizName }: { qid: number; quizName: string }) {
   const [selected, setSelected] = useState<ObjectiveAnswer | null>(null)
   const [feedback, setFeedback] = useState<{ correct: boolean; correctAnswer?: CorrectAnswer; firstTime?: boolean } | null>(null)
 
-  async function fetchProblem(reset?: boolean) {
+  async function fetchProblem(fresh?: boolean, reset?: boolean) {
     setLoading(true)
     setFetchError(null)
     setDone(false)
+    setEmptyRange(false)
     setNewBatch(false)
     try {
       if (reset) await api.portalQuizReset(qid)
-      const r = await api.portalQuizProblem(qid)
-      if (r.done || !r.problem) {
+      const r = await api.portalQuizProblem(qid, fresh)
+      if (r.emptyRange) {
+        setEmptyRange(true)
+        setDone(true)
+        setProblem(null)
+      } else if (r.done || !r.problem) {
         setDone(true)
         setProblem(null)
       } else {
@@ -76,9 +82,9 @@ function QuizRound({ qid, quizName }: { qid: number; quizName: string }) {
     }
   }
 
-  // 首次挂载自动抽题
+  // 首次挂载自动抽题（fresh=1：开新批，避免上次残留导致一进入即完成）
   useEffect(() => {
-    void fetchProblem()
+    void fetchProblem(true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [qid])
 
@@ -125,7 +131,11 @@ function QuizRound({ qid, quizName }: { qid: number; quizName: string }) {
         )}
 
         {done ? (
-          <DonePanel wrongCnt={wrongCnt} quizName={quizName} onRestart={() => void fetchProblem(true)} onRefresh={() => void fetchProblem(false)} />
+          emptyRange ? (
+            <EmptyRangePanel quizName={quizName} />
+          ) : (
+            <DonePanel wrongCnt={wrongCnt} quizName={quizName} onRestart={() => void fetchProblem(true, true)} onRefresh={() => void fetchProblem(false)} />
+          )
         ) : fetchError ? (
           <div className="py-10 text-center">
             <p className="text-sm text-muted-foreground">{fetchError}</p>
@@ -172,6 +182,20 @@ function QuizRound({ qid, quizName }: { qid: number; quizName: string }) {
         )}
       </div>
     </PageContainer>
+  )
+}
+
+function EmptyRangePanel({ quizName }: { quizName: string }) {
+  return (
+    <div className="py-10 text-center">
+      <div className="mx-auto mb-3 flex size-14 items-center justify-center rounded-full bg-muted">
+        <BookOpenIcon className="size-7 text-muted-foreground" />
+      </div>
+      <h2 className="text-lg font-semibold">范围内暂无题目</h2>
+      <p className="mt-2 text-sm text-muted-foreground">
+        「{quizName}」范围内没有可选的选择题/判断题，请联系管理员调整范围标签或题单
+      </p>
+    </div>
   )
 }
 
