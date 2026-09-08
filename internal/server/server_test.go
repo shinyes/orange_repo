@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"golang.org/x/crypto/bcrypt"
@@ -791,7 +792,7 @@ func TestImportAutoDetect(t *testing.T) {
 
 	// 场景 2：含 chapters → auto 识别为训练并按结构建章，名称=元数据标题
 	planZip, err := zipio.BuildZip(entries, &zipio.PlanMeta{
-		Title: "带章节的训练",
+		Title:    "带章节的训练",
 		Chapters: []zipio.PlanChapter{{Title: "热身", ProblemIDs: []int{0, 1}}},
 	}, nil)
 	if err != nil {
@@ -1008,7 +1009,8 @@ func TestImportIntoFolder(t *testing.T) {
 	}
 }
 
-// importBackupZip 上传备份包到 /api/import/backup。
+// importBackupZip 上传备份包到 /api/import/backup，等待后台任务完成后返回最终任务载荷
+// （含 result: {imported,trainings,practices}）。
 func importBackupZip(t *testing.T, app *fiber.App, cookie string, zipData []byte) map[string]any {
 	t.Helper()
 	body := &bytes.Buffer{}
@@ -1034,7 +1036,48 @@ func importBackupZip(t *testing.T, app *fiber.App, cookie string, zipData []byte
 	if resp.StatusCode != fiber.StatusCreated {
 		t.Fatalf("import backup = %d %s", resp.StatusCode, raw)
 	}
+	taskID, _ := out["taskId"].(string)
+	if taskID == "" {
+		t.Fatalf("import backup 响应缺 taskId: %s", raw)
+	}
+	return waitImportTask(t, app, cookie, taskID)
+}
+
+// waitImportTask 轮询 /api/import/backup/task/:id 直到任务完成；任务失败则 t.Fatal（附错误文本）。
+func waitImportTask(t *testing.T, app *fiber.App, cookie, taskID string) map[string]any {
+	t.Helper()
+	out := pollImportTask(t, app, cookie, taskID)
+	if ok, _ := out["ok"].(bool); !ok {
+		t.Fatalf("import task %s 失败: %v", taskID, out["error"])
+	}
 	return out
+}
+
+// pollImportTask 轮询任务直到 done=true，返回最终载荷（不校验 ok，供失败路径断言）。
+func pollImportTask(t *testing.T, app *fiber.App, cookie, taskID string) map[string]any {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		req := httptest.NewRequest("GET", "/api/import/backup/task/"+taskID, nil)
+		req.Header.Set("Cookie", cookie)
+		resp, err := app.Test(req, -1)
+		if err != nil {
+			t.Fatalf("poll import task %s: %v", taskID, err)
+		}
+		raw, _ := io.ReadAll(resp.Body)
+		if resp.StatusCode != fiber.StatusOK {
+			t.Fatalf("poll import task %s = %d %s", taskID, resp.StatusCode, raw)
+		}
+		var out map[string]any
+		_ = json.Unmarshal(raw, &out)
+		if done, _ := out["done"].(bool); done {
+			return out
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("import task %s 超时（未完成）: %s", taskID, raw)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
 }
 
 // TestBackupRoundTrip 全库备份：导出 → 新库导入 → 题目/目录/训练/练习结构一致；
@@ -1147,6 +1190,127 @@ func TestBackupRoundTrip(t *testing.T) {
 	_, tl2 := doJSON(t, dstApp, "GET", "/api/trainings", dstCookie, nil)
 	if len(tl2["trainings"].([]any)) != 2 {
 		t.Fatalf("trainings after second import = %d, want 2", len(tl2["trainings"].([]any)))
+	}
+}
+
+// TestImportBackupAsyncTask 异步契约：POST 立即返回 201 {taskId}，任务轮询终态
+// done/ok/result 正确（imported/trainings/practices），数据确实落库。
+func TestImportBackupAsyncTask(t *testing.T) {
+	app, _ := newTestApp(t)
+	cookie := sessionCookie(t, app)
+	doJSON(t, app, "POST", "/api/problems", cookie, map[string]any{"type": "programming", "title": "异步导入题一"})
+	doJSON(t, app, "POST", "/api/problems", cookie, map[string]any{"type": "programming", "title": "异步导入题二"})
+	doJSON(t, app, "POST", "/api/trainings", cookie, map[string]string{"title": "异步导入训练"})
+	zipData := getZip(t, app, cookie, "/api/export/backup")
+
+	dstApp, _ := newTestApp(t)
+	dstCookie := sessionCookie(t, dstApp)
+
+	// POST → 201 {taskId}
+	body := &bytes.Buffer{}
+	mw := multipart.NewWriter(body)
+	fw, err := mw.CreateFormFile("zip", "backup.zip")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fw.Write(zipData); err != nil {
+		t.Fatal(err)
+	}
+	mw.Close()
+	req := httptest.NewRequest("POST", "/api/import/backup", body)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	req.Header.Set("Cookie", dstCookie)
+	resp, err := dstApp.Test(req, -1)
+	if err != nil {
+		t.Fatalf("import backup: %v", err)
+	}
+	raw, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != fiber.StatusCreated {
+		t.Fatalf("POST = %d %s", resp.StatusCode, raw)
+	}
+	var created map[string]any
+	_ = json.Unmarshal(raw, &created)
+	taskID, _ := created["taskId"].(string)
+	if taskID == "" {
+		t.Fatalf("缺 taskId: %s", raw)
+	}
+
+	// 轮询到终态：done=true ok=true phase=完成 result 汇总正确
+	final := waitImportTask(t, dstApp, dstCookie, taskID)
+	if done, _ := final["done"].(bool); !done {
+		t.Fatalf("done=false: %v", final)
+	}
+	if p, _ := final["phase"].(string); p != "完成" {
+		t.Fatalf("phase=%q, want 完成", p)
+	}
+	res, _ := final["result"].(map[string]any)
+	if int(res["imported"].(float64)) != 2 || int(res["trainings"].(float64)) != 1 || int(res["practices"].(float64)) != 0 {
+		t.Fatalf("result=%v, want imported=2 trainings=1 practices=0", res)
+	}
+	_, pl := doJSON(t, dstApp, "GET", "/api/problems", dstCookie, nil)
+	if len(pl["problems"].([]any)) != 2 {
+		t.Fatalf("problems after async import = %d, want 2", len(pl["problems"].([]any)))
+	}
+}
+
+// TestImportBackupTaskFailure 失败/过期路径：坏包登记任务后经 task.error 上报（POST 仍 201）；
+// 未知 taskId 轮询 → 404；坏包不落任何数据。
+func TestImportBackupTaskFailure(t *testing.T) {
+	app, _ := newTestApp(t)
+	cookie := sessionCookie(t, app)
+
+	// 未知任务 → 404
+	req := httptest.NewRequest("GET", "/api/import/backup/task/no-such-task", nil)
+	req.Header.Set("Cookie", cookie)
+	resp, err := app.Test(req, -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != fiber.StatusNotFound {
+		t.Fatalf("未知任务 = %d, want 404", resp.StatusCode)
+	}
+
+	// 非法 zip → POST 201 + taskId；终态 done=true ok=false 且带 error
+	body := &bytes.Buffer{}
+	mw := multipart.NewWriter(body)
+	fw, err := mw.CreateFormFile("zip", "bad.zip")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fw.Write([]byte("this is not a zip archive at all")); err != nil {
+		t.Fatal(err)
+	}
+	mw.Close()
+	req2 := httptest.NewRequest("POST", "/api/import/backup", body)
+	req2.Header.Set("Content-Type", mw.FormDataContentType())
+	req2.Header.Set("Cookie", cookie)
+	resp2, err := app.Test(req2, -1)
+	if err != nil {
+		t.Fatalf("import backup: %v", err)
+	}
+	raw2, _ := io.ReadAll(resp2.Body)
+	if resp2.StatusCode != fiber.StatusCreated {
+		t.Fatalf("POST 坏包 = %d %s", resp2.StatusCode, raw2)
+	}
+	var created map[string]any
+	_ = json.Unmarshal(raw2, &created)
+	taskID, _ := created["taskId"].(string)
+	if taskID == "" {
+		t.Fatalf("缺 taskId: %s", raw2)
+	}
+	final := pollImportTask(t, app, cookie, taskID)
+	if done, _ := final["done"].(bool); !done {
+		t.Fatalf("done=false: %v", final)
+	}
+	if ok, _ := final["ok"].(bool); ok {
+		t.Fatalf("坏包任务应失败: %v", final)
+	}
+	if errMsg, _ := final["error"].(string); errMsg == "" {
+		t.Fatalf("失败任务缺 error: %v", final)
+	}
+	_, pl := doJSON(t, app, "GET", "/api/problems", cookie, nil)
+	if len(pl["problems"].([]any)) != 0 {
+		t.Fatalf("坏包导入后应有 0 题")
 	}
 }
 

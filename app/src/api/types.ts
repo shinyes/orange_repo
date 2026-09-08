@@ -220,6 +220,19 @@ export interface WrongBookView {
   groups: WrongGroup[]
 }
 
+// ---------- 全量导入任务（异步进度） ----------
+
+export interface ImportTaskView {
+  done: boolean
+  ok: boolean
+  phase: string
+  message: string
+  current: number
+  total: number
+  error?: string
+  result?: { imported: number; trainings: number; practices: number }
+}
+
 // ---------- 排行榜 ----------
 
 export interface RankRow {

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"sync"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/logger"
@@ -24,6 +25,10 @@ type Server struct {
 	Accounts   *accounts.Store
 	UploadsDir string
 	WebDist    string
+
+	// 全量导入异步任务表（单进程内存态，惰性初始化，见 import_task.go）
+	importTaskMu sync.Mutex
+	importTasks  map[string]*ImportTask
 }
 
 // New 创建管理端 Fiber 应用（含路由与中间件）——保留签名供测试与旧单进程模式。
@@ -125,6 +130,8 @@ func (s *Server) registerManagement(app *fiber.App) {
 	// 全库备份/迁移：导出单包 / 导入恢复（见 backup.go）
 	ga("GET", "/export/backup", s.handleExportBackup)
 	ga("POST", "/import/backup", s.handleImportBackup)
+	// 全量导入异步任务进度轮询（任务登记于 POST /import/backup，见 import_task.go）
+	ga("GET", "/import/backup/task/:taskId", s.handleImportTask)
 
 	// 域管理：列表查询允许两类管理员（domain_admin 仅见其域，用于显示域名）；其余域管理仅系统管理员
 	gag := func(method, path string, h fiber.Handler) {

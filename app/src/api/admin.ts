@@ -11,6 +11,7 @@ import type {
   Chapter,
   Domain,
   DomainAdminUser,
+  ImportTaskView,
   MemberUser,
   Practice,
   PracticeItem,
@@ -105,10 +106,27 @@ export const adminApi = {
   // 全库备份/迁移（域级：导出该域 / 导入到该域，domainId 为空时后端回退默认域）
   exportBackupUrl: (domainId?: number | null) =>
     `/api/export/backup${domainId != null ? `?domainId=${domainId}` : ''}`,
-  importBackup: async (file: File, domainId?: number | null): Promise<{ imported: number; trainings: number; practices: number }> => {
+  /** 全量导入（异步）：上传后立即返回 taskId，用 importTask 轮询进度 */
+  startImportBackup: async (file: File, domainId?: number | null): Promise<{ taskId: string }> => {
     const body = new FormData()
     body.append('zip', file)
     return req(`/api/import/backup${domainId != null ? `?domainId=${domainId}` : ''}`, { method: 'POST', body })
+  },
+  /** 导入任务进度轮询 */
+  importTask: (taskId: string): Promise<ImportTaskView> =>
+    req(`/api/import/backup/task/${taskId}`),
+  /** 兼容旧调用：上传后轮询至完成（供仍用同步语义的调用方） */
+  importBackup: async (file: File, domainId?: number | null): Promise<{ imported: number; trainings: number; practices: number }> => {
+    const started = await adminApi.startImportBackup(file, domainId)
+    for (;;) {
+      const t = await adminApi.importTask(started.taskId)
+      if (!t.done) {
+        await new Promise((r) => setTimeout(r, 600))
+        continue
+      }
+      if (!t.ok) throw new Error(t.error || '导入失败')
+      return t.result as { imported: number; trainings: number; practices: number }
+    }
   },
 
   // ---- 题册目录（可嵌套） ----

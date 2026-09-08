@@ -11,8 +11,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
@@ -243,7 +241,10 @@ func (s *Server) backupScope(c *fiber.Ctx) *int64 {
 // importBackup 全库恢复（严格模式）：预校验全部数据 → 逐段写入并记录创建资源；
 // 任何一步失败立即报错并补偿回滚（删除本次已建题目/目录/训练/练习与落盘图片），
 // 不留半导入状态。
-func (s *Server) importBackup(manifest *backupManifest, problems []zipio.ExportProblem, domainID *int64) (err error) {
+//
+// prog（可 nil）为进度回调：各阶段内以 prog(phase, cur, total) 上报当前进度，cur 从 1 起。
+// phase 取值：题目/训练/练习（import_task.go 常量）。回调仅为上报，绝不改变导入语义。
+func (s *Server) importBackup(manifest *backupManifest, problems []zipio.ExportProblem, domainID *int64, prog func(phase string, cur, total int)) (err error) {
 	if manifest.Version != 1 {
 		return errors.New("不支持的备份版本")
 	}
@@ -293,7 +294,7 @@ func (s *Server) importBackup(manifest *backupManifest, problems []zipio.ExportP
 		}
 	}
 
-	// 回滚补偿：记录本次创建的资源（图片回删由调用方 handleImportBackup 负责）
+	// 回滚补偿：记录本次创建的资源（图片回删由调用方 runImportBackupTask 负责）
 	type rollback struct {
 		problemIDs  []int64
 		trainingIDs []int64
@@ -336,6 +337,9 @@ func (s *Server) importBackup(manifest *backupManifest, problems []zipio.ExportP
 	// ---------- 1) 题目 ----------
 	createdIDs := make([]int64, len(problems))
 	for i := range problems {
+		if prog != nil {
+			prog(importPhaseProblems, i+1, len(problems)) // 含 uuid 去重命中/新建
+		}
 		p := problems[i]
 		zipio.ApplyImportRewrite(&p)
 		payload := zipio.ProblemPayload{
@@ -394,7 +398,10 @@ func (s *Server) importBackup(manifest *backupManifest, problems []zipio.ExportP
 	}
 
 	// 3) 训练
-	for _, bt := range manifest.Trainings {
+	for i, bt := range manifest.Trainings {
+		if prog != nil {
+			prog(importPhaseTrainings, i+1, len(manifest.Trainings))
+		}
 		folder, err := s.folderIDByPath(dirs, bt.Folder)
 		if err != nil {
 			return err
@@ -422,7 +429,10 @@ func (s *Server) importBackup(manifest *backupManifest, problems []zipio.ExportP
 	}
 
 	// 4) 练习
-	for _, bp := range manifest.Practices {
+	for i, bp := range manifest.Practices {
+		if prog != nil {
+			prog(importPhasePractices, i+1, len(manifest.Practices))
+		}
 		folder, err := s.folderIDByPath(dirs, bp.Folder)
 		if err != nil {
 			return err
@@ -446,7 +456,10 @@ func (s *Server) importBackup(manifest *backupManifest, problems []zipio.ExportP
 	return nil
 }
 
-// handleImportBackup POST /api/import/backup（multipart zip）→ 全库恢复。
+// handleImportBackup POST /api/import/backup（multipart zip）→ 登记全库恢复任务。
+// 接收 zip 后立即返回 201 {"taskId"}；解析/图片落盘/写库在后台 goroutine 顺序执行，
+// 进度与结果经 GET /api/import/backup/task/:taskId 轮询（见 import_task.go）。
+// 失败文本、严格预校验与补偿回滚语义与同步版本一致，仅错误上报改经任务表。
 func (s *Server) handleImportBackup(c *fiber.Ctx) error {
 	file, err := c.FormFile("zip")
 	if err != nil {
@@ -460,79 +473,20 @@ func (s *Server) handleImportBackup(c *fiber.Ctx) error {
 		return err
 	}
 	defer src.Close()
+	// 内存捕获（100MB 上限内可行）；data 由 goroutine 闭包持有，之后不再使用 src
 	data, err := io.ReadAll(src)
 	if err != nil {
 		return err
 	}
 
-	problems, _, images, extra, err := zipio.ParseZipWithExtra(data)
+	task, err := s.createImportTask()
 	if err != nil {
-		return respondError(c, fiber.StatusBadRequest, err.Error())
+		return respondError(c, fiber.StatusServiceUnavailable, err.Error())
 	}
-	raw, ok := extra[BackupJSONName]
-	if !ok {
-		return respondError(c, fiber.StatusBadRequest, "不是 OrangeOJ 全库备份包（缺少 "+BackupJSONName+"）")
-	}
-	manifest := &backupManifest{}
-	if err := json.Unmarshal(raw, manifest); err != nil {
-		return respondError(c, fiber.StatusBadRequest, "备份清单解析失败: "+err.Error())
-	}
-
-	// 严格校验：题目文本引用的图片必须存在于包内（缺失=不完整备份，拒绝导入）
-	{
-		available := map[string]bool{}
-		for name := range images {
-			available[name] = true
-		}
-		for i := range problems {
-			refs := zipio.CollectImageRefs(
-				problems[i].StatementMD, string(problems[i].BodyJSON),
-				string(problems[i].AnswerJSON), string(problems[i].Solutions),
-			)
-			for _, r := range refs {
-				if !available[r] {
-					return respondError(c, fiber.StatusBadRequest,
-						fmt.Sprintf("题目 %d（%q）引用图片 %q 但备份包内缺失——备份不完整，已拒绝导入", i+1, problems[i].Title, r))
-				}
-			}
-		}
-	}
-
-	// 落盘图片（nano 命名 + 引用重写，与 ImportZipData 一致）
-	imageRename := map[string]string{}
-	for name, content := range images {
-		ext := extOf(name)
-		newName, err := NanoName(16)
-		if err != nil {
-			return respondError(c, fiber.StatusInternalServerError, err.Error())
-		}
-		newName += ext
-		if _, err := s.SaveUpload(newName, strings.NewReader(string(content))); err != nil {
-			return respondError(c, fiber.StatusInternalServerError, err.Error())
-		}
-		imageRename[name] = newName
-	}
-	if len(imageRename) > 0 {
-		for i := range problems {
-			problems[i].StatementMD = rewriteUploadRefs(problems[i].StatementMD, imageRename)
-			problems[i].BodyJSON = json.RawMessage(rewriteUploadRefs(string(problems[i].BodyJSON), imageRename))
-			problems[i].AnswerJSON = json.RawMessage(rewriteUploadRefs(string(problems[i].AnswerJSON), imageRename))
-			problems[i].Solutions = json.RawMessage(rewriteUploadRefs(string(problems[i].Solutions), imageRename))
-		}
-	}
-
-	if err := s.importBackup(manifest, problems, s.backupScope(c)); err != nil {
-		// 回滚本次已落盘的图片（库侧资源已由 importBackup 补偿删除）
-		for _, newName := range imageRename {
-			_ = os.Remove(filepath.Join(s.UploadsDir, newName))
-		}
-		return respondError(c, fiber.StatusBadRequest, "导入失败，已全部回滚: "+err.Error())
-	}
-	return respondData(c, fiber.StatusCreated, fiber.Map{
-		"imported":  len(problems),
-		"trainings": len(manifest.Trainings),
-		"practices": len(manifest.Practices),
-	})
+	// fiber.Ctx 只能在 handler 内使用：域作用域先在主协程解析好，再交给后台任务
+	scope := s.backupScope(c)
+	go s.runImportBackupTask(task, data, scope)
+	return respondData(c, fiber.StatusCreated, fiber.Map{"taskId": task.ID})
 }
 
 func extOf(name string) string {
