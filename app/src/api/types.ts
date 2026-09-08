@@ -41,6 +41,8 @@ export interface TrainingBrief {
   tags: string[]
   maxAttempts: number
   problemCount: number
+  /** 公开：空间内所有成员可见；缺省/未落地前按 undefined 处理（不显示公开标签） */
+  isPublic?: boolean
 }
 
 export interface PracticeBrief {
@@ -51,6 +53,8 @@ export interface PracticeBrief {
   description: string
   tags: string[]
   problemCount: number
+  /** 公开：空间内所有成员可见；缺省/未落地前按 undefined 处理（不显示公开标签） */
+  isPublic?: boolean
 }
 
 export interface QuizBrief {
@@ -65,6 +69,8 @@ export interface QuizBrief {
   /** 每轮题数（0=不限制：整范围一轮） */
   roundSize?: number
   problemCount: number
+  /** 公开：空间内所有成员可见；缺省/未落地前按 undefined 处理（不显示公开标签） */
+  isPublic?: boolean
 }
 
 // ---------- 空间训练（章节化，客观题限次作答） ----------
@@ -460,6 +466,8 @@ export interface SpaceTraining {
   tags: string[]
   maxAttempts: number
   problemCount: number
+  /** 公开：空间内所有成员可见；缺省/未落地前按 undefined 处理 */
+  isPublic?: boolean
 }
 
 export interface SpaceChapterItem {
@@ -488,6 +496,8 @@ export interface SpacePractice {
   description: string
   tags: string[]
   problemCount: number
+  /** 公开：空间内所有成员可见；缺省/未落地前按 undefined 处理 */
+  isPublic?: boolean
 }
 
 export interface SpacePracticeItem {
@@ -510,6 +520,8 @@ export interface SpaceQuiz {
   repoKind?: string
   repoId?: number
   problemCount: number
+  /** 公开：空间内所有成员可见；缺省/未落地前按 undefined 处理 */
+  isPublic?: boolean
 }
 
 // ---------- 题目做题（/api/oj/problem/:id 保留） ----------

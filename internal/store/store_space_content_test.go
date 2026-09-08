@@ -42,7 +42,7 @@ func jsonRaw(v string) []byte { return []byte(v) }
 func TestSpaceTrainingFlow(t *testing.T) {
 	s, spaceID, pids := setupSpaceContentEnv(t)
 
-	trID, err := s.CreateSpaceTraining(spaceID, "第一训练", "描述", []string{"t1"}, 3)
+	trID, err := s.CreateSpaceTraining(spaceID, "第一训练", "描述", []string{"t1"}, 3, false)
 	if err != nil {
 		t.Fatal(err)
 	}

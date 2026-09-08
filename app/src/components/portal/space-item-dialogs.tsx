@@ -13,6 +13,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { PublicToggleRow } from '@/components/portal/public-toggle'
 
 // ---------- 新建训练（门户管理员） ----------
 
@@ -25,11 +26,12 @@ export function NewTrainingDialog(props: {
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [maxAttempts, setMaxAttempts] = useState('3')
+  const [isPublic, setIsPublic] = useState(false)
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
     if (props.open) {
-      setTitle(''); setDescription(''); setMaxAttempts('3')
+      setTitle(''); setDescription(''); setMaxAttempts('3'); setIsPublic(false)
     }
   }, [props.open])
 
@@ -46,8 +48,9 @@ export function NewTrainingDialog(props: {
         title: t,
         description: description.trim() || undefined,
         maxAttempts: Number.isFinite(ma) && ma > 0 ? ma : undefined,
+        isPublic,
       })
-      toast.success('训练已创建（默认无成员可见，可点眼睛按钮分配）')
+      toast.success(isPublic ? '训练已创建并公开（空间内所有成员可见）' : '训练已创建（默认无成员可见，可点眼睛按钮分配）')
       props.onCreated()
       props.onOpenChange(false)
     } catch (e) {
@@ -62,7 +65,7 @@ export function NewTrainingDialog(props: {
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>新建训练</DialogTitle>
-          <DialogDescription>创建后默认无成员可见，请用卡片上的眼睛按钮分配可见成员。</DialogDescription>
+          <DialogDescription>设置标题/描述与限次；未开启公开时默认无成员可见，可在卡片上用 👁 按钮分配。</DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
           <div className="space-y-1.5">
@@ -78,6 +81,7 @@ export function NewTrainingDialog(props: {
             <Input type="number" min={0} value={maxAttempts} onChange={(e) => setMaxAttempts(e.target.value)} />
             <p className="text-[11px] text-muted-foreground">0 = 不限次数</p>
           </div>
+          <PublicToggleRow checked={isPublic} disabled={busy} onCheckedChange={setIsPublic} />
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => props.onOpenChange(false)}>取消</Button>
@@ -98,10 +102,11 @@ export function NewPracticeDialog(props: {
 }) {
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
+  const [isPublic, setIsPublic] = useState(false)
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
-    if (props.open) { setTitle(''); setDescription('') }
+    if (props.open) { setTitle(''); setDescription(''); setIsPublic(false) }
   }, [props.open])
 
   async function create() {
@@ -112,8 +117,8 @@ export function NewPracticeDialog(props: {
     }
     setBusy(true)
     try {
-      await api.createSpacePractice(props.spaceId, { title: t, description: description.trim() || undefined })
-      toast.success('练习已创建（默认无成员可见，可点眼睛按钮分配）')
+      await api.createSpacePractice(props.spaceId, { title: t, description: description.trim() || undefined, isPublic })
+      toast.success(isPublic ? '练习已创建并公开（空间内所有成员可见）' : '练习已创建（默认无成员可见，可点眼睛按钮分配）')
       props.onCreated()
       props.onOpenChange(false)
     } catch (e) {
@@ -128,7 +133,7 @@ export function NewPracticeDialog(props: {
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>新建练习</DialogTitle>
-          <DialogDescription>创建后默认无成员可见，请用卡片上的眼睛按钮分配可见成员。</DialogDescription>
+          <DialogDescription>设置标题/描述；未开启公开时默认无成员可见，可在卡片上用 👁 按钮分配。</DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
           <div className="space-y-1.5">
@@ -139,6 +144,7 @@ export function NewPracticeDialog(props: {
             <Label>描述（可选）</Label>
             <Textarea rows={2} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="练习说明" />
           </div>
+          <PublicToggleRow checked={isPublic} disabled={busy} onCheckedChange={setIsPublic} />
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => props.onOpenChange(false)}>取消</Button>
@@ -160,10 +166,11 @@ export function NewQuizDialog(props: {
   const [title, setTitle] = useState('')
   const [tags, setTags] = useState('')
   const [roundSize, setRoundSize] = useState('')
+  const [isPublic, setIsPublic] = useState(false)
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
-    if (props.open) { setTitle(''); setTags(''); setRoundSize('') }
+    if (props.open) { setTitle(''); setTags(''); setRoundSize(''); setIsPublic(false) }
   }, [props.open])
 
   async function create() {
@@ -185,8 +192,15 @@ export function NewQuizDialog(props: {
         tags: tagList.length > 0 ? tagList : undefined,
         sourceType: 'tags',
         roundSize: rs,
+        isPublic,
       })
-      toast.success(rs > 0 ? `刷题项目已创建（每轮 ${rs} 题，默认无成员可见，可点眼睛分配）` : '刷题项目已创建（默认无成员可见，可点眼睛分配）')
+      toast.success(
+        isPublic
+          ? '刷题项目已创建并公开（空间内所有成员可见）'
+          : rs > 0
+            ? `刷题项目已创建（每轮 ${rs} 题，默认无成员可见，可点眼睛分配）`
+            : '刷题项目已创建（默认无成员可见，可点眼睛分配）',
+      )
       props.onCreated()
       props.onOpenChange(false)
     } catch (e) {
@@ -202,7 +216,7 @@ export function NewQuizDialog(props: {
         <DialogHeader>
           <DialogTitle>新建刷题项目</DialogTitle>
           <DialogDescription>
-            范围内单选/判断题循环复习：做过少做、答错的下轮多做、同轮不重复。创建后默认无成员可见。
+            范围内单选/判断题循环复习：做过少做、答错的下轮多做、同轮不重复。未开启公开时默认无成员可见，可在卡片上用 👁 按钮分配。
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
@@ -225,6 +239,7 @@ export function NewQuizDialog(props: {
               placeholder="如：10 —— 每轮最多抽 10 题，答完开下一轮"
             />
           </div>
+          <PublicToggleRow checked={isPublic} disabled={busy} onCheckedChange={setIsPublic} />
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => props.onOpenChange(false)}>取消</Button>
@@ -247,6 +262,7 @@ export function QuizEditDialog(props: {
   const [title, setTitle] = useState(props.quiz.title)
   const [tags, setTags] = useState((props.quiz.tags ?? []).join(', '))
   const [roundSize, setRoundSize] = useState(String(props.quiz.roundSize ?? 0))
+  const [isPublic, setIsPublic] = useState(!!props.quiz.isPublic)
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
@@ -254,6 +270,7 @@ export function QuizEditDialog(props: {
       setTitle(props.quiz.title)
       setTags((props.quiz.tags ?? []).join(', '))
       setRoundSize(String(props.quiz.roundSize ?? 0))
+      setIsPublic(!!props.quiz.isPublic)
     }
   }, [props.open, props.quiz])
 
@@ -275,8 +292,9 @@ export function QuizEditDialog(props: {
         title: t,
         tags: tagList,
         roundSize: rs,
+        isPublic,
       })
-      toast.success(rs > 0 ? '已保存（每轮 ' + rs + ' 题）' : '已保存（整范围一轮）')
+      toast.success(isPublic ? '已保存并公开（空间内所有成员可见）' : rs > 0 ? '已保存（每轮 ' + rs + ' 题）' : '已保存（整范围一轮）')
       props.onSaved()
       props.onOpenChange(false)
     } catch (e) {
@@ -306,6 +324,7 @@ export function QuizEditDialog(props: {
             <Label>每轮题目数量（0=不限，整范围为一轮）</Label>
             <Input type="number" min={0} max={200} value={roundSize} onChange={(e) => setRoundSize(e.target.value)} placeholder="如：10" />
           </div>
+          <PublicToggleRow checked={isPublic} disabled={busy} onCheckedChange={setIsPublic} />
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => props.onOpenChange(false)}>取消</Button>
@@ -376,7 +395,7 @@ export function VisibleUsersDialog(props: {
         <DialogHeader>
           <DialogTitle>可见成员 · {props.title}</DialogTitle>
           <DialogDescription>
-            仅被分配的成员能在门户看到并进入该项目；默认无成员可见（管理员始终可见）。
+            未公开时，仅被分配的成员能在门户看到并进入该项目（默认无成员可见，管理员始终可见）；若已在编辑弹窗开启「公开」，则空间内所有成员可见，无需在此分配。
           </DialogDescription>
         </DialogHeader>
         <div className="max-h-72 space-y-1 overflow-y-auto">

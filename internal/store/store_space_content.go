@@ -15,6 +15,7 @@ type SpaceTraining struct {
 	ID           int64    `json:"id"`
 	UUID         string   `json:"uuid,omitempty"`
 	SpaceID      int64    `json:"spaceId"`
+	IsPublic     bool     `json:"isPublic"`
 	Title        string   `json:"title"`
 	Description  string   `json:"description"`
 	Tags         []string `json:"tags"`
@@ -43,7 +44,7 @@ type SpaceChapterItem struct {
 }
 
 // CreateSpaceTraining 建空间训练（max_attempts：0=不限；负值兜底默认 3）。
-func (s *Store) CreateSpaceTraining(spaceID int64, title, description string, tags []string, maxAttempts int) (int64, error) {
+func (s *Store) CreateSpaceTraining(spaceID int64, title, description string, tags []string, maxAttempts int, isPublic bool) (int64, error) {
 	if maxAttempts < 0 {
 		maxAttempts = 3
 	}
@@ -51,8 +52,8 @@ func (s *Store) CreateSpaceTraining(spaceID int64, title, description string, ta
 	if err != nil {
 		return 0, err
 	}
-	res, err := s.DB.Exec(`INSERT INTO space_trainings(uuid,space_id,title,description,tags_json,max_attempts)
-		VALUES(?,?,?,?,?,?)`, u, spaceID, title, description, encodeTags(tags), maxAttempts)
+	res, err := s.DB.Exec(`INSERT INTO space_trainings(uuid,space_id,title,description,tags_json,max_attempts,is_public)
+		VALUES(?,?,?,?,?,?,?)`, u, spaceID, title, description, encodeTags(tags), maxAttempts, boolInt(isPublic))
 	if err != nil {
 		return 0, err
 	}
@@ -61,7 +62,7 @@ func (s *Store) CreateSpaceTraining(spaceID int64, title, description string, ta
 
 // ListSpaceTrainings 空间内训练列表。
 func (s *Store) ListSpaceTrainings(spaceID int64) ([]SpaceTraining, error) {
-	rows, err := s.DB.Query(`SELECT t.id,t.uuid,t.space_id,t.title,t.description,t.tags_json,t.max_attempts,
+	rows, err := s.DB.Query(`SELECT t.id,t.uuid,t.space_id,t.title,t.description,t.tags_json,t.max_attempts,t.is_public,
 		(SELECT COUNT(*) FROM space_training_items i JOIN space_training_chapters c ON i.chapter_id=c.id WHERE c.training_id=t.id)
 		FROM space_trainings t WHERE t.space_id=? ORDER BY t.id`, spaceID)
 	if err != nil {
@@ -72,9 +73,11 @@ func (s *Store) ListSpaceTrainings(spaceID int64) ([]SpaceTraining, error) {
 	for rows.Next() {
 		var t SpaceTraining
 		var tags string
-		if err := rows.Scan(&t.ID, &t.UUID, &t.SpaceID, &t.Title, &t.Description, &tags, &t.MaxAttempts, &t.ProblemCount); err != nil {
+		var pub int
+		if err := rows.Scan(&t.ID, &t.UUID, &t.SpaceID, &t.Title, &t.Description, &tags, &t.MaxAttempts, &pub, &t.ProblemCount); err != nil {
 			return nil, err
 		}
+		t.IsPublic = pub != 0
 		t.Tags = decodeTags(tags)
 		out = append(out, t)
 	}
@@ -85,16 +88,18 @@ func (s *Store) ListSpaceTrainings(spaceID int64) ([]SpaceTraining, error) {
 func (s *Store) GetSpaceTraining(id int64) (*SpaceTraining, []SpaceChapter, error) {
 	var t SpaceTraining
 	var tags string
-	err := s.DB.QueryRow(`SELECT t.id,t.uuid,t.space_id,t.title,t.description,t.tags_json,t.max_attempts,
+	var pub int
+	err := s.DB.QueryRow(`SELECT t.id,t.uuid,t.space_id,t.title,t.description,t.tags_json,t.max_attempts,t.is_public,
 		(SELECT COUNT(*) FROM space_training_items i JOIN space_training_chapters c ON i.chapter_id=c.id WHERE c.training_id=t.id)
 		FROM space_trainings t WHERE t.id=?`, id).
-		Scan(&t.ID, &t.UUID, &t.SpaceID, &t.Title, &t.Description, &tags, &t.MaxAttempts, &t.ProblemCount)
+		Scan(&t.ID, &t.UUID, &t.SpaceID, &t.Title, &t.Description, &tags, &t.MaxAttempts, &pub, &t.ProblemCount)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil, ErrNotFound
 	}
 	if err != nil {
 		return nil, nil, err
 	}
+	t.IsPublic = pub != 0
 	t.Tags = decodeTags(tags)
 	chapters, err := s.ListSpaceChapters(id)
 	if err != nil {
@@ -105,12 +110,13 @@ func (s *Store) GetSpaceTraining(id int64) (*SpaceTraining, []SpaceChapter, erro
 
 // UpdateSpaceTrainingMeta 部分更新训练元信息（nil 指针 = 该字段不变）。
 // maxAttempts 语义：0 = 不限次（显式）；>0 = 限 N 次；nil = 不变。
-func (s *Store) UpdateSpaceTrainingMeta(id int64, title, description *string, tags []string, maxAttempts *int) error {
+// isPublic：nil = 不变；非 nil = 设公开/取消公开。
+func (s *Store) UpdateSpaceTrainingMeta(id int64, title, description *string, tags []string, maxAttempts *int, isPublic *bool) error {
 	// 读当前值组装 UPDATE（保持部分更新；tags nil = 不变）
 	var curTitle, curDesc, curTags string
-	var curMax int
-	if err := s.DB.QueryRow(`SELECT title,description,tags_json,max_attempts FROM space_trainings WHERE id=?`, id).
-		Scan(&curTitle, &curDesc, &curTags, &curMax); err != nil {
+	var curMax, curPub int
+	if err := s.DB.QueryRow(`SELECT title,description,tags_json,max_attempts,is_public FROM space_trainings WHERE id=?`, id).
+		Scan(&curTitle, &curDesc, &curTags, &curMax, &curPub); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return ErrNotFound
 		}
@@ -128,8 +134,11 @@ func (s *Store) UpdateSpaceTrainingMeta(id int64, title, description *string, ta
 	if maxAttempts != nil {
 		curMax = *maxAttempts
 	}
-	res, err := s.DB.Exec(`UPDATE space_trainings SET title=?,description=?,tags_json=?,max_attempts=? WHERE id=?`,
-		curTitle, curDesc, curTags, curMax, id)
+	if isPublic != nil {
+		curPub = boolInt(*isPublic)
+	}
+	res, err := s.DB.Exec(`UPDATE space_trainings SET title=?,description=?,tags_json=?,max_attempts=?,is_public=? WHERE id=?`,
+		curTitle, curDesc, curTags, curMax, curPub, id)
 	if err != nil {
 		return err
 	}
@@ -220,7 +229,8 @@ func (s *Store) ReorderSpaceChapters(trainingID int64, chapterIDs []int64) error
 }
 
 // ReorderSpaceChapterItems 按给定条目 id 顺序重写章节内条目 order_no（题目排序）。
-func (s *Store) ReorderSpaceChapterItems(chapterID int64, itemIDs []int64) error {	tx, err := s.DB.Begin()
+func (s *Store) ReorderSpaceChapterItems(chapterID int64, itemIDs []int64) error {
+	tx, err := s.DB.Begin()
 	if err != nil {
 		return err
 	}
@@ -288,7 +298,7 @@ func (s *Store) AddSpaceChapterItems(chapterID int64, problemIDs []int64) ([]int
 	// 存在性过滤：仅插入真实存在的题目（空间条目无 FK，防悬挂）
 	existing := map[int64]bool{}
 	if len(problemIDs) > 0 {
-		rows, err := s.DB.Query(`SELECT id FROM problems WHERE id IN (` + placeholders(len(problemIDs)) + `)`, anySlice(problemIDs)...)
+		rows, err := s.DB.Query(`SELECT id FROM problems WHERE id IN (`+placeholders(len(problemIDs))+`)`, anySlice(problemIDs)...)
 		if err != nil {
 			return nil, err
 		}
@@ -475,6 +485,7 @@ type SpacePractice struct {
 	ID           int64    `json:"id"`
 	UUID         string   `json:"uuid,omitempty"`
 	SpaceID      int64    `json:"spaceId"`
+	IsPublic     bool     `json:"isPublic"`
 	Title        string   `json:"title"`
 	Description  string   `json:"description"`
 	Tags         []string `json:"tags"`
@@ -493,13 +504,13 @@ type SpacePracticeItem struct {
 }
 
 // CreateSpacePractice 建空间练习。
-func (s *Store) CreateSpacePractice(spaceID int64, title, description string, tags []string) (int64, error) {
+func (s *Store) CreateSpacePractice(spaceID int64, title, description string, tags []string, isPublic bool) (int64, error) {
 	u, err := NewUUIDv7()
 	if err != nil {
 		return 0, err
 	}
-	res, err := s.DB.Exec(`INSERT INTO space_practices(uuid,space_id,title,description,tags_json) VALUES(?,?,?,?,?)`,
-		u, spaceID, title, description, encodeTags(tags))
+	res, err := s.DB.Exec(`INSERT INTO space_practices(uuid,space_id,title,description,tags_json,is_public) VALUES(?,?,?,?,?,?)`,
+		u, spaceID, title, description, encodeTags(tags), boolInt(isPublic))
 	if err != nil {
 		return 0, err
 	}
@@ -508,7 +519,7 @@ func (s *Store) CreateSpacePractice(spaceID int64, title, description string, ta
 
 // ListSpacePractices 空间练习列表。
 func (s *Store) ListSpacePractices(spaceID int64) ([]SpacePractice, error) {
-	rows, err := s.DB.Query(`SELECT p.id,p.uuid,p.space_id,p.title,p.description,p.tags_json,
+	rows, err := s.DB.Query(`SELECT p.id,p.uuid,p.space_id,p.title,p.description,p.tags_json,p.is_public,
 		(SELECT COUNT(*) FROM space_practice_items i WHERE i.practice_id=p.id)
 		FROM space_practices p WHERE p.space_id=? ORDER BY p.id`, spaceID)
 	if err != nil {
@@ -519,9 +530,11 @@ func (s *Store) ListSpacePractices(spaceID int64) ([]SpacePractice, error) {
 	for rows.Next() {
 		var p SpacePractice
 		var tags string
-		if err := rows.Scan(&p.ID, &p.UUID, &p.SpaceID, &p.Title, &p.Description, &tags, &p.ProblemCount); err != nil {
+		var pub int
+		if err := rows.Scan(&p.ID, &p.UUID, &p.SpaceID, &p.Title, &p.Description, &tags, &pub, &p.ProblemCount); err != nil {
 			return nil, err
 		}
+		p.IsPublic = pub != 0
 		p.Tags = decodeTags(tags)
 		out = append(out, p)
 	}
@@ -532,16 +545,18 @@ func (s *Store) ListSpacePractices(spaceID int64) ([]SpacePractice, error) {
 func (s *Store) GetSpacePractice(id int64) (*SpacePractice, []SpacePracticeItem, error) {
 	var p SpacePractice
 	var tags string
-	err := s.DB.QueryRow(`SELECT p.id,p.uuid,p.space_id,p.title,p.description,p.tags_json,
+	var pub int
+	err := s.DB.QueryRow(`SELECT p.id,p.uuid,p.space_id,p.title,p.description,p.tags_json,p.is_public,
 		(SELECT COUNT(*) FROM space_practice_items i WHERE i.practice_id=p.id)
 		FROM space_practices p WHERE p.id=?`, id).
-		Scan(&p.ID, &p.UUID, &p.SpaceID, &p.Title, &p.Description, &tags, &p.ProblemCount)
+		Scan(&p.ID, &p.UUID, &p.SpaceID, &p.Title, &p.Description, &tags, &pub, &p.ProblemCount)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil, ErrNotFound
 	}
 	if err != nil {
 		return nil, nil, err
 	}
+	p.IsPublic = pub != 0
 	p.Tags = decodeTags(tags)
 	items, err := s.ListSpacePracticeItems(id)
 	if err != nil {
@@ -550,10 +565,33 @@ func (s *Store) GetSpacePractice(id int64) (*SpacePractice, []SpacePracticeItem,
 	return &p, items, nil
 }
 
-// UpdateSpacePracticeMeta 更新练习名称/描述/标签。
-func (s *Store) UpdateSpacePracticeMeta(id int64, title, description string, tags []string) error {
-	res, err := s.DB.Exec(`UPDATE space_practices SET title=?,description=?,tags_json=? WHERE id=?`,
-		title, description, encodeTags(tags), id)
+// UpdateSpacePracticeMeta 更新练习名称/描述/标签/公开开关（nil 指针 = 该字段不变；
+// 读当前值合并后单条 UPDATE，支持前端单字段保存）。
+func (s *Store) UpdateSpacePracticeMeta(id int64, title, description *string, tags []string, isPublic *bool) error {
+	// 读当前值合并后写回（保持单字段部分更新；tags nil = 不变）
+	var curTitle, curDesc, curTags string
+	var curPub int
+	if err := s.DB.QueryRow(`SELECT title,description,tags_json,is_public FROM space_practices WHERE id=?`, id).
+		Scan(&curTitle, &curDesc, &curTags, &curPub); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrNotFound
+		}
+		return err
+	}
+	if title != nil {
+		curTitle = *title
+	}
+	if description != nil {
+		curDesc = *description
+	}
+	if tags != nil {
+		curTags = encodeTags(tags)
+	}
+	if isPublic != nil {
+		curPub = boolInt(*isPublic)
+	}
+	res, err := s.DB.Exec(`UPDATE space_practices SET title=?,description=?,tags_json=?,is_public=? WHERE id=?`,
+		curTitle, curDesc, curTags, curPub, id)
 	if err != nil {
 		return err
 	}
@@ -663,6 +701,7 @@ type SpaceQuiz struct {
 	ID           int64    `json:"id"`
 	UUID         string   `json:"uuid,omitempty"`
 	SpaceID      int64    `json:"spaceId"`
+	IsPublic     bool     `json:"isPublic"`
 	Title        string   `json:"title"`
 	Tags         []string `json:"tags"`
 	SourceType   string   `json:"sourceType"` // tags | repo
@@ -673,23 +712,45 @@ type SpaceQuiz struct {
 }
 
 // CreateSpaceQuiz 建刷题项目（roundSize：每轮题数，0=不限制）。
-func (s *Store) CreateSpaceQuiz(spaceID int64, title string, tags []string, sourceType, repoKind string, repoID int64, roundSize int) (int64, error) {
+func (s *Store) CreateSpaceQuiz(spaceID int64, title string, tags []string, sourceType, repoKind string, repoID int64, roundSize int, isPublic bool) (int64, error) {
 	u, err := NewUUIDv7()
 	if err != nil {
 		return 0, err
 	}
-	res, err := s.DB.Exec(`INSERT INTO space_quizzes(uuid,space_id,title,tags_json,source_type,repo_kind,repo_id,round_size)
-		VALUES(?,?,?,?,?,?,?,?)`, u, spaceID, title, encodeTags(tags), sourceType, repoKind, repoID, roundSize)
+	res, err := s.DB.Exec(`INSERT INTO space_quizzes(uuid,space_id,title,tags_json,source_type,repo_kind,repo_id,round_size,is_public)
+		VALUES(?,?,?,?,?,?,?,?,?)`, u, spaceID, title, encodeTags(tags), sourceType, repoKind, repoID, roundSize, boolInt(isPublic))
 	if err != nil {
 		return 0, err
 	}
 	return res.LastInsertId()
 }
 
-// UpdateSpaceQuiz 更新刷题项目标题/范围标签/每轮题数（内容结构由编辑对话框完整回传）。
-func (s *Store) UpdateSpaceQuiz(id int64, title string, tags []string, roundSize int) error {
-	res, err := s.DB.Exec(`UPDATE space_quizzes SET title=?,tags_json=?,round_size=? WHERE id=?`,
-		title, encodeTags(tags), roundSize, id)
+// UpdateSpaceQuiz 更新刷题项目标题/范围标签/每轮题数/公开开关（nil 指针 = 该字段不变；
+// 读当前值合并后单条 UPDATE，支持前端单字段保存；tags nil = 不变）。
+func (s *Store) UpdateSpaceQuiz(id int64, title *string, tags []string, roundSize *int, isPublic *bool) error {
+	var curTitle, curTags string
+	var curRound, curPub int
+	if err := s.DB.QueryRow(`SELECT title,tags_json,round_size,is_public FROM space_quizzes WHERE id=?`, id).
+		Scan(&curTitle, &curTags, &curRound, &curPub); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrNotFound
+		}
+		return err
+	}
+	if title != nil {
+		curTitle = *title
+	}
+	if tags != nil {
+		curTags = encodeTags(tags)
+	}
+	if roundSize != nil {
+		curRound = *roundSize
+	}
+	if isPublic != nil {
+		curPub = boolInt(*isPublic)
+	}
+	res, err := s.DB.Exec(`UPDATE space_quizzes SET title=?,tags_json=?,round_size=?,is_public=? WHERE id=?`,
+		curTitle, curTags, curRound, curPub, id)
 	if err != nil {
 		return err
 	}
@@ -702,7 +763,7 @@ func (s *Store) UpdateSpaceQuiz(id int64, title string, tags []string, roundSize
 
 // ListSpaceQuizzes 空间刷题项目列表。
 func (s *Store) ListSpaceQuizzes(spaceID int64) ([]SpaceQuiz, error) {
-	rows, err := s.DB.Query(`SELECT id,uuid,space_id,title,tags_json,source_type,repo_kind,repo_id,round_size
+	rows, err := s.DB.Query(`SELECT id,uuid,space_id,title,tags_json,source_type,repo_kind,repo_id,round_size,is_public
 		FROM space_quizzes WHERE space_id=? ORDER BY id`, spaceID)
 	if err != nil {
 		return nil, err
@@ -712,9 +773,11 @@ func (s *Store) ListSpaceQuizzes(spaceID int64) ([]SpaceQuiz, error) {
 	for rows.Next() {
 		var q SpaceQuiz
 		var tags string
-		if err := rows.Scan(&q.ID, &q.UUID, &q.SpaceID, &q.Title, &tags, &q.SourceType, &q.RepoKind, &q.RepoID, &q.RoundSize); err != nil {
+		var pub int
+		if err := rows.Scan(&q.ID, &q.UUID, &q.SpaceID, &q.Title, &tags, &q.SourceType, &q.RepoKind, &q.RepoID, &q.RoundSize, &pub); err != nil {
 			return nil, err
 		}
+		q.IsPublic = pub != 0
 		q.Tags = decodeTags(tags)
 		out = append(out, q)
 	}
@@ -735,7 +798,7 @@ func (s *Store) DeleteSpaceQuiz(id int64) error {
 }
 
 // SpaceContentIDs 返回空间下 刷题项目/训练/练习 的 id 三组
-//（供删除空间前收集、删除后由上层清理作答侧孤儿）。
+// （供删除空间前收集、删除后由上层清理作答侧孤儿）。
 func (s *Store) SpaceContentIDs(spaceID int64) (quizIDs, trainingIDs, practiceIDs []int64, err error) {
 	quizIDs, err = s.spaceContentIDList(`SELECT id FROM space_quizzes WHERE space_id=?`, spaceID)
 	if err != nil {

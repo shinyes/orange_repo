@@ -290,6 +290,7 @@ func (s *Store) migrateSpaceContent() error {
 			description TEXT NOT NULL DEFAULT '',
 			tags_json TEXT NOT NULL DEFAULT '[]',
 			max_attempts INTEGER NOT NULL DEFAULT 3, -- 训练级客观题统一选择上限
+			is_public INTEGER NOT NULL DEFAULT 0, -- 1=空间全体成员可见（免可见名单）；0=仅可见名单（默认）
 			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 		);`,
 		`CREATE TABLE IF NOT EXISTS space_training_chapters (
@@ -311,6 +312,7 @@ func (s *Store) migrateSpaceContent() error {
 			title TEXT NOT NULL,
 			description TEXT NOT NULL DEFAULT '',
 			tags_json TEXT NOT NULL DEFAULT '[]',
+			is_public INTEGER NOT NULL DEFAULT 0, -- 1=空间全体成员可见（免可见名单）；0=仅可见名单（默认）
 			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 		);`,
 		`CREATE TABLE IF NOT EXISTS space_practice_items (
@@ -330,6 +332,7 @@ func (s *Store) migrateSpaceContent() error {
 			repo_kind TEXT NOT NULL DEFAULT '',
 			repo_id INTEGER NOT NULL DEFAULT 0,
 			round_size INTEGER NOT NULL DEFAULT 0,
+			is_public INTEGER NOT NULL DEFAULT 0, -- 1=空间全体成员可见（免可见名单）；0=仅可见名单（默认）
 			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 		);`,
 		// ---------- 空间内容可见成员授权（空=默认无成员可见；管理员始终可见） ----------
@@ -360,6 +363,12 @@ func (s *Store) migrateSpaceContent() error {
 	// 刷题项目每轮题数（0=不限制：整范围一轮）
 	if err := s.ensureColumn("space_quizzes", "round_size", `round_size INTEGER NOT NULL DEFAULT 0`); err != nil {
 		return err
+	}
+	// 公开开关（存量库补列；0=仅可见名单成员可见[默认]，1=空间全体成员可见）
+	for _, tbl := range []string{"space_trainings", "space_practices", "space_quizzes"} {
+		if err := s.ensureColumn(tbl, "is_public", `is_public INTEGER NOT NULL DEFAULT 0`); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -409,7 +418,7 @@ func (s *Store) DeleteDomainProblems(domainID int64) error {
 }
 
 // DomainOnlyBookletIDs 返回「含 ≥1 道题且全部题目都属于 domainID」的仓库训练/练习模板 id
-//（删域前收集：删题后这些模板变空壳，应随之删除；他域/混合/空模板不受影响）。
+// （删域前收集：删题后这些模板变空壳，应随之删除；他域/混合/空模板不受影响）。
 func (s *Store) DomainOnlyBookletIDs(domainID int64) (trainingIDs, practiceIDs []int64, err error) {
 	rows, err := s.DB.Query(`SELECT DISTINCT t.id FROM trainings t
 		WHERE EXISTS (SELECT 1 FROM training_items i JOIN training_chapters c ON i.chapter_id=c.id

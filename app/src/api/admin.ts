@@ -221,12 +221,12 @@ export const adminApi = {
   spaceTrainings: (spaceId: number) => req<{ trainings: SpaceTraining[] }>(`/api/space/${spaceId}/trainings`),
   createSpaceTraining: (
     spaceId: number,
-    body: { title: string; description?: string; tags?: string[]; maxAttempts?: number; fromRepo?: { kind: 'training' | 'practice'; id: number } },
+    body: { title: string; description?: string; tags?: string[]; maxAttempts?: number; isPublic?: boolean; fromRepo?: { kind: 'training' | 'practice'; id: number } },
   ) => req<{ id: number }>(`/api/space/${spaceId}/trainings`, json({ method: 'POST', body: JSON.stringify(body) })),
   getSpaceTraining: (spaceId: number, tid: number) =>
     req<{ training: SpaceTraining; chapters: SpaceChapter[] }>(`/api/space/${spaceId}/trainings/${tid}`),
   /** 更新训练元信息（部分更新：仅发送的字段被修改；title 提供时不可为空） */
-  updateSpaceTraining: (spaceId: number, tid: number, body: { title?: string; description?: string; tags?: string[]; maxAttempts?: number }) =>
+  updateSpaceTraining: (spaceId: number, tid: number, body: { title?: string; description?: string; tags?: string[]; maxAttempts?: number; isPublic?: boolean }) =>
     req<void>(`/api/space/${spaceId}/trainings/${tid}`, json({ method: 'PUT', body: JSON.stringify(body) })),
   deleteSpaceTraining: (spaceId: number, tid: number) => req<void>(`/api/space/${spaceId}/trainings/${tid}`, { method: 'DELETE' }),
   /** 可见成员名单（训练/练习/刷题；kind=training|practice|quiz） */
@@ -253,11 +253,11 @@ export const adminApi = {
   spacePractices: (spaceId: number) => req<{ practices: SpacePractice[] }>(`/api/space/${spaceId}/practices`),
   createSpacePractice: (
     spaceId: number,
-    body: { title: string; description?: string; tags?: string[]; fromRepo?: { kind: 'training' | 'practice'; id: number } },
+    body: { title: string; description?: string; tags?: string[]; isPublic?: boolean; fromRepo?: { kind: 'training' | 'practice'; id: number } },
   ) => req<{ id: number }>(`/api/space/${spaceId}/practices`, json({ method: 'POST', body: JSON.stringify(body) })),
   getSpacePractice: (spaceId: number, pid: number) =>
     req<{ practice: SpacePractice; items: SpacePracticeItem[] }>(`/api/space/${spaceId}/practices/${pid}`),
-  updateSpacePractice: (spaceId: number, pid: number, body: { title: string; description?: string; tags?: string[] }) =>
+  updateSpacePractice: (spaceId: number, pid: number, body: { title: string; description?: string; tags?: string[]; isPublic?: boolean }) =>
     req<void>(`/api/space/${spaceId}/practices/${pid}`, json({ method: 'PUT', body: JSON.stringify(body) })),
   deleteSpacePractice: (spaceId: number, pid: number) => req<void>(`/api/space/${spaceId}/practices/${pid}`, { method: 'DELETE' }),
   addSpacePracticeItems: (spaceId: number, pid: number, problemIds: number[]) =>
@@ -267,9 +267,9 @@ export const adminApi = {
     req<void>(`/api/space/practices/${pid}/items/order`, json({ method: 'PUT', body: JSON.stringify({ itemIds }) })),
   deleteSpaceItem: (itemId: number) => req<void>(`/api/space/space-items/${itemId}`, { method: 'DELETE' }),
   spaceQuizzes: (spaceId: number) => req<{ quizzes: SpaceQuiz[] }>(`/api/space/${spaceId}/quizzes`),
-  createSpaceQuiz: (spaceId: number, body: { title: string; tags?: string[]; sourceType: string; repoKind?: string; repoId?: number; roundSize?: number }) =>
+  createSpaceQuiz: (spaceId: number, body: { title: string; tags?: string[]; sourceType: string; repoKind?: string; repoId?: number; roundSize?: number; isPublic?: boolean }) =>
     req<{ id: number }>(`/api/space/${spaceId}/quizzes`, json({ method: 'POST', body: JSON.stringify(body) })),
-  updateSpaceQuiz: (spaceId: number, quizId: number, body: { title: string; tags?: string[]; roundSize?: number }) =>
+  updateSpaceQuiz: (spaceId: number, quizId: number, body: { title: string; tags?: string[]; roundSize?: number; isPublic?: boolean }) =>
     req<void>(`/api/space/${spaceId}/quizzes/${quizId}`, json({ method: 'PUT', body: JSON.stringify(body) })),
   deleteSpaceQuiz: (spaceId: number, quizId: number) => req<void>(`/api/space/${spaceId}/quizzes/${quizId}`, { method: 'DELETE' }),
 }

@@ -45,8 +45,8 @@ func (s *Server) handleListSpaceTrainings(c *fiber.Ctx) error {
 }
 
 // handleCreateSpaceTraining POST /api/space/:id/trainings
-// {title, description?, tags?, maxAttempts?, fromRepo?{kind:'training'|'practice', id}?}
-// fromRepo 提供时从仓库模板拷贝结构（章节/条目）。
+// {title, description?, tags?, maxAttempts?, isPublic?, fromRepo?{kind:'training'|'practice', id}?}
+// fromRepo 提供时从仓库模板拷贝结构（章节/条目）。isPublic 缺省=false（仅可见名单可见）。
 func (s *Server) handleCreateSpaceTraining(c *fiber.Ctx) error {
 	spaceID, err := s.spaceParam(c)
 	if err != nil {
@@ -57,12 +57,14 @@ func (s *Server) handleCreateSpaceTraining(c *fiber.Ctx) error {
 		return err
 	}
 	var req struct {
-		Title       string `json:"title"`
-		Description string `json:"description"`
+		Title       string   `json:"title"`
+		Description string   `json:"description"`
 		Tags        []string `json:"tags"`
 		// 缺省（null/不传）=3 次；显式 0=不限作答次数
 		MaxAttempts *int `json:"maxAttempts"`
-		FromRepo    *struct {
+		// 缺省（null/不传）=false：仅可见名单成员可见
+		IsPublic *bool `json:"isPublic"`
+		FromRepo *struct {
 			Kind string `json:"kind"` // training | practice
 			ID   int64  `json:"id"`
 		} `json:"fromRepo"`
@@ -81,7 +83,11 @@ func (s *Server) handleCreateSpaceTraining(c *fiber.Ctx) error {
 	if req.MaxAttempts != nil {
 		maxAttempts = *req.MaxAttempts
 	}
-	id, err := s.Store.CreateSpaceTraining(spaceID, req.Title, req.Description, req.Tags, maxAttempts)
+	isPublic := false
+	if req.IsPublic != nil {
+		isPublic = *req.IsPublic
+	}
+	id, err := s.Store.CreateSpaceTraining(spaceID, req.Title, req.Description, req.Tags, maxAttempts, isPublic)
 	if err != nil {
 		return err
 	}
@@ -208,6 +214,7 @@ func (s *Server) handleUpdateSpaceTrainingMeta(c *fiber.Ctx) error {
 		Description *string  `json:"description"`
 		Tags        []string `json:"tags"`
 		MaxAttempts *int     `json:"maxAttempts"`
+		IsPublic    *bool    `json:"isPublic"`
 	}
 	if err := c.BodyParser(&req); err != nil {
 		return respondError(c, fiber.StatusBadRequest, "invalid request")
@@ -220,7 +227,7 @@ func (s *Server) handleUpdateSpaceTrainingMeta(c *fiber.Ctx) error {
 	if req.Tags != nil {
 		tagsPtr = req.Tags
 	}
-	if err := s.Store.UpdateSpaceTrainingMeta(tid, req.Title, req.Description, tagsPtr, req.MaxAttempts); err != nil {
+	if err := s.Store.UpdateSpaceTrainingMeta(tid, req.Title, req.Description, tagsPtr, req.MaxAttempts, req.IsPublic); err != nil {
 		if err == store.ErrNotFound {
 			return respondError(c, fiber.StatusNotFound, "训练不存在")
 		}
@@ -520,7 +527,7 @@ func (s *Server) handleListSpacePractices(c *fiber.Ctx) error {
 }
 
 // handleCreateSpacePractice POST /api/space/:id/practices
-// {title, description?, tags?, fromRepo?{kind,id}?}
+// {title, description?, tags?, isPublic?, fromRepo?{kind,id}?} —— isPublic 缺省=false。
 func (s *Server) handleCreateSpacePractice(c *fiber.Ctx) error {
 	spaceID, err := s.spaceParam(c)
 	if err != nil {
@@ -531,9 +538,10 @@ func (s *Server) handleCreateSpacePractice(c *fiber.Ctx) error {
 		return err
 	}
 	var req struct {
-		Title       string `json:"title"`
-		Description string `json:"description"`
+		Title       string   `json:"title"`
+		Description string   `json:"description"`
 		Tags        []string `json:"tags"`
+		IsPublic    *bool    `json:"isPublic"`
 		FromRepo    *struct {
 			Kind string `json:"kind"`
 			ID   int64  `json:"id"`
@@ -545,7 +553,11 @@ func (s *Server) handleCreateSpacePractice(c *fiber.Ctx) error {
 	if strings.TrimSpace(req.Title) == "" {
 		return respondError(c, fiber.StatusBadRequest, "标题不能为空")
 	}
-	id, err := s.Store.CreateSpacePractice(spaceID, req.Title, req.Description, req.Tags)
+	isPublic := false
+	if req.IsPublic != nil {
+		isPublic = *req.IsPublic
+	}
+	id, err := s.Store.CreateSpacePractice(spaceID, req.Title, req.Description, req.Tags, isPublic)
 	if err != nil {
 		return err
 	}
@@ -676,6 +688,7 @@ func (s *Server) handleAddSpacePracticeItems(c *fiber.Ctx) error {
 }
 
 // handleUpdateSpacePractice PUT /api/space/:id/practices/:pid
+// {title?, description?, tags?, isPublic?}——部分更新（nil 字段不变），支持单字段保存。
 func (s *Server) handleUpdateSpacePractice(c *fiber.Ctx) error {
 	spaceID, err := s.spaceParam(c)
 	if err != nil {
@@ -700,14 +713,23 @@ func (s *Server) handleUpdateSpacePractice(c *fiber.Ctx) error {
 		return err
 	}
 	var req struct {
-		Title       string   `json:"title"`
-		Description string   `json:"description"`
+		Title       *string  `json:"title"`
+		Description *string  `json:"description"`
 		Tags        []string `json:"tags"`
+		IsPublic    *bool    `json:"isPublic"`
 	}
 	if err := c.BodyParser(&req); err != nil {
 		return respondError(c, fiber.StatusBadRequest, "invalid request")
 	}
-	if err := s.Store.UpdateSpacePracticeMeta(pid, req.Title, req.Description, req.Tags); err != nil {
+	// title 显式提供时不得为空
+	if req.Title != nil && strings.TrimSpace(*req.Title) == "" {
+		return respondError(c, fiber.StatusBadRequest, "标题不能为空")
+	}
+	var tagsPtr []string
+	if req.Tags != nil {
+		tagsPtr = req.Tags
+	}
+	if err := s.Store.UpdateSpacePracticeMeta(pid, req.Title, req.Description, tagsPtr, req.IsPublic); err != nil {
 		if err == store.ErrNotFound {
 			return respondError(c, fiber.StatusNotFound, "练习不存在")
 		}
@@ -775,7 +797,8 @@ func (s *Server) handleListSpaceQuizzes(c *fiber.Ctx) error {
 }
 
 // handleCreateSpaceQuiz POST /api/space/:id/quizzes
-// {title, tags?[], sourceType:'tags'|'repo', repoKind?, repoId?}
+// {title, tags?[], sourceType:'tags'|'repo', repoKind?, repoId?, roundSize?, isPublic?}
+// —— isPublic 缺省=false（仅可见名单成员可见）。
 func (s *Server) handleCreateSpaceQuiz(c *fiber.Ctx) error {
 	spaceID, err := s.spaceParam(c)
 	if err != nil {
@@ -792,6 +815,7 @@ func (s *Server) handleCreateSpaceQuiz(c *fiber.Ctx) error {
 		RepoKind   string   `json:"repoKind"`
 		RepoID     int64    `json:"repoId"`
 		RoundSize  int      `json:"roundSize"` // 每轮题数（0/负=整范围一轮）
+		IsPublic   *bool    `json:"isPublic"`
 	}
 	if err := c.BodyParser(&req); err != nil {
 		return respondError(c, fiber.StatusBadRequest, "invalid request")
@@ -805,7 +829,11 @@ func (s *Server) handleCreateSpaceQuiz(c *fiber.Ctx) error {
 	if req.RoundSize < 0 || req.RoundSize > 200 {
 		return respondError(c, fiber.StatusBadRequest, "每轮题数须在 1~200（0=不限）")
 	}
-	id, err := s.Store.CreateSpaceQuiz(spaceID, req.Title, req.Tags, req.SourceType, req.RepoKind, req.RepoID, req.RoundSize)
+	isPublic := false
+	if req.IsPublic != nil {
+		isPublic = *req.IsPublic
+	}
+	id, err := s.Store.CreateSpaceQuiz(spaceID, req.Title, req.Tags, req.SourceType, req.RepoKind, req.RepoID, req.RoundSize, isPublic)
 	if err != nil {
 		return err
 	}
@@ -813,7 +841,7 @@ func (s *Server) handleCreateSpaceQuiz(c *fiber.Ctx) error {
 }
 
 // handleUpdateSpaceQuiz PUT /api/space/:id/quizzes/:qid
-// {title, tags?, roundSize}——编辑标题/范围标签/每轮题数。
+// {title?, tags?, roundSize?, isPublic?}——部分更新（nil 字段不变），支持单字段保存。
 func (s *Server) handleUpdateSpaceQuiz(c *fiber.Ctx) error {
 	spaceID, err := s.spaceParam(c)
 	if err != nil {
@@ -838,24 +866,22 @@ func (s *Server) handleUpdateSpaceQuiz(c *fiber.Ctx) error {
 		return err
 	}
 	var req struct {
-		Title     string   `json:"title"`
+		Title     *string  `json:"title"`
 		Tags      []string `json:"tags"`
 		RoundSize *int     `json:"roundSize"`
+		IsPublic  *bool    `json:"isPublic"`
 	}
 	if err := c.BodyParser(&req); err != nil {
 		return respondError(c, fiber.StatusBadRequest, "invalid request")
 	}
-	if strings.TrimSpace(req.Title) == "" {
+	// title 显式提供时不得为空
+	if req.Title != nil && strings.TrimSpace(*req.Title) == "" {
 		return respondError(c, fiber.StatusBadRequest, "标题不能为空")
 	}
-	roundSize := 0
-	if req.RoundSize != nil {
-		roundSize = *req.RoundSize
-	}
-	if roundSize < 0 || roundSize > 200 {
+	if req.RoundSize != nil && (*req.RoundSize < 0 || *req.RoundSize > 200) {
 		return respondError(c, fiber.StatusBadRequest, "每轮题数须在 1~200（0=不限）")
 	}
-	if err := s.Store.UpdateSpaceQuiz(qid, req.Title, req.Tags, roundSize); err != nil {
+	if err := s.Store.UpdateSpaceQuiz(qid, req.Title, req.Tags, req.RoundSize, req.IsPublic); err != nil {
 		if err == store.ErrNotFound {
 			return respondError(c, fiber.StatusNotFound, "刷题项目不存在")
 		}
@@ -913,17 +939,23 @@ func (s *Server) visibleTarget(c *fiber.Ctx) (int64, int64, string, error) {
 	var check func(int64) (int64, error)
 	if tid := c.Params("tid"); tid != "" {
 		id, e := paramID(c, "tid")
-		if e != nil { return 0, 0, "", respondError(c, fiber.StatusBadRequest, "invalid id") }
+		if e != nil {
+			return 0, 0, "", respondError(c, fiber.StatusBadRequest, "invalid id")
+		}
 		item, table = id, "space_training_visible"
 		check = s.Store.SpaceIDOfTraining
 	} else if pid := c.Params("pid"); pid != "" {
 		id, e := paramID(c, "pid")
-		if e != nil { return 0, 0, "", respondError(c, fiber.StatusBadRequest, "invalid id") }
+		if e != nil {
+			return 0, 0, "", respondError(c, fiber.StatusBadRequest, "invalid id")
+		}
 		item, table = id, "space_practice_visible"
 		check = s.Store.SpaceIDOfPractice
 	} else if qid := c.Params("qid"); qid != "" {
 		id, e := paramID(c, "qid")
-		if e != nil { return 0, 0, "", respondError(c, fiber.StatusBadRequest, "invalid id") }
+		if e != nil {
+			return 0, 0, "", respondError(c, fiber.StatusBadRequest, "invalid id")
+		}
 		item, table = id, "space_quiz_visible"
 		check = s.Store.SpaceIDOfQuiz
 	} else {

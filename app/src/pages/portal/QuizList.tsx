@@ -5,14 +5,16 @@ import { toast } from 'sonner'
 
 import type { QuizBrief } from '@/api/types'
 import { api } from '@/api'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { NewQuizDialog, QuizEditDialog, VisibleUsersDialog } from '@/components/portal/space-item-dialogs'
+import { ConfirmDeleteDialog } from '@/components/portal/confirm-delete-dialog'
 import { useSpaceHome } from './useSpaceHome'
 import { usePortalCtx } from './SpaceShell'
 import { usePortalSession } from './portal-context'
 
 // 空间刷题项目列表（空间壳内 tab 页），点击进入独立刷题页。
-// 管理员：顶部新建；卡片右上常显 编辑/可见成员/删除。
+// 管理员：顶部新建；卡片 hover 显示 删除/可见成员/编辑。
 export function QuizList() {
   const { space } = usePortalCtx()
   const home = useSpaceHome(space)
@@ -22,15 +24,20 @@ export function QuizList() {
   const [creating, setCreating] = useState(false)
   const [editing, setEditing] = useState<QuizBrief | null>(null)
   const [visibleFor, setVisibleFor] = useState<QuizBrief | null>(null)
+  const [deleting, setDeleting] = useState<QuizBrief | null>(null)
+  const [deleteBusy, setDeleteBusy] = useState(false)
 
   async function remove(qz: QuizBrief) {
-    if (!confirm(`删除刷题项目「${qz.title}」？`)) return
+    setDeleteBusy(true)
     try {
       await api.deleteSpaceQuiz(space.id, qz.id)
       toast.success('已删除')
+      setDeleting(null)
       void home.refetch()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : '删除失败')
+    } finally {
+      setDeleteBusy(false)
     }
   }
 
@@ -71,7 +78,7 @@ export function QuizList() {
             canEdit={canEdit}
             onEdit={() => setEditing(qz)}
             onVisible={() => setVisibleFor(qz)}
-            onRemove={() => void remove(qz)}
+            onDelete={() => setDeleting(qz)}
           />
         ))}
       </div>
@@ -104,52 +111,62 @@ export function QuizList() {
           onSaved={() => void home.refetch()}
         />
       )}
+
+      <ConfirmDeleteDialog
+        open={deleting !== null}
+        title={deleting ? `删除刷题项目「${deleting.title}」？` : '删除刷题项目'}
+        description="删除后不可恢复，成员将无法再进入该刷题项目。"
+        busy={deleteBusy}
+        onOpenChange={(v) => { if (!v && !deleteBusy) setDeleting(null) }}
+        onConfirm={() => { if (deleting) return remove(deleting) }}
+      />
     </div>
   )
 }
 
-function QuizCard({ q, spaceId, canEdit, onEdit, onVisible, onRemove }: {
+function QuizCard({ q, spaceId, canEdit, onEdit, onVisible, onDelete }: {
   q: QuizBrief
   spaceId: number
   canEdit: boolean
   onEdit: () => void
   onVisible: () => void
-  onRemove: () => void
+  onDelete: () => void
 }) {
   return (
-    <div className="relative rounded-2xl border bg-card transition-colors hover:border-primary/50">
+    <div className="group relative rounded-2xl border bg-card transition-colors hover:border-primary/50">
       {canEdit && (
         <div className="absolute top-2 right-2 z-10 flex items-center gap-1">
           <button
             type="button"
-            title="编辑项目（每轮题数/范围/可见成员）"
-            onClick={onEdit}
-            className="flex size-7 items-center justify-center rounded-md border bg-background text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary"
+            title="删除刷题项目"
+            onClick={onDelete}
+            className="flex size-7 items-center justify-center rounded-md border bg-background text-muted-foreground opacity-0 transition-opacity hover:border-red-400/40 hover:text-red-500 focus:opacity-100 group-hover:opacity-100"
           >
-            <PencilIcon className="size-3.5" />
+            <Trash2Icon className="size-3.5" />
           </button>
           <button
             type="button"
             title="设置可见成员"
             onClick={onVisible}
-            className="flex size-7 items-center justify-center rounded-md border bg-background text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary"
+            className="flex size-7 items-center justify-center rounded-md border bg-background text-muted-foreground opacity-0 transition-opacity hover:border-primary/40 hover:text-primary focus:opacity-100 group-hover:opacity-100"
           >
             <EyeIcon className="size-3.5" />
           </button>
           <button
             type="button"
-            title="删除刷题项目"
-            onClick={onRemove}
-            className="flex size-7 items-center justify-center rounded-md border bg-background text-muted-foreground transition-colors hover:border-red-400/40 hover:text-red-500"
+            title="编辑项目（每轮题数/范围）"
+            onClick={onEdit}
+            className="flex size-7 items-center justify-center rounded-md border bg-background text-muted-foreground opacity-0 transition-opacity hover:border-primary/40 hover:text-primary focus:opacity-100 group-hover:opacity-100"
           >
-            <Trash2Icon className="size-3.5" />
+            <PencilIcon className="size-3.5" />
           </button>
         </div>
       )}
-      <Link to={`/s/${spaceId}/quiz/${q.id}`} className="flex w-full flex-col gap-1.5 rounded-2xl p-4 pr-28">
-        <span className="flex items-center gap-2 font-medium">
+      <Link to={`/s/${spaceId}/quiz/${q.id}`} className="flex w-full flex-col gap-1.5 rounded-2xl p-4 pr-24">
+        <span className="flex min-w-0 items-center gap-2 font-medium">
           <BookOpenIcon className="size-4 shrink-0 text-primary" />
           <span className="min-w-0 truncate">{q.title}</span>
+          {q.isPublic && <Badge variant="secondary" className="shrink-0 px-1.5 text-[10px] font-normal text-emerald-600">公开</Badge>}
         </span>
         <span className="mt-1 text-xs text-muted-foreground">
           {q.sourceType === 'repo' ? '题单范围 · 循环复习' : '标签范围 · 循环复习'}

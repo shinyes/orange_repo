@@ -27,3 +27,11 @@ func anySlice(ids []int64) []any {
 	}
 	return out
 }
+
+// boolInt bool → 0/1（SQLite 无原生 bool；is_public 存 INTEGER）。
+func boolInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
+}

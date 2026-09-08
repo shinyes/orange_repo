@@ -59,7 +59,7 @@ func newPortalEnv(t *testing.T) (*fiber.App, map[string]int64, int64, string) {
 		}
 		ids[fmt.Sprintf("p%d", i)] = id
 	}
-	trID, err := main.CreateSpaceTraining(spaceID, "单元训练", "", nil, 2)
+	trID, err := main.CreateSpaceTraining(spaceID, "单元训练", "", nil, 2, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,13 +68,13 @@ func newPortalEnv(t *testing.T) (*fiber.App, map[string]int64, int64, string) {
 	_, _ = main.AddSpaceChapterItems(ch1, []int64{ids["p1"]})
 	ch2, _ := main.CreateSpaceChapter(trID, "判断")
 	_, _ = main.AddSpaceChapterItems(ch2, []int64{ids["p2"]})
-	prID, err := main.CreateSpacePractice(spaceID, "期中卷", "", nil)
+	prID, err := main.CreateSpacePractice(spaceID, "期中卷", "", nil, false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	ids["practice"] = prID
 	_ = main.AddSpacePracticeItems(prID, []int64{ids["p1"], ids["p2"]})
-	qID, err := main.CreateSpaceQuiz(spaceID, "每日刷题", nil, "tags", "", 0, 0)
+	qID, err := main.CreateSpaceQuiz(spaceID, "每日刷题", nil, "tags", "", 0, 0, false)
 	if err != nil {
 		t.Fatal(err)
 	}

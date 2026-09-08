@@ -24,10 +24,10 @@ func TestDeleteProblemClearsSpaceItems(t *testing.T) {
 	}
 	_, _ = s.DB.Exec(`UPDATE problems SET domain_id=? WHERE id=?`, domainID, pid)
 	// 空间训练（章内条目）+ 空间练习（条目）
-	trID, _ := s.CreateSpaceTraining(spaceID, "训练", "", nil, 3)
+	trID, _ := s.CreateSpaceTraining(spaceID, "训练", "", nil, 3, false)
 	chID, _ := s.CreateSpaceChapter(trID, "章")
 	_, _ = s.AddSpaceChapterItems(chID, []int64{pid})
-	prID, _ := s.CreateSpacePractice(spaceID, "练习", "", nil)
+	prID, _ := s.CreateSpacePractice(spaceID, "练习", "", nil, false)
 	_ = s.AddSpacePracticeItems(prID, []int64{pid})
 
 	// 删题
@@ -53,7 +53,7 @@ func TestDeleteDomainProblemsClearsSpaceItems(t *testing.T) {
 	spaceID, _ := s.CreateSpace(domainID, "空间B")
 	pid, _ := s.CreateProblem(model.Problem{Type: model.TypeSingleChoice, Title: "题", BodyJSON: []byte(`{"options":["a"]}`), AnswerJSON: []byte(`{"answerIndex":0}`)})
 	_, _ = s.DB.Exec(`UPDATE problems SET domain_id=? WHERE id=?`, domainID, pid)
-	trID, _ := s.CreateSpaceTraining(spaceID, "训练", "", nil, 3)
+	trID, _ := s.CreateSpaceTraining(spaceID, "训练", "", nil, 3, false)
 	chID, _ := s.CreateSpaceChapter(trID, "章")
 	_, _ = s.AddSpaceChapterItems(chID, []int64{pid})
 	if err := s.DeleteDomainProblems(domainID); err != nil {

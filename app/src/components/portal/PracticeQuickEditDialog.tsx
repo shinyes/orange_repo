@@ -21,6 +21,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ProblemPickerDialog, typeLabel } from '@/components/portal/problem-picker'
+import { PublicToggleRow } from '@/components/portal/public-toggle'
 
 export function PracticeQuickEditDialog(props: {
   spaceId: number
@@ -41,6 +42,7 @@ export function PracticeQuickEditDialog(props: {
 
   const [title, setTitle] = useState(props.practiceTitle)
   const [description, setDescription] = useState('')
+  const [isPublic, setIsPublic] = useState(false)
   const [busy, setBusy] = useState(false)
   const [pickerOpen, setPickerOpen] = useState(false)
 
@@ -52,6 +54,7 @@ export function PracticeQuickEditDialog(props: {
     if (practice) {
       setTitle(practice.title || props.practiceTitle)
       setDescription(practice.description || '')
+      setIsPublic(!!practice.isPublic)
     }
   }
   // practice 首次加载/变化后回填表单（用 key 控制子组件生命周期更简单——直接 useEffect 依赖 practiceId）
@@ -93,8 +96,23 @@ export function PracticeQuickEditDialog(props: {
       return
     }
     void run(
-      () => api.updateSpacePractice(spaceId, practiceId, { title: t, description: description.trim() }),
+      () => api.updateSpacePractice(spaceId, practiceId, { title: t, description: description.trim(), isPublic }),
       '已保存',
+    )
+  }
+
+  // 公开开关即改即存（含当前标题/描述，防止覆盖其他未保存字段）
+  function togglePublic(v: boolean) {
+    if (v === isPublic) return
+    const t = title.trim()
+    if (!t) {
+      toast.error('标题不能为空')
+      return
+    }
+    setIsPublic(v)
+    void run(
+      () => api.updateSpacePractice(spaceId, practiceId, { title: t, description: description.trim(), isPublic: v }),
+      v ? '已设为公开（空间内所有成员可见）' : '已设为仅可见名单可见',
     )
   }
 
@@ -149,6 +167,8 @@ export function PracticeQuickEditDialog(props: {
                     placeholder="练习说明（可选）"
                   />
                 </div>
+                {/* 公开开关（即改即存） */}
+                <PublicToggleRow checked={isPublic} disabled={busy} onCheckedChange={togglePublic} />
               </div>
 
               {/* 题目清单 */}
