@@ -23,7 +23,7 @@ export function CodeEditor({
 }) {
   const onChangeRef = useRef(onChange)
   onChangeRef.current = onChange
-  const editorRef = useRef<{ editor: Parameters<OnMount>[0]; monaco: Parameters<OnMount>[1] } | null>(null)
+  const editorRef = useRef<Parameters<OnMount>[0] | null>(null)
 
   // 确保本地 monaco 配置就绪（幂等，早于 Editor 实例化）
   setupMonaco()
@@ -32,8 +32,8 @@ export function CodeEditor({
   // 同走 EditorZoom 缩放系统，行为完全一致（每档字号 ×(1+zoom*0.1)，全局档位 -5..20）。
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      const ctx = editorRef.current
-      if (!ctx || !ctx.editor.hasTextFocus()) return
+      const editor = editorRef.current
+      if (!editor || !editor.hasTextFocus()) return
       if (!e.altKey || e.ctrlKey || e.metaKey) return
       const k = e.key
       const cmd =
@@ -43,15 +43,15 @@ export function CodeEditor({
               : null
       if (cmd) {
         e.preventDefault()
-        ctx.editor.trigger('keyboard', cmd, null)
+        editor.trigger('keyboard', cmd, null)
       }
     }
     document.addEventListener('keydown', onKeyDown, true)
     return () => document.removeEventListener('keydown', onKeyDown, true)
   }, [])
 
-  const handleMount: OnMount = (editor, monaco) => {
-    editorRef.current = { editor, monaco }
+  const handleMount: OnMount = (editor) => {
+    editorRef.current = editor
   }
 
   return (
