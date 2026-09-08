@@ -186,6 +186,12 @@ func (s *Server) handleOJCodeAction(c *fiber.Ctx, submitType judge.SubmitType) e
 	if err := c.BodyParser(&req); err != nil {
 		return respondError(c, fiber.StatusBadRequest, "invalid request")
 	}
+	if len(req.SourceCode) > 512*1024 {
+		return respondError(c, fiber.StatusBadRequest, "代码过长")
+	}
+	if len(req.InputData) > 256*1024 {
+		return respondError(c, fiber.StatusBadRequest, "自定义输入过大")
+	}
 	lang, ok := normalizeLanguage(req.Language)
 	if !ok {
 		return respondError(c, fiber.StatusBadRequest, "仅支持 Python 与 C++")
@@ -367,6 +373,11 @@ func (s *Server) handleOJSubmissionPoll(c *fiber.Ctx) error {
 	if isFinal && verdict == judge.VerdictAC && sub.SubmitType == judge.SubmitTypeSubmit {
 		if tidRaw := strings.TrimSpace(c.Query("trainingId")); tidRaw != "" {
 			if tid, perr := strconv.ParseInt(tidRaw, 10, 64); perr == nil && tid > 0 {
+				// 可见性校验：该训练对当前用户可见（成员需在可见名单/空间成员，管理员豁免）
+				_, _, verr := s.QS.Repo.GetSpaceTrainingBrief(tid, viewerID(user))
+				if verr != nil {
+					return respondError(c, fiber.StatusNotFound, "训练不存在或不可见")
+				}
 				// 校验该题确属该训练（防乱标）
 				var ok bool
 				_ = s.QS.Repo.DB.QueryRow(`SELECT COUNT(1)>0 FROM space_training_items i

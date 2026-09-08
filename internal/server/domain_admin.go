@@ -406,11 +406,34 @@ func (s *Server) handleDeleteSpace(c *fiber.Ctx) error {
 	if err := s.requireSpaceAccess(c, user, id); err != nil {
 		return err
 	}
+	// 删除前收集空间下内容 id（删除级联后无法再查），供作答侧数据清理
+	quizIDs, trainingIDs, practiceIDs, err := s.Store.SpaceContentIDs(id)
+	if err != nil {
+		return err
+	}
 	if err := s.Store.DeleteSpace(id); err != nil {
 		if err == store.ErrNotFound {
 			return respondError(c, fiber.StatusNotFound, "空间不存在")
 		}
 		return err
+	}
+	// 作答侧数据清理（错题集/会话/尝试/交卷记录，均无 FK 级联）
+	if s.QuizStore != nil {
+		for _, qz := range quizIDs {
+			if err := s.QuizStore.RemoveQuizData(qz); err != nil {
+				return err
+			}
+		}
+		for _, tr := range trainingIDs {
+			if err := s.QuizStore.RemoveTrainingData(tr); err != nil {
+				return err
+			}
+		}
+		for _, pr := range practiceIDs {
+			if err := s.QuizStore.RemovePracticeData(pr); err != nil {
+				return err
+			}
+		}
 	}
 	return c.SendStatus(fiber.StatusNoContent)
 }

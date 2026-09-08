@@ -285,9 +285,34 @@ func (s *Store) ReorderSpacePracticeItems(practiceID int64, itemIDs []int64) err
 
 // AddSpaceChapterItems 章节追加题目（跳过不存在的题；返回加入的 item id）。
 func (s *Store) AddSpaceChapterItems(chapterID int64, problemIDs []int64) ([]int64, error) {
-	var out []int64
+	// 存在性过滤：仅插入真实存在的题目（空间条目无 FK，防悬挂）
+	existing := map[int64]bool{}
+	if len(problemIDs) > 0 {
+		rows, err := s.DB.Query(`SELECT id FROM problems WHERE id IN (` + placeholders(len(problemIDs)) + `)`, anySlice(problemIDs)...)
+		if err != nil {
+			return nil, err
+		}
+		for rows.Next() {
+			var id int64
+			if err := rows.Scan(&id); err != nil {
+				rows.Close()
+				return nil, err
+			}
+			existing[id] = true
+		}
+		rows.Close()
+	}
+	out := []int64{}
+	tx, err := s.DB.Begin()
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
 	for _, pid := range problemIDs {
-		res, err := s.DB.Exec(`INSERT INTO space_training_items(chapter_id,problem_id,order_no)
+		if !existing[pid] {
+			continue
+		}
+		res, err := tx.Exec(`INSERT INTO space_training_items(chapter_id,problem_id,order_no)
 			SELECT ?,?,COALESCE(MAX(order_no),0)+1 FROM space_training_items WHERE chapter_id=?`,
 			chapterID, pid, chapterID)
 		if err != nil {
@@ -296,7 +321,10 @@ func (s *Store) AddSpaceChapterItems(chapterID int64, problemIDs []int64) ([]int
 		id, _ := res.LastInsertId()
 		out = append(out, id)
 	}
-	return nonNilSlice(out), nil
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 // RemoveSpaceChapterItem 从章节移除条目。
@@ -549,16 +577,40 @@ func (s *Store) DeleteSpacePractice(id int64) error {
 	return nil
 }
 
-// AddSpacePracticeItems 练习追加题目（排末尾）。
+// AddSpacePracticeItems 练习追加题目（排末尾；仅插入存在的题）。
 func (s *Store) AddSpacePracticeItems(practiceID int64, problemIDs []int64) error {
+	existing := map[int64]bool{}
+	if len(problemIDs) > 0 {
+		rows, err := s.DB.Query(`SELECT id FROM problems WHERE id IN (`+placeholders(len(problemIDs))+`)`, anySlice(problemIDs)...)
+		if err != nil {
+			return err
+		}
+		for rows.Next() {
+			var id int64
+			if err := rows.Scan(&id); err != nil {
+				rows.Close()
+				return err
+			}
+			existing[id] = true
+		}
+		rows.Close()
+	}
+	tx, err := s.DB.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
 	for _, pid := range problemIDs {
-		if _, err := s.DB.Exec(`INSERT INTO space_practice_items(practice_id,problem_id,order_no)
+		if !existing[pid] {
+			continue
+		}
+		if _, err := tx.Exec(`INSERT INTO space_practice_items(practice_id,problem_id,order_no)
 			SELECT ?,?,COALESCE(MAX(order_no),0)+1 FROM space_practice_items WHERE practice_id=?`,
 			practiceID, pid, practiceID); err != nil {
 			return err
 		}
 	}
-	return nil
+	return tx.Commit()
 }
 
 // RemoveSpacePracticeItem 移除练习条目。
@@ -665,4 +717,36 @@ func (s *Store) DeleteSpaceQuiz(id int64) error {
 		return ErrNotFound
 	}
 	return nil
+}
+
+// SpaceContentIDs 返回空间下 刷题项目/训练/练习 的 id 三组
+//（供删除空间前收集、删除后由上层清理作答侧孤儿）。
+func (s *Store) SpaceContentIDs(spaceID int64) (quizIDs, trainingIDs, practiceIDs []int64, err error) {
+	quizIDs, err = s.spaceContentIDList(`SELECT id FROM space_quizzes WHERE space_id=?`, spaceID)
+	if err != nil {
+		return
+	}
+	trainingIDs, err = s.spaceContentIDList(`SELECT id FROM space_trainings WHERE space_id=?`, spaceID)
+	if err != nil {
+		return
+	}
+	practiceIDs, err = s.spaceContentIDList(`SELECT id FROM space_practices WHERE space_id=?`, spaceID)
+	return
+}
+
+func (s *Store) spaceContentIDList(q string, spaceID int64) ([]int64, error) {
+	rows, err := s.DB.Query(q, spaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []int64{}
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
 }

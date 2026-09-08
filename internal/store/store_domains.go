@@ -82,15 +82,22 @@ func (s *Store) RenameDomain(id int64, name string) error {
 	return nil
 }
 
-// DeleteDomain 删域（级联删空间与成员；域内题目一并删除需调用方决策——
-// 此处仅删域与空间，题目删除由上层按 domain_id 处理）。
+// DeleteDomain 删域（级联删空间与成员；题目不会级联删除——必须先显式删除
+// 域内题目（DeleteDomainProblems）。域内仍有题目时返回错误（防裸删静默删题/歧义）。
 func (s *Store) DeleteDomain(id int64) error {
+	var n int
+	if err := s.DB.QueryRow(`SELECT COUNT(1) FROM problems WHERE domain_id=?`, id).Scan(&n); err != nil {
+		return err
+	}
+	if n > 0 {
+		return fmt.Errorf("域内仍有 %d 道题目，请先删除题目（deleteProblems=true）", n)
+	}
 	res, err := s.DB.Exec(`DELETE FROM domains WHERE id=?`, id)
 	if err != nil {
 		return err
 	}
-	n, _ := res.RowsAffected()
-	if n == 0 {
+	n2, _ := res.RowsAffected()
+	if n2 == 0 {
 		return ErrNotFound
 	}
 	return nil

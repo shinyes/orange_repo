@@ -185,8 +185,10 @@ func (s *Store) migrate() error {
 			return err
 		}
 	}
-	// 题目归属域：存量题归入默认域
-	if err := s.ensureColumn("problems", "domain_id", `domain_id INTEGER REFERENCES domains(id) ON DELETE CASCADE`); err != nil {
+	// 题目归属域：存量题归入默认域。
+	// 注意：不挂 ON DELETE CASCADE——删域必须先显式删除域内题目（DeleteDomainProblems），
+	// 防止“裸删域”静默级联删题（或题目被仓库题册引用时因 FK 报错）的行为歧义
+	if err := s.ensureColumn("problems", "domain_id", `domain_id INTEGER REFERENCES domains(id)`); err != nil {
 		return err
 	}
 	return s.backfillProblemDomain()

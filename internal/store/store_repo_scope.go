@@ -12,7 +12,7 @@ import (
 // ListTrainingsInDomain 返回含至少一道该域题目的训练模板（仓库页按域选模板用）。
 func (s *Store) ListTrainingsInDomain(domainID int64) ([]model.Training, error) {
 	rows, err := s.DB.Query(`SELECT DISTINCT t.id,t.uuid,t.title,t.description,t.tags_json,t.created_at,
-		COALESCE(t.folder_id,0)
+		t.folder_id
 		FROM trainings t
 		WHERE EXISTS (
 			SELECT 1 FROM training_items i JOIN training_chapters c ON i.chapter_id=c.id
@@ -44,7 +44,7 @@ func (s *Store) ListTrainingsInDomain(domainID int64) ([]model.Training, error) 
 // ListPracticesInDomain 含至少一道该域题目的练习模板。
 func (s *Store) ListPracticesInDomain(domainID int64) ([]model.Practice, error) {
 	rows, err := s.DB.Query(`SELECT DISTINCT p.id,p.uuid,p.title,p.description,p.tags_json,p.created_at,
-		COALESCE(p.folder_id,0)
+		p.folder_id
 		FROM practices p
 		WHERE EXISTS (
 			SELECT 1 FROM practice_items i JOIN problems pr ON pr.id=i.problem_id

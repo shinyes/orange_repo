@@ -315,6 +315,9 @@ type quizPickResult struct {
 //   - 本批覆盖完且仍有错题 → 自动开新批（错题下批优先复抽）
 //   - 本批覆盖完且无错 → done（一轮完整刷完，用户可重开）
 func (s *Server) pickQuizProblem(user *accounts.User, qid int64) (*quizPickResult, error) {
+	// 会话锁：Get→Save 整体读改写需按 user×quiz 串行（防并发抽题丢 wrong/drawn）
+	unlock := s.lockQuizSession(user.ID, qid)
+	defer unlock()
 	ids, err := s.quizProblemIDs(qid)
 	if err != nil {
 		return nil, err
@@ -418,16 +421,16 @@ func (s *Server) handlePortalQuizProblem(c *fiber.Ctx) error {
 	// fresh=1（进入刷题页的首请求）：开新批——清空本批已抽（保留错题袋），
 	// 避免上次会话残留的 drawn 导致一进入就判定“本轮已完成”
 	if c.Query("fresh") == "1" {
+		unlock := s.lockQuizSession(user.ID, qid)
 		ss, serr := s.QS.GetQuizSession(user.ID, qid)
-		if serr != nil {
-			return respondError(c, fiber.StatusInternalServerError, err.Error())
-		}
-		if len(ss.Drawn) > 0 {
+		if serr == nil && len(ss.Drawn) > 0 {
 			ss.BatchNo++
 			ss.Drawn = []int64{}
-			if err := s.QS.SaveQuizSession(user.ID, qid, ss); err != nil {
-				return respondError(c, fiber.StatusInternalServerError, err.Error())
-			}
+			serr = s.QS.SaveQuizSession(user.ID, qid, ss)
+		}
+		unlock()
+		if serr != nil {
+			return respondError(c, fiber.StatusInternalServerError, serr.Error())
 		}
 	}
 	res, err := s.pickQuizProblem(user, qid)
@@ -520,19 +523,23 @@ func (s *Server) handlePortalQuizAnswer(c *fiber.Ctx) error {
 		}
 	}
 	// 同步刷题会话：答对→从错题袋移除；答错→加入错题袋（下批优先复抽）
+	unlockSess := s.lockQuizSession(user.ID, qid)
 	ss, serr := s.QS.GetQuizSession(user.ID, qid)
 	if serr != nil {
+		unlockSess()
 		return respondError(c, fiber.StatusInternalServerError, err.Error())
 	}
 	if correct {
 		if quizstore.ContainsInt64(ss.Wrong, req.ProblemID) {
 			ss.Wrong = quizstore.RemoveInt64(ss.Wrong, req.ProblemID)
 			if err := s.QS.SaveQuizSession(user.ID, qid, ss); err != nil {
+				unlockSess()
 				return respondError(c, fiber.StatusInternalServerError, err.Error())
 			}
 		}
 		// 全局错题集同步：答对即移除
 		if err := s.QS.RemoveWrongByProblem(user.ID, req.ProblemID); err != nil {
+			unlockSess()
 			return respondError(c, fiber.StatusInternalServerError, err.Error())
 		}
 	} else {
@@ -540,13 +547,16 @@ func (s *Server) handlePortalQuizAnswer(c *fiber.Ctx) error {
 		if !quizstore.ContainsInt64(ss.Wrong, req.ProblemID) {
 			ss.Wrong = append(ss.Wrong, req.ProblemID)
 			if err := s.QS.SaveQuizSession(user.ID, qid, ss); err != nil {
+				unlockSess()
 				return respondError(c, fiber.StatusInternalServerError, err.Error())
 			}
 		}
 		if err := s.QS.AddWrong(user.ID, req.ProblemID, qid); err != nil {
+			unlockSess()
 			return respondError(c, fiber.StatusInternalServerError, err.Error())
 		}
 	}
+	unlockSess()
 	return respondData(c, fiber.StatusOK, fiber.Map{
 		"correct":       correct,
 		"correctAnswer": correctAnswer,
@@ -569,6 +579,8 @@ func (s *Server) handlePortalQuizReset(c *fiber.Ctx) error {
 	if _, err := s.resolveSpaceCtx(c, spaceID); err != nil {
 		return err
 	}
+	unlock := s.lockQuizSession(user.ID, qid)
+	defer unlock()
 	if err := s.QS.ResetQuizSession(user.ID, qid); err != nil {
 		return respondError(c, fiber.StatusInternalServerError, err.Error())
 	}

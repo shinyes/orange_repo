@@ -159,19 +159,30 @@ func jsonUnmarshalTags(s string, out *[]string) error {
 
 // rankDomainOf 排行榜域：member 默认其任一空间的域（取第一个）；管理员可带 domainId query。
 func (s *Server) rankDomainOf(c *fiber.Ctx, user *accounts.User) (int64, error) {
+	// member 仅能查看自己加入空间所属域的排行榜（防任意枚举他域用户名/解题数）
+	spaces, err := s.QS.Repo.UserDomainSpaceIDs(user.ID)
+	if err != nil {
+		return 0, err
+	}
+	allowed := map[int64]bool{}
+	for _, sp := range spaces {
+		allowed[sp.DomainID] = true
+	}
 	if raw := strings.TrimSpace(c.Query("domainId")); raw != "" {
 		id, err := strconv.ParseInt(raw, 10, 64)
 		if err != nil || id <= 0 {
 			return 0, fiber.NewError(fiber.StatusBadRequest, "invalid domainId")
 		}
+		if isAdminRole(user.Role) {
+			return id, nil
+		}
+		if !allowed[id] {
+			return 0, fiber.NewError(fiber.StatusForbidden, "无权查看该域排行榜")
+		}
 		return id, nil
 	}
 	if user.Role == accounts.RoleDomainAdmin && user.DomainID != nil {
 		return *user.DomainID, nil
-	}
-	spaces, err := s.QS.Repo.UserDomainSpaceIDs(user.ID)
-	if err != nil {
-		return 0, err
 	}
 	if len(spaces) == 0 {
 		return 0, fiber.NewError(fiber.StatusBadRequest, "当前用户未加入任何空间")

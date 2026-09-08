@@ -4,9 +4,11 @@ package quizserver
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
+	"sync"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/logger"
@@ -33,6 +35,27 @@ type Server struct {
 	// queueCtx/queueCancel 队列生命周期。
 	queueCtx    context.Context
 	queueCancel context.CancelFunc
+	// quizSessMu/quizSessLocks：刷题会话（user×quiz）串行化锁表——会话为整体
+	// JSON 读改写（wrong/drawn），需按 key 串行避免并发覆盖丢更新
+	quizSessMu    sync.Mutex
+	quizSessLocks map[string]*sync.Mutex
+}
+
+// lockQuizSession 获取某用户×刷题项目的会话锁（用后解锁）。
+func (s *Server) lockQuizSession(userID, quizID int64) func() {
+	s.quizSessMu.Lock()
+	if s.quizSessLocks == nil {
+		s.quizSessLocks = map[string]*sync.Mutex{}
+	}
+	key := fmt.Sprintf("%d:%d", userID, quizID)
+	lk := s.quizSessLocks[key]
+	if lk == nil {
+		lk = &sync.Mutex{}
+		s.quizSessLocks[key] = lk
+	}
+	s.quizSessMu.Unlock()
+	lk.Lock()
+	return lk.Unlock
 }
 
 // Queue 返回判题队列服务（nil 表示未启用——judge token 未配置）。

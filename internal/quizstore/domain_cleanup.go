@@ -4,6 +4,7 @@ package quizstore
 
 import (
 	"database/sql"
+	"strings"
 	"encoding/json"
 	"fmt"
 )
@@ -65,13 +66,34 @@ func cleanupProblemDataTx(tx *sql.Tx, problemIDs []int64, uuids []string) error 
 			}
 		}
 	}
-	// student_solved：uuid 去重记录
+	// student_solved：uuid 去重记录——跨域保护：该 uuid 若仍存在于其它域题目
+	// （各域可持同 uuid 导入副本），其通过记录保留，仅当彻底无残留题目才清
 	for _, u := range uuids {
 		if u == "" {
 			continue
 		}
-		if _, err := tx.Exec(`DELETE FROM student_solved WHERE problem_uuid=?`, u); err != nil {
-			return fmt.Errorf("cleanup solved: %w", err)
+		var remain int
+		if len(problemIDs) > 0 {
+			ph := make([]string, len(problemIDs))
+			args := make([]any, 0, len(problemIDs)+1)
+			args = append(args, u)
+			for i, pid := range problemIDs {
+				ph[i] = "?"
+				args = append(args, pid)
+			}
+			if err := tx.QueryRow(`SELECT COUNT(1) FROM problems WHERE uuid=? AND id NOT IN (`+
+				joinPlaceholders(ph)+`)`, args...).Scan(&remain); err != nil {
+				return fmt.Errorf("check solved residue: %w", err)
+			}
+		} else {
+			if err := tx.QueryRow(`SELECT COUNT(1) FROM problems WHERE uuid=?`, u).Scan(&remain); err != nil {
+				return fmt.Errorf("check solved residue: %w", err)
+			}
+		}
+		if remain == 0 {
+			if _, err := tx.Exec(`DELETE FROM student_solved WHERE problem_uuid=?`, u); err != nil {
+				return fmt.Errorf("cleanup solved: %w", err)
+			}
 		}
 	}
 	// 快照/会话 JSON 内嵌引用：拉取解码后过滤写回（行数有限）
@@ -179,4 +201,34 @@ func cleanupJSONRefs(tx *sql.Tx, problemIDs []int64) error {
 		}
 	}
 	return nil
+}
+
+// RemoveQuizData 删除刷题项目后的作答侧数据（错题集来源行/会话）。
+func (s *Store) RemoveQuizData(quizID int64) error {
+	if _, err := s.DB.Exec(`DELETE FROM wrong_book WHERE quiz_id=?`, quizID); err != nil {
+		return err
+	}
+	if _, err := s.DB.Exec(`DELETE FROM quiz_sessions WHERE quiz_id=?`, quizID); err != nil {
+		return err
+	}
+	return nil
+}
+
+// RemoveTrainingData 删除空间训练后的作答侧数据（客观题尝试/编程通过标记记录）。
+func (s *Store) RemoveTrainingData(trainingID int64) error {
+	_, err := s.DB.Exec(`DELETE FROM space_training_attempts WHERE training_id=?`, trainingID)
+	return err
+}
+
+// RemovePracticeData 删除空间练习后的作答侧数据（交卷记录）。
+func (s *Store) RemovePracticeData(practiceID int64) error {
+	_, err := s.DB.Exec(`DELETE FROM space_practice_submissions WHERE practice_id=?`, practiceID)
+	return err
+}
+
+// SpaceContentIDs 主库空间下内容 id（供删空间时先收集、后清理作答侧）。
+
+// joinPlaceholders 拼接占位符列表为 "(?,?)" 形式（IN 子句）。
+func joinPlaceholders(ph []string) string {
+	return strings.Join(ph, ",")
 }

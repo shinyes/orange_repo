@@ -6,6 +6,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
+	"orangeoj/internal/accounts"
 	"orangeoj/internal/model"
 	"orangeoj/internal/store"
 )
@@ -83,6 +84,12 @@ func (s *Server) handleUpdateTraining(c *fiber.Ctx) error {
 	if err != nil {
 		return respondError(c, fiber.StatusBadRequest, err.Error())
 	}
+	if err := s.ensureRepoTrainingInScope(c, currentUser(c), id); err != nil {
+		if ferr, ok := err.(*fiber.Error); ok {
+			return respondError(c, ferr.Code, ferr.Message)
+		}
+		return err
+	}
 	var req trainingPayload
 	if err := c.BodyParser(&req); err != nil || req.Title == "" {
 		return respondError(c, fiber.StatusBadRequest, "title is required")
@@ -100,6 +107,12 @@ func (s *Server) handleDeleteTraining(c *fiber.Ctx) error {
 	id, err := paramID(c, "id")
 	if err != nil {
 		return respondError(c, fiber.StatusBadRequest, err.Error())
+	}
+	if err := s.ensureRepoTrainingInScope(c, currentUser(c), id); err != nil {
+		if ferr, ok := err.(*fiber.Error); ok {
+			return respondError(c, ferr.Code, ferr.Message)
+		}
+		return err
 	}
 	if err := s.Store.DeleteTraining(id); err != nil {
 		return err
@@ -287,6 +300,12 @@ func (s *Server) handleUpdatePractice(c *fiber.Ctx) error {
 	if err != nil {
 		return respondError(c, fiber.StatusBadRequest, err.Error())
 	}
+	if err := s.ensureRepoPracticeInScope(c, currentUser(c), id); err != nil {
+		if ferr, ok := err.(*fiber.Error); ok {
+			return respondError(c, ferr.Code, ferr.Message)
+		}
+		return err
+	}
 	var req practicePayload
 	if err := c.BodyParser(&req); err != nil || req.Title == "" {
 		return respondError(c, fiber.StatusBadRequest, "title is required")
@@ -304,6 +323,12 @@ func (s *Server) handleDeletePractice(c *fiber.Ctx) error {
 	id, err := paramID(c, "id")
 	if err != nil {
 		return respondError(c, fiber.StatusBadRequest, err.Error())
+	}
+	if err := s.ensureRepoPracticeInScope(c, currentUser(c), id); err != nil {
+		if ferr, ok := err.(*fiber.Error); ok {
+			return respondError(c, ferr.Code, ferr.Message)
+		}
+		return err
 	}
 	if err := s.Store.DeletePractice(id); err != nil {
 		return err
@@ -404,4 +429,50 @@ func (s *Server) handleTrainingLayout(c *fiber.Ctx) error {
 		chapters = []model.Chapter{}
 	}
 	return respondData(c, fiber.StatusOK, fiber.Map{"chapters": chapters})
+}
+
+// ---------- 仓库模板域门禁（domain_admin 只能写/删本域模板） ----------
+
+// ensureRepoTrainingInScope：域管理员操作的训练模板须含其域题目（模板按题判定归属）。
+// global_admin/其他角色放行。
+func (s *Server) ensureRepoTrainingInScope(c *fiber.Ctx, user *accounts.User, id int64) error {
+	if user == nil || user.Role != accounts.RoleDomainAdmin {
+		return nil
+	}
+	if user.DomainID == nil {
+		return fiber.NewError(fiber.StatusForbidden, "域管理员未关联域")
+	}
+	var n int
+	err := s.Store.DB.QueryRow(`SELECT COUNT(1) FROM training_items i
+		JOIN training_chapters c ON i.chapter_id=c.id
+		JOIN problems p ON p.id=i.problem_id
+		WHERE c.training_id=? AND p.domain_id=?`, id, *user.DomainID).Scan(&n)
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return fiber.NewError(fiber.StatusForbidden, "该训练不属于你的域")
+	}
+	return nil
+}
+
+// ensureRepoPracticeInScope：同上，练习模板。
+func (s *Server) ensureRepoPracticeInScope(c *fiber.Ctx, user *accounts.User, id int64) error {
+	if user == nil || user.Role != accounts.RoleDomainAdmin {
+		return nil
+	}
+	if user.DomainID == nil {
+		return fiber.NewError(fiber.StatusForbidden, "域管理员未关联域")
+	}
+	var n int
+	err := s.Store.DB.QueryRow(`SELECT COUNT(1) FROM practice_items i
+		JOIN problems p ON p.id=i.problem_id
+		WHERE i.practice_id=? AND p.domain_id=?`, id, *user.DomainID).Scan(&n)
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return fiber.NewError(fiber.StatusForbidden, "该练习不属于你的域")
+	}
+	return nil
 }
