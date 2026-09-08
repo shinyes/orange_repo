@@ -313,17 +313,21 @@ func exportFilename(prefix, name string) string {
 }
 
 // handleExportProblems 导出题目：?ids=1,2 或按过滤参数，无参导出全部。
-// 域隔离：scope 强制（domain_admin 本域 / global 按 query 或默认域）——防止越域导出答案密钥。
+// 域隔离：domain_admin 强制仅本域（防越域导出答案密钥）；global_admin 保留 query 过滤，
+// 未带 domainId 时维持“导出全部”原语义（仓库页总是显式带域）。
 func (s *Server) handleExportProblems(c *fiber.Ctx) error {
 	filter, err := parseProblemFilter(c)
 	if err != nil {
 		return respondError(c, fiber.StatusBadRequest, err.Error())
 	}
-	scope, err := s.domainOrDefault(c, currentUser(c))
-	if err != nil {
-		return respondError(c, fiber.StatusBadRequest, err.Error())
+	user := currentUser(c)
+	if user.Role == accounts.RoleDomainAdmin {
+		scope, serr := s.domainOrDefault(c, user)
+		if serr != nil {
+			return respondError(c, fiber.StatusBadRequest, serr.Error())
+		}
+		filter.DomainID = scope
 	}
-	filter.DomainID = scope
 	list, err := s.Store.ListProblems(filter)
 	if err != nil {
 		return err

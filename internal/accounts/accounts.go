@@ -44,6 +44,9 @@ const (
 
 	roleLegacyAdmin   Role = "admin"
 	roleLegacyStudent Role = "student"
+
+	// sessionTTL 服务端会话有效期（与登录 cookie MaxAge 对齐）。
+	sessionTTL = 30 * 24 * time.Hour
 )
 
 // migrateRole 兼容旧角色值：admin→global_admin、student→member。
@@ -154,7 +157,23 @@ func Migrate(db *sql.DB) error {
 			return fmt.Errorf("accounts migrate failed: %w; stmt: %s", err, stmt)
 		}
 	}
+	if err := ensureSessionsExpires(db); err != nil {
+		return err
+	}
 	return nil
+}
+
+// ensureSessionsExpires 为 sessions 补充 expires_at 列（服务端会话过期；存量会话 NULL=不强制过期）。
+func ensureSessionsExpires(db *sql.DB) error {
+	var n int
+	if err := db.QueryRow(`SELECT COUNT(1) FROM pragma_table_info('sessions') WHERE name='expires_at'`).Scan(&n); err != nil {
+		return err
+	}
+	if n > 0 {
+		return nil
+	}
+	_, err := db.Exec(`ALTER TABLE sessions ADD COLUMN expires_at DATETIME`)
+	return err
 }
 
 // migrateUsersSchema 检测旧版 users（旧 CHECK 或缺 domain_id）并重建迁移（幂等）。
@@ -573,25 +592,28 @@ func newToken() (string, error) {
 	return hex.EncodeToString(b), nil
 }
 
-// CreateSession 为用户创建会话，返回 token。
+// CreateSession 为用户创建会话（服务端 30 天过期，与 cookie MaxAge 对齐），返回 token。
 func (s *Store) CreateSession(userID int64) (string, error) {
 	token, err := newToken()
 	if err != nil {
 		return "", err
 	}
-	if _, err := s.DB.Exec(`INSERT INTO sessions(token,user_id) VALUES(?,?)`, token, userID); err != nil {
+	expires := time.Now().UTC().Add(sessionTTL).Format("2006-01-02 15:04:05")
+	if _, err := s.DB.Exec(`INSERT INTO sessions(token,user_id,expires_at) VALUES(?,?,?)`, token, userID, expires); err != nil {
 		return "", err
 	}
 	return token, nil
 }
 
-// GetUserByToken 按会话 token 取用户；token 失效（用户被删）时自动清理。
+// GetUserByToken 按会话 token 取用户；token 失效（用户被删/会话过期）时自动清理。
+// 兼容存量无 expires_at 的会话（NULL=不强制过期，随 cookie 自然失效）。
 func (s *Store) GetUserByToken(token string) (*User, bool) {
 	if token == "" {
 		return nil, false
 	}
 	u, err := s.scanUser(`SELECT u.id,u.username,u.role,u.domain_id FROM sessions se
-		JOIN users u ON u.id=se.user_id WHERE se.token=?`, token)
+		JOIN users u ON u.id=se.user_id
+		WHERE se.token=? AND (se.expires_at IS NULL OR se.expires_at > CURRENT_TIMESTAMP)`, token)
 	if err != nil {
 		// 仅当会话确实不存在时清理（DB 瞬时错误不得误删合法会话）
 		if errors.Is(err, ErrNotFound) {

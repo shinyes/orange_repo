@@ -210,7 +210,7 @@ func (s *Server) handleDeleteProblem(c *fiber.Ctx) error {
 	if s.QuizStore != nil {
 		u := existing.UUID
 		if err := s.QuizStore.CleanupProblems([]int64{id}, []string{u}); err != nil {
-			return err
+			warnCleanup("problem-delete", err)
 		}
 	}
 	return c.SendStatus(fiber.StatusNoContent)

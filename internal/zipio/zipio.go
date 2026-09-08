@@ -22,8 +22,8 @@ const (
 )
 
 // imageRefPattern 匹配 /api/uploads/<file> 图片引用（与上游正则一致，
-// 文件名可为 hex、UUID 或旧版序号）。
-var imageRefPattern = regexp.MustCompile(`/api/uploads/([a-zA-Z0-9_-]+\.(?:png|jpe?g|gif|webp|svg))`)
+// 文件名可为 hex、UUID 或旧版序号；不含 svg——SVG 为活动内容不允许上传）。
+var imageRefPattern = regexp.MustCompile(`/api/uploads/([a-zA-Z0-9_-]+\.(?:png|jpe?g|gif|webp))`)
 
 // imagesPathPattern 匹配导入包内相对图片引用 (images/<file>)。
 var imagesPathPattern = regexp.MustCompile(`\(images/`)
@@ -290,9 +290,27 @@ func ParseZipWithExtra(data []byte) (problems []ExportProblem, meta *PlanMeta, i
 	images = map[string][]byte{}
 	extra = map[string][]byte{}
 	seen := map[string]bool{ProblemsJSONName: true, PlanJSONName: true}
+	// 解压炸弹防护：条目数 / 单文件展开 / 总展开 上限（包入口另有压缩后 100MB 限制）
+	const (
+		maxZipEntries  = 20000
+		maxFileSize    = 64 << 20 // 单文件展开 ≤64MB
+		maxTotalSize   = 800 << 20 // 总展开 ≤800MB
+		maxImageSize   = 12 << 20 // 单图 ≤12MB
+	)
+	if len(r.File) > maxZipEntries {
+		return nil, nil, nil, nil, fmt.Errorf("zip 条目过多（>%d）", maxZipEntries)
+	}
+	var totalSize int64
 	for _, f := range r.File {
 		if f.FileInfo().IsDir() {
 			continue
+		}
+		if f.UncompressedSize64 > maxFileSize {
+			return nil, nil, nil, nil, fmt.Errorf("zip 内文件过大: %s", f.Name)
+		}
+		totalSize += int64(f.UncompressedSize64)
+		if totalSize > maxTotalSize {
+			return nil, nil, nil, nil, fmt.Errorf("zip 展开总大小超限")
 		}
 		clean := strings.ReplaceAll(f.Name, "\\", "/")
 		base := path.Base(clean)
@@ -309,6 +327,9 @@ func ParseZipWithExtra(data []byte) (problems []ExportProblem, meta *PlanMeta, i
 		rc.Close()
 		if dir == "images" || strings.HasSuffix(dir, "/images") {
 			if imageRefPattern.MatchString("/api/uploads/" + base) {
+				if buf.Len() > maxImageSize {
+					return nil, nil, nil, nil, fmt.Errorf("图片过大: %s", base)
+				}
 				images[base] = buf.Bytes()
 			}
 			continue
@@ -340,6 +361,13 @@ func NormalizeProblemPayload(p *ProblemPayload) error {
 		}
 		if p.MemoryLimitMiB <= 0 {
 			p.MemoryLimitMiB = 256
+		}
+		// 硬上限（防超大限制拖垮判题沙箱/队列）：time ≤15s、mem ≤2048MiB
+		if p.TimeLimitMS > 15000 {
+			return fmt.Errorf("time limit 过大（≤15000ms）")
+		}
+		if p.MemoryLimitMiB > 2048 {
+			return fmt.Errorf("memory limit 过大（≤2048MiB）")
 		}
 	}
 	if len(p.BodyJSON) == 0 {

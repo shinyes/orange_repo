@@ -10,12 +10,13 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
+// 允许上传的图片扩展（不含 svg——SVG 为活动内容，同源内联可执行脚本，存活性 XSS 面）。
 var allowedImageExts = map[string]bool{
-	".png": true, ".jpg": true, ".jpeg": true, ".gif": true, ".webp": true, ".svg": true,
+	".png": true, ".jpg": true, ".jpeg": true, ".gif": true, ".webp": true,
 }
 
 // uploadRefPattern 匹配题面文本中的 /api/uploads/<file> 图片引用（与 zipio 一致）。
-var uploadRefPattern = regexp.MustCompile(`/api/uploads/([a-zA-Z0-9_-]+\.(?:png|jpe?g|gif|webp|svg))`)
+var uploadRefPattern = regexp.MustCompile(`/api/uploads/([a-zA-Z0-9_-]+\.(?:png|jpe?g|gif|webp))`)
 
 // handleUploadImage 接收 multipart(file)，存为 16 位 URL-safe 随机文件名（nano 命名避免重名），返回 /api/uploads/ URL。
 func (s *Server) handleUploadImage(c *fiber.Ctx) error {

@@ -433,8 +433,8 @@ func (s *Server) handleTrainingLayout(c *fiber.Ctx) error {
 
 // ---------- 仓库模板域门禁（domain_admin 只能写/删本域模板） ----------
 
-// ensureRepoTrainingInScope：域管理员操作的训练模板须含其域题目（模板按题判定归属）。
-// global_admin/其他角色放行。
+// ensureRepoTrainingInScope：域管理员操作的训练模板不得含他域题目（含 ≥1 本域题或
+// 空模板均视为其域内可操作对象——空模板无内容泄露面）。global_admin 放行。
 func (s *Server) ensureRepoTrainingInScope(c *fiber.Ctx, user *accounts.User, id int64) error {
 	if user == nil || user.Role != accounts.RoleDomainAdmin {
 		return nil
@@ -442,16 +442,16 @@ func (s *Server) ensureRepoTrainingInScope(c *fiber.Ctx, user *accounts.User, id
 	if user.DomainID == nil {
 		return fiber.NewError(fiber.StatusForbidden, "域管理员未关联域")
 	}
-	var n int
+	var foreign int
 	err := s.Store.DB.QueryRow(`SELECT COUNT(1) FROM training_items i
 		JOIN training_chapters c ON i.chapter_id=c.id
 		JOIN problems p ON p.id=i.problem_id
-		WHERE c.training_id=? AND p.domain_id=?`, id, *user.DomainID).Scan(&n)
+		WHERE c.training_id=? AND (p.domain_id IS NULL OR p.domain_id<>?)`, id, *user.DomainID).Scan(&foreign)
 	if err != nil {
 		return err
 	}
-	if n == 0 {
-		return fiber.NewError(fiber.StatusForbidden, "该训练不属于你的域")
+	if foreign > 0 {
+		return fiber.NewError(fiber.StatusForbidden, "该训练含不属于你域的题目")
 	}
 	return nil
 }
@@ -464,15 +464,15 @@ func (s *Server) ensureRepoPracticeInScope(c *fiber.Ctx, user *accounts.User, id
 	if user.DomainID == nil {
 		return fiber.NewError(fiber.StatusForbidden, "域管理员未关联域")
 	}
-	var n int
+	var foreign int
 	err := s.Store.DB.QueryRow(`SELECT COUNT(1) FROM practice_items i
 		JOIN problems p ON p.id=i.problem_id
-		WHERE i.practice_id=? AND p.domain_id=?`, id, *user.DomainID).Scan(&n)
+		WHERE i.practice_id=? AND (p.domain_id IS NULL OR p.domain_id<>?)`, id, *user.DomainID).Scan(&foreign)
 	if err != nil {
 		return err
 	}
-	if n == 0 {
-		return fiber.NewError(fiber.StatusForbidden, "该练习不属于你的域")
+	if foreign > 0 {
+		return fiber.NewError(fiber.StatusForbidden, "该练习含不属于你域的题目")
 	}
 	return nil
 }

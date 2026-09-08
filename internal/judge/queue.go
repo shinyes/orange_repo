@@ -216,7 +216,9 @@ func (q *QueueService) completeJob(ctx context.Context, jobID int64) error {
 	return err
 }
 
-// failJob 处理异常失败：judge_jobs failed + submissions failed(RE, stderr 截断)。
+// failJob 处理异常失败：judge_jobs failed；submissions 仅当其仍 queued/running
+// 才置 failed(RE)——若结果已写回 done（completeJob 阶段失败），保留已完成结果，
+// 防止瞬时错误把 AC/WA 等终态覆盖成 RE。
 func (q *QueueService) failJob(ctx context.Context, jobID int64, jobErr error) error {
 	_, err := q.db.ExecContext(ctx, `UPDATE judge_jobs SET status='failed', finished_at=CURRENT_TIMESTAMP WHERE id=?`, jobID)
 	if err != nil {
@@ -225,7 +227,8 @@ func (q *QueueService) failJob(ctx context.Context, jobID int64, jobErr error) e
 	_, _ = q.db.ExecContext(ctx, `
 UPDATE submissions
 SET status='failed', verdict='RE', stderr=?, finished_at=CURRENT_TIMESTAMP
-WHERE id=(SELECT submission_id FROM judge_jobs WHERE id=?)`, TrimTo(jobErr.Error(), MaxFailStderr), jobID)
+WHERE status IN ('queued','running')
+AND id=(SELECT submission_id FROM judge_jobs WHERE id=?)`, TrimTo(jobErr.Error(), MaxFailStderr), jobID)
 	return nil
 }
 

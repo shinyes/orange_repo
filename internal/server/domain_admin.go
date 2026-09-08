@@ -198,12 +198,16 @@ func (s *Server) handleDeleteDomain(c *fiber.Ctx) error {
 	}
 	rows.Close()
 	if c.Query("deleteProblems") == "true" {
+		// 删除前收集「仅含该域题」的仓库模板（删题后变空壳，应随之删除；不碰他域/空模板）
+		trainingIDs, practiceIDs, err := s.Store.DomainOnlyBookletIDs(id)
+		if err != nil {
+			return err
+		}
 		// 级联删除域内题目（空间/条目引用一并清理）
 		if err := s.Store.DeleteDomainProblems(id); err != nil {
 			return err
 		}
-		// 空壳仓库模板（原仅含该域题的训练/练习）一并清掉
-		if err := s.Store.DeleteEmptyWarehouseBooklets(); err != nil {
+		if err := s.Store.DeleteBookletIDs(trainingIDs, practiceIDs); err != nil {
 			return err
 		}
 	} else if len(pids) > 0 {
@@ -220,10 +224,10 @@ func (s *Server) handleDeleteDomain(c *fiber.Ctx) error {
 		return err
 	}
 	// 刷题侧数据全清（域与空间已删，孤儿会话/练习快照在此阶段一并清理）：
-	// 判题历史/进度/草稿/错题集/通过记录/会话/交卷快照 中引用该域题的数据
+	// 判题历史/进度/草稿/错题集/通过记录/会话/交卷快照 中引用该域题的数据；失败仅告警
 	if s.QuizStore != nil {
 		if err := s.QuizStore.CleanupDomainProblems(pids, uuids); err != nil {
-			return err
+			warnCleanup("domain-delete", err)
 		}
 	}
 	return c.SendStatus(fiber.StatusNoContent)
@@ -254,6 +258,14 @@ func (s *Server) handleRemoveDomainAdmin(c *fiber.Ctx) error {
 	}
 	if _, err := s.Store.GetDomain(id); err != nil {
 		return respondError(c, fiber.StatusNotFound, "域不存在")
+	}
+	// 归属校验：只能降级属于该域的域管理员（防跨域降级他人管理员）
+	u, err := s.Accounts.GetUserByID(uid)
+	if err != nil || u.Role != accounts.RoleDomainAdmin {
+		return respondError(c, fiber.StatusNotFound, "该用户不是域管理员")
+	}
+	if u.DomainID == nil || *u.DomainID != id {
+		return respondError(c, fiber.StatusNotFound, "该用户不是此域的域管理员")
 	}
 	if err := s.Accounts.RemoveDomainAdmin(uid); err != nil {
 		if err == accounts.ErrNotFound {
@@ -417,21 +429,21 @@ func (s *Server) handleDeleteSpace(c *fiber.Ctx) error {
 		}
 		return err
 	}
-	// 作答侧数据清理（错题集/会话/尝试/交卷记录，均无 FK 级联）
+	// 作答侧数据清理（错题集/会话/尝试/交卷记录，均无 FK 级联）；失败仅告警不阻塞删除
 	if s.QuizStore != nil {
 		for _, qz := range quizIDs {
 			if err := s.QuizStore.RemoveQuizData(qz); err != nil {
-				return err
+				warnCleanup("space-delete-quiz", err)
 			}
 		}
 		for _, tr := range trainingIDs {
 			if err := s.QuizStore.RemoveTrainingData(tr); err != nil {
-				return err
+				warnCleanup("space-delete-training", err)
 			}
 		}
 		for _, pr := range practiceIDs {
 			if err := s.QuizStore.RemovePracticeData(pr); err != nil {
-				return err
+				warnCleanup("space-delete-practice", err)
 			}
 		}
 	}

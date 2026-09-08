@@ -262,7 +262,7 @@ func (s *Server) handleDeleteSpaceTraining(c *fiber.Ctx) error {
 	// 作答侧数据清理（尝试限次/通过标记等，无 FK 级联）
 	if s.QuizStore != nil {
 		if err := s.QuizStore.RemoveTrainingData(tid); err != nil {
-			return err
+			warnCleanup("training-delete", err)
 		}
 	}
 	return c.SendStatus(fiber.StatusNoContent)
@@ -749,7 +749,7 @@ func (s *Server) handleDeleteSpacePractice(c *fiber.Ctx) error {
 	// 作答侧数据清理（交卷记录，无 FK 级联）
 	if s.QuizStore != nil {
 		if err := s.QuizStore.RemovePracticeData(pid); err != nil {
-			return err
+			warnCleanup("practice-delete", err)
 		}
 	}
 	return c.SendStatus(fiber.StatusNoContent)
@@ -841,7 +841,7 @@ func (s *Server) handleDeleteSpaceQuiz(c *fiber.Ctx) error {
 	// 作答侧数据清理（错题集来源/刷题会话，无 FK 级联）
 	if s.QuizStore != nil {
 		if err := s.QuizStore.RemoveQuizData(qid); err != nil {
-			return err
+			warnCleanup("quiz-delete", err)
 		}
 	}
 	return c.SendStatus(fiber.StatusNoContent)

@@ -4,7 +4,6 @@ package quizserver
 import (
 	"context"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -35,25 +34,18 @@ type Server struct {
 	// queueCtx/queueCancel 队列生命周期。
 	queueCtx    context.Context
 	queueCancel context.CancelFunc
-	// quizSessMu/quizSessLocks：刷题会话（user×quiz）串行化锁表——会话为整体
-	// JSON 读改写（wrong/drawn），需按 key 串行避免并发覆盖丢更新
-	quizSessMu    sync.Mutex
-	quizSessLocks map[string]*sync.Mutex
+	// quizSessLocks：刷题会话（user×quiz）串行化锁分片——会话为整体 JSON 读改写
+	// （wrong/drawn），需按 key 串行避免并发覆盖丢更新；定长 256 槽有界（不随项目/用户增长）
+	quizSessLocks [quizSessLockSlots]sync.Mutex
 }
+
+// quizSessLockSlots 会话锁分片数。
+const quizSessLockSlots = 256
 
 // lockQuizSession 获取某用户×刷题项目的会话锁（用后解锁）。
 func (s *Server) lockQuizSession(userID, quizID int64) func() {
-	s.quizSessMu.Lock()
-	if s.quizSessLocks == nil {
-		s.quizSessLocks = map[string]*sync.Mutex{}
-	}
-	key := fmt.Sprintf("%d:%d", userID, quizID)
-	lk := s.quizSessLocks[key]
-	if lk == nil {
-		lk = &sync.Mutex{}
-		s.quizSessLocks[key] = lk
-	}
-	s.quizSessMu.Unlock()
+	idx := (uint64(userID)*73856093 ^ uint64(quizID)*19349663) % quizSessLockSlots
+	lk := &s.quizSessLocks[idx]
 	lk.Lock()
 	return lk.Unlock
 }

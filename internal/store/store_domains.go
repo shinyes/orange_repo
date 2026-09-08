@@ -403,29 +403,69 @@ func (s *Store) DeleteDomainProblems(domainID int64) error {
 	return tx.Commit()
 }
 
-// DeleteEmptyWarehouseBooklets 删除仓库中不再含任何题目的空壳训练/练习模板
-//（域题目删除后，原仅含该域题的模板会变空壳——域隔离语义下应一并清掉；
-// 其章节/条目已由删题流程清理，此处删无条目模板行与空目录按需保留）。
-func (s *Store) DeleteEmptyWarehouseBooklets() error {
+// DomainOnlyBookletIDs 返回「含 ≥1 道题且全部题目都属于 domainID」的仓库训练/练习模板 id
+//（删域前收集：删题后这些模板变空壳，应随之删除；他域/混合/空模板不受影响）。
+func (s *Store) DomainOnlyBookletIDs(domainID int64) (trainingIDs, practiceIDs []int64, err error) {
+	rows, err := s.DB.Query(`SELECT DISTINCT t.id FROM trainings t
+		WHERE EXISTS (SELECT 1 FROM training_items i JOIN training_chapters c ON i.chapter_id=c.id
+			JOIN problems p ON p.id=i.problem_id WHERE c.training_id=t.id AND p.domain_id=?)
+		AND NOT EXISTS (SELECT 1 FROM training_items i JOIN training_chapters c ON i.chapter_id=c.id
+			JOIN problems p ON p.id=i.problem_id WHERE c.training_id=t.id AND (p.domain_id IS NULL OR p.domain_id<>?))
+		ORDER BY t.id`, domainID, domainID)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, nil, err
+		}
+		trainingIDs = append(trainingIDs, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, nil, err
+	}
+	prows, err := s.DB.Query(`SELECT DISTINCT p.id FROM practices p
+		WHERE EXISTS (SELECT 1 FROM practice_items i JOIN problems pr ON pr.id=i.problem_id
+			WHERE i.practice_id=p.id AND pr.domain_id=?)
+		AND NOT EXISTS (SELECT 1 FROM practice_items i JOIN problems pr ON pr.id=i.problem_id
+			WHERE i.practice_id=p.id AND (pr.domain_id IS NULL OR pr.domain_id<>?))
+		ORDER BY p.id`, domainID, domainID)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer prows.Close()
+	for prows.Next() {
+		var id int64
+		if err := prows.Scan(&id); err != nil {
+			return nil, nil, err
+		}
+		practiceIDs = append(practiceIDs, id)
+	}
+	return trainingIDs, practiceIDs, prows.Err()
+}
+
+// DeleteBookletIDs 按 id 删除仓库训练/练习模板（级联其章节；练习无章节）。
+func (s *Store) DeleteBookletIDs(trainingIDs, practiceIDs []int64) error {
 	tx, err := s.DB.Begin()
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
-	// 训练：无章节或章节无条目 → 空壳（级联删 chapters）
-	if _, err := tx.Exec(`DELETE FROM trainings WHERE id IN (
-		SELECT t.id FROM trainings t
-		LEFT JOIN training_chapters c ON c.training_id=t.id
-		LEFT JOIN training_items i ON i.chapter_id=c.id
-		GROUP BY t.id HAVING COUNT(i.id)=0)`); err != nil {
-		return err
+	if len(trainingIDs) > 0 {
+		for _, id := range trainingIDs {
+			if _, err := tx.Exec(`DELETE FROM trainings WHERE id=?`, id); err != nil {
+				return err
+			}
+		}
 	}
-	// 练习：无条目 → 空壳
-	if _, err := tx.Exec(`DELETE FROM practices WHERE id IN (
-		SELECT p.id FROM practices p
-		LEFT JOIN practice_items i ON i.practice_id=p.id
-		GROUP BY p.id HAVING COUNT(i.id)=0)`); err != nil {
-		return err
+	if len(practiceIDs) > 0 {
+		for _, id := range practiceIDs {
+			if _, err := tx.Exec(`DELETE FROM practices WHERE id=?`, id); err != nil {
+				return err
+			}
+		}
 	}
 	return tx.Commit()
 }

@@ -203,15 +203,20 @@ func cleanupJSONRefs(tx *sql.Tx, problemIDs []int64) error {
 	return nil
 }
 
-// RemoveQuizData 删除刷题项目后的作答侧数据（错题集来源行/会话）。
+// RemoveQuizData 删除刷题项目后的作答侧数据（错题集来源行/会话；事务内）。
 func (s *Store) RemoveQuizData(quizID int64) error {
-	if _, err := s.DB.Exec(`DELETE FROM wrong_book WHERE quiz_id=?`, quizID); err != nil {
+	tx, err := s.DB.Begin()
+	if err != nil {
 		return err
 	}
-	if _, err := s.DB.Exec(`DELETE FROM quiz_sessions WHERE quiz_id=?`, quizID); err != nil {
+	defer tx.Rollback()
+	if _, err := tx.Exec(`DELETE FROM wrong_book WHERE quiz_id=?`, quizID); err != nil {
 		return err
 	}
-	return nil
+	if _, err := tx.Exec(`DELETE FROM quiz_sessions WHERE quiz_id=?`, quizID); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // RemoveTrainingData 删除空间训练后的作答侧数据（客观题尝试/编程通过标记记录）。

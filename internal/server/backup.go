@@ -15,6 +15,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
+	"orangeoj/internal/accounts"
 	"orangeoj/internal/model"
 	"orangeoj/internal/store"
 	"orangeoj/internal/zipio"
@@ -87,11 +88,17 @@ func (s *Server) dirPathOf(dirs []model.BookletDirectory, id int64) string {
 }
 
 // buildBackup 组装全库清单与题目数组（problems.json 顺序即下标）。
-func (s *Server) buildBackup() (*backupManifest, []zipio.ExportProblem, error) {
+// buildBackup 导出（全量或按域 scope）：scope=nil 导出全部域（仅 global_admin 使用）；
+// domain_admin 调用时必须传其域（仅导出该域题目，训练/练习仅收录含已导出题目的条目）。
+func (s *Server) buildBackup(scope *int64) (*backupManifest, []zipio.ExportProblem, error) {
 	manifest := &backupManifest{Version: 1}
 
-	// 题目：全量导出（含被训练/练习引用与未被引用的）
-	all, err := s.Store.ListProblems(store.ProblemFilter{})
+	// 题目：按 scope 过滤（nil=全量）；含被训练/练习引用与未被引用的
+	filter := store.ProblemFilter{}
+	if scope != nil {
+		filter.DomainID = scope
+	}
+	all, err := s.Store.ListProblems(filter)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -171,9 +178,19 @@ func (s *Server) buildBackup() (*backupManifest, []zipio.ExportProblem, error) {
 	return manifest, entries, nil
 }
 
-// handleExportBackup GET /api/export/backup → 全库 ZIP。
+// handleExportBackup GET /api/export/backup → 全库/本域 ZIP。
+// 域隔离：global_admin 未带 domainId = 全库备份（恢复迁移语义）；
+// domain_admin 强制仅导出其域（防越域下载他域答案/题解/图片）。
 func (s *Server) handleExportBackup(c *fiber.Ctx) error {
-	manifest, entries, err := s.buildBackup()
+	user := currentUser(c)
+	var scope *int64
+	if user.Role == accounts.RoleDomainAdmin {
+		scope = s.backupScope(c)
+		if scope == nil {
+			return respondError(c, fiber.StatusForbidden, "域管理员未关联域")
+		}
+	}
+	manifest, entries, err := s.buildBackup(scope)
 	if err != nil {
 		return err
 	}

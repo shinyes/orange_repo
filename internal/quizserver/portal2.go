@@ -478,16 +478,11 @@ func (s *Server) handlePortalQuizAnswer(c *fiber.Ctx) error {
 		return respondError(c, fiber.StatusBadRequest, "invalid request")
 	}
 	// 归属校验：题目必须属于该项目题集（防用任意域/任意题枚举答案密钥）
-	scopeIDs, err := s.quizProblemIDs(qid)
+	// 归属校验：题目必须属于该项目题集（防用任意域/任意题枚举答案密钥）
+	// 单条 EXISTS 判定（tags 源逐 tag 匹配同源逻辑，repo 源 JOIN 模板条目），避免全量拉题
+	inScope, err := s.problemInQuizScope(spaceID, qid, req.ProblemID)
 	if err != nil {
 		return respondError(c, fiber.StatusInternalServerError, err.Error())
-	}
-	inScope := false
-	for _, id := range scopeIDs {
-		if id == req.ProblemID {
-			inScope = true
-			break
-		}
 	}
 	if !inScope {
 		return respondError(c, fiber.StatusBadRequest, "题目不在该刷题项目范围内")
@@ -525,22 +520,20 @@ func (s *Server) handlePortalQuizAnswer(c *fiber.Ctx) error {
 	}
 	// 同步刷题会话：答对→从错题袋移除；答错→加入错题袋（下批优先复抽）
 	unlockSess := s.lockQuizSession(user.ID, qid)
+	defer unlockSess() // 统一 defer：任一路径（含 panic 恢复转 500）都释放，防锁死
 	ss, serr := s.QS.GetQuizSession(user.ID, qid)
 	if serr != nil {
-		unlockSess()
-		return respondError(c, fiber.StatusInternalServerError, err.Error())
+		return respondError(c, fiber.StatusInternalServerError, serr.Error())
 	}
 	if correct {
 		if quizstore.ContainsInt64(ss.Wrong, req.ProblemID) {
 			ss.Wrong = quizstore.RemoveInt64(ss.Wrong, req.ProblemID)
 			if err := s.QS.SaveQuizSession(user.ID, qid, ss); err != nil {
-				unlockSess()
 				return respondError(c, fiber.StatusInternalServerError, err.Error())
 			}
 		}
 		// 全局错题集同步：答对即移除
 		if err := s.QS.RemoveWrongByProblem(user.ID, req.ProblemID); err != nil {
-			unlockSess()
 			return respondError(c, fiber.StatusInternalServerError, err.Error())
 		}
 	} else {
@@ -548,16 +541,13 @@ func (s *Server) handlePortalQuizAnswer(c *fiber.Ctx) error {
 		if !quizstore.ContainsInt64(ss.Wrong, req.ProblemID) {
 			ss.Wrong = append(ss.Wrong, req.ProblemID)
 			if err := s.QS.SaveQuizSession(user.ID, qid, ss); err != nil {
-				unlockSess()
 				return respondError(c, fiber.StatusInternalServerError, err.Error())
 			}
 		}
 		if err := s.QS.AddWrong(user.ID, req.ProblemID, qid); err != nil {
-			unlockSess()
 			return respondError(c, fiber.StatusInternalServerError, err.Error())
 		}
 	}
-	unlockSess()
 	return respondData(c, fiber.StatusOK, fiber.Map{
 		"correct":       correct,
 		"correctAnswer": correctAnswer,

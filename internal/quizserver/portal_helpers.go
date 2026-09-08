@@ -3,6 +3,7 @@ package quizserver
 
 import (
 	"crypto/rand"
+	"database/sql"
 	"encoding/json"
 	"math/big"
 	"strconv"
@@ -51,6 +52,61 @@ func (s *Server) resolveSpaceCtx(c *fiber.Ctx, spaceID int64) (int64, error) {
 	}
 	c.Locals(spaceLocals, spaceID)
 	return spaceID, nil
+}
+
+// problemInQuizScope 判定 problemID 是否属于刷题项目 qid 的题集（单题判定，供作答归属校验）：
+//   - tags 源：题目客观题 + 属项目空间所在域 + 命中项目标签（空标签=该域全部客观题）
+//   - repo 源：题目是仓库模板（训练/练习）条目中的客观题（并限本域）
+func (s *Server) problemInQuizScope(spaceID, qid, problemID int64) (bool, error) {
+	var (
+		sourceType string
+		repoKind   string
+		repoID     int64
+		tagsJSON   string
+	)
+	err := s.QS.Repo.DB.QueryRow(`SELECT source_type,COALESCE(repo_kind,''),COALESCE(repo_id,0),COALESCE(tags_json,'')
+		FROM space_quizzes WHERE id=?`, qid).Scan(&sourceType, &repoKind, &repoID, &tagsJSON)
+	if err != nil {
+		return false, err
+	}
+	domainID, err := s.QS.Repo.SpaceDomain(spaceID)
+	if err != nil {
+		return false, err
+	}
+	if sourceType == "tags" {
+		var pDomain sql.NullInt64
+		var pType, pTags string
+		err := s.QS.Repo.DB.QueryRow(`SELECT domain_id,type,COALESCE(tags_json,'') FROM problems
+			WHERE id=?`, problemID).Scan(&pDomain, &pType, &pTags)
+		if err != nil {
+			return false, nil // 题不存在
+		}
+		if pDomain.Int64 != domainID || (pType != "single_choice" && pType != "true_false") {
+			return false, nil
+		}
+		var tags []string
+		_ = jsonUnmarshalTags(tagsJSON, &tags)
+		if len(tags) == 0 {
+			return true, nil
+		}
+		var problemTags []string
+		_ = jsonUnmarshalTags(pTags, &problemTags)
+		return store.TagMatchesSelected(problemTags, tags), nil
+	}
+	// repo 源
+	if repoKind == "training" {
+		var n int
+		err := s.QS.Repo.DB.QueryRow(`SELECT COUNT(1)>0 FROM training_items i
+			JOIN training_chapters c ON i.chapter_id=c.id
+			JOIN problems p ON p.id=i.problem_id
+			WHERE c.training_id=? AND p.id=? AND p.domain_id=?`, repoID, problemID, domainID).Scan(&n)
+		return n > 0, err
+	}
+	var n int
+	err = s.QS.Repo.DB.QueryRow(`SELECT COUNT(1)>0 FROM practice_items i
+		JOIN problems p ON p.id=i.problem_id
+		WHERE i.practice_id=? AND i.problem_id=? AND p.domain_id=?`, repoID, problemID, domainID).Scan(&n)
+	return n > 0, err
 }
 
 // quizSpaceOf 刷题项目所属空间（不存在报错）。
@@ -173,7 +229,17 @@ func (s *Server) rankDomainOf(c *fiber.Ctx, user *accounts.User) (int64, error) 
 		if err != nil || id <= 0 {
 			return 0, fiber.NewError(fiber.StatusBadRequest, "invalid domainId")
 		}
-		if isAdminRole(user.Role) {
+		// domain_admin 一律限本域（与其它管理口径一致）；仅 global_admin 可任意指定
+		if user.Role == accounts.RoleDomainAdmin {
+			if user.DomainID == nil {
+				return 0, fiber.NewError(fiber.StatusForbidden, "域管理员未关联域")
+			}
+			if *user.DomainID != id {
+				return 0, fiber.NewError(fiber.StatusForbidden, "无权查看该域排行榜")
+			}
+			return id, nil
+		}
+		if user.Role == accounts.RoleGlobalAdmin {
 			return id, nil
 		}
 		if !allowed[id] {
