@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { BookOpenIcon, CheckCircle2Icon, Loader2Icon, PartyPopperIcon, RefreshCwIcon, SkipForwardIcon } from 'lucide-react'
+import { BookOpenIcon, CheckCircle2Icon, LayersIcon, Loader2Icon, PartyPopperIcon, RefreshCwIcon, RotateCcwIcon, SkipForwardIcon } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { api } from '@/api'
@@ -12,8 +12,9 @@ import { ObjectiveQuestion } from '@/components/portal/objective'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
-// 刷题单题流：进入即取一题（GET problem），作答（POST answer）即时反馈；
-// 答对后「下一题」；答错可「再试一次」或「换一题」；done=true 显示完成页。
+// 刷题（批式复习）单题流：
+// 默认规则——同批不重复；做过（已通过）的题少抽；答错的题进错题袋，下一批优先复抽；
+// 一轮（批）覆盖完且无错题 → 本轮完成，可重新开始；有错题 → 自动开新一轮继续复习。
 export function QuizSolve() {
   const { spaceId, quizId } = useParams()
   const sid = Number(spaceId)
@@ -27,7 +28,7 @@ export function QuizSolve() {
 
   return (
     <SpacePageShell spaceId={sid} backTo={`/s/${sid}/quiz`} backLabel="返回刷题列表">
-      <QuizRound key={qid} qid={qid} quizName={quizName} spaceName={space.name} />
+      <QuizRound key={qid} qid={qid} quizName={quizName} />
     </SpacePageShell>
   )
 }
@@ -36,19 +37,25 @@ function Center({ text }: { text: string }) {
   return <div className="flex h-dvh items-center justify-center text-sm text-muted-foreground">{text}</div>
 }
 
-function QuizRound({ qid, quizName, spaceName }: { qid: number; quizName: string; spaceName: string }) {
+function QuizRound({ qid, quizName }: { qid: number; quizName: string }) {
   const [problem, setProblem] = useState<QuizProblemResponse['problem'] | null>(null)
   const [fetchError, setFetchError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [done, setDone] = useState(false)
+  const [newBatch, setNewBatch] = useState(false) // 本轮开始时提示
+  const [batchNo, setBatchNo] = useState(1)
+  const [wrongCnt, setWrongCnt] = useState(0)
   const [busy, setBusy] = useState(false)
   const [selected, setSelected] = useState<ObjectiveAnswer | null>(null)
   const [feedback, setFeedback] = useState<{ correct: boolean; correctAnswer?: CorrectAnswer; firstTime?: boolean } | null>(null)
 
-  async function fetchProblem() {
+  async function fetchProblem(reset?: boolean) {
     setLoading(true)
     setFetchError(null)
+    setDone(false)
+    setNewBatch(false)
     try {
+      if (reset) await api.portalQuizReset(qid)
       const r = await api.portalQuizProblem(qid)
       if (r.done || !r.problem) {
         setDone(true)
@@ -56,6 +63,9 @@ function QuizRound({ qid, quizName, spaceName }: { qid: number; quizName: string
       } else {
         setDone(false)
         setProblem(r.problem)
+        setNewBatch(!!r.newBatch)
+        setBatchNo(r.batchNo ?? 1)
+        setWrongCnt(r.wrongCnt ?? 0)
         setSelected(null)
         setFeedback(null)
       }
@@ -79,10 +89,11 @@ function QuizRound({ qid, quizName, spaceName }: { qid: number; quizName: string
     try {
       const r = await api.portalQuizAnswer(qid, problem.id, a)
       setFeedback(r)
+      if (typeof r.wrongCnt === 'number') setWrongCnt(r.wrongCnt)
       if (r.correct) {
-        toast.success(r.firstTime ? '回答正确 · 首次通过 +1' : '回答正确（此前已通过）')
+        toast.success(r.firstTime ? '回答正确 · 首次通过' : '回答正确')
       } else {
-        toast.error('回答错误')
+        toast.error('回答错误，已加入错题袋（下一轮优先复习）')
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : '提交失败')
@@ -100,8 +111,21 @@ function QuizRound({ qid, quizName, spaceName }: { qid: number; quizName: string
   return (
     <PageContainer className="max-w-2xl lg:px-6">
       <div className="mt-3 rounded-2xl border bg-card p-5">
+        {/* 批次/进度信息条 */}
+        {!done && !fetchError && (
+          <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+            <span className="inline-flex items-center gap-1 font-medium text-primary">
+              <LayersIcon className="size-3.5" /> 第 {batchNo} 轮
+            </span>
+            {wrongCnt > 0 && (
+              <span className="inline-flex items-center gap-1 text-red-500">错题袋 {wrongCnt} 道（下一轮优先）</span>
+            )}
+            <span className="ml-auto truncate">范围内单选/判断循环 · 同轮不重复</span>
+          </div>
+        )}
+
         {done ? (
-          <DonePanel spaceName={spaceName} quizName={quizName} onRefresh={() => void fetchProblem()} />
+          <DonePanel wrongCnt={wrongCnt} quizName={quizName} onRestart={() => void fetchProblem(true)} onRefresh={() => void fetchProblem(false)} />
         ) : fetchError ? (
           <div className="py-10 text-center">
             <p className="text-sm text-muted-foreground">{fetchError}</p>
@@ -119,6 +143,11 @@ function QuizRound({ qid, quizName, spaceName }: { qid: number; quizName: string
               <BookOpenIcon className="size-4 shrink-0 text-primary" />
               <span className="min-w-0 flex-1 truncate text-sm font-semibold">{quizName}</span>
             </div>
+            {newBatch && (
+              <div className="mb-3 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-700">
+                进入第 {batchNo} 轮：错题优先复习，同轮题目不重复
+              </div>
+            )}
             <ObjectiveQuestion
               problem={problem}
               selected={selected}
@@ -146,22 +175,37 @@ function QuizRound({ qid, quizName, spaceName }: { qid: number; quizName: string
   )
 }
 
-function DonePanel({ spaceName, quizName, onRefresh }: { spaceName: string; quizName: string; onRefresh: () => void }) {
+function DonePanel({ wrongCnt, quizName, onRestart, onRefresh }: {
+  wrongCnt: number
+  quizName: string
+  onRestart: () => void
+  onRefresh: () => void
+}) {
+  const allClear = wrongCnt === 0
   return (
     <div className="py-10 text-center">
-      <div className="mx-auto mb-3 flex size-14 items-center justify-center rounded-full bg-emerald-50">
-        <PartyPopperIcon className="size-7 text-emerald-600" />
+      <div className={cn('mx-auto mb-3 flex size-14 items-center justify-center rounded-full', allClear ? 'bg-emerald-50' : 'bg-sky-50')}>
+        {allClear ? <PartyPopperIcon className="size-7 text-emerald-600" /> : <CheckCircle2Icon className="size-7 text-sky-600" />}
       </div>
       <h2 className="flex items-center justify-center gap-2 text-lg font-semibold">
-        <CheckCircle2Icon className="size-5 text-emerald-600" /> 本组刷题完成！
+        {allClear ? '本轮刷题完成！' : `本轮完成，错题袋 ${wrongCnt} 道`}
       </h2>
       <p className="mt-2 text-sm text-muted-foreground">
-        空间「{spaceName}」的「{quizName}」内题目已全部通过（按 uuid 去重记录）
+        {allClear
+          ? <>「{quizName}」范围内的题已全部答对一轮（已通过记录保留），可重新开始一轮</>
+          : <>「{quizName}」本轮题目已全部出现，{wrongCnt} 道错题将在下一轮优先复习</>}
       </p>
-      <div className={cn('mt-5 flex justify-center gap-3')}>
-        <Button variant="outline" onClick={onRefresh}>
-          <RefreshCwIcon className="size-4" /> 刷新检查
-        </Button>
+      <div className="mt-5 flex justify-center gap-3">
+        {!allClear && (
+          <Button variant="outline" onClick={onRefresh}>
+            <RefreshCwIcon className="size-4" /> 继续下一轮（复习错题）
+          </Button>
+        )}
+        {allClear && (
+          <Button onClick={onRestart}>
+            <RotateCcwIcon className="size-4" /> 重新开始一轮
+          </Button>
+        )}
       </div>
     </div>
   )

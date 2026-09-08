@@ -7,6 +7,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
+	"orangeoj/internal/accounts"
 	"orangeoj/internal/quizstore"
 )
 
@@ -298,9 +299,100 @@ func (s *Server) handlePortalSpaceQuizzes(c *fiber.Ctx) error {
 	return respondData(c, fiber.StatusOK, fiber.Map{"quizzes": quizzes})
 }
 
+// quizPickResult 抽题结果。
+type quizPickResult struct {
+	Problem  *quizstore.OJProblem `json:"problem"`
+	Done     bool                 `json:"done"`
+	NewBatch bool                 `json:"newBatch"` // 开新一轮（错题复习优先）
+	BatchNo  int                  `json:"batchNo"`
+	WrongCnt int                  `json:"wrongCnt"` // 会话中待纠正错题数
+}
+
+// pickQuizProblem 按默认刷题规则抽一题：
+//   - 范围 = 刷题项目题集（tags/repo 客观题）；批内不重复（drawn）
+//   - 候选优先：本会话答错的 → 未 uuid 通过的 → 其余
+//   - 本批覆盖完且仍有错题 → 自动开新批（错题下批优先复抽）
+//   - 本批覆盖完且无错 → done（一轮完整刷完，用户可重开）
+func (s *Server) pickQuizProblem(user *accounts.User, qid int64) (*quizPickResult, error) {
+	ids, err := s.quizProblemIDs(qid)
+	if err != nil {
+		return nil, err
+	}
+	if len(ids) == 0 {
+		return &quizPickResult{Done: true}, nil
+	}
+	solved, err := s.QS.SolvedUUIDs(user.ID)
+	if err != nil {
+		return nil, err
+	}
+	ss, err := s.QS.GetQuizSession(user.ID, qid)
+	if err != nil {
+		return nil, err
+	}
+	newBatch := false
+	drawn := ss.Drawn
+	// 候选 = 范围中本批未抽的题
+	candidates := make([]int64, 0, len(ids))
+	for _, id := range ids {
+		if !quizstore.ContainsInt64(drawn, id) {
+			candidates = append(candidates, id)
+		}
+	}
+	if len(candidates) == 0 {
+		// 本批抽完
+		if len(ss.Wrong) > 0 {
+			// 有错题：开新批（错题优先复习）
+			ss.BatchNo++
+			drawn = []int64{}
+			candidates = ids
+			newBatch = true
+		} else {
+			// 全批刷完且无错 → 完成
+			return &quizPickResult{Done: true, BatchNo: ss.BatchNo}, nil
+		}
+	}
+	// 分组加权：错题（本批未抽的）> 未通过 > 其余
+	var wrongCand, freshCand, restCand []int64
+	for _, id := range candidates {
+		var u string
+		_ = s.QS.Repo.DB.QueryRow(`SELECT uuid FROM problems WHERE id=?`, id).Scan(&u)
+		switch {
+		case quizstore.ContainsInt64(ss.Wrong, id):
+			wrongCand = append(wrongCand, id)
+		case u != "" && solved[u]:
+			restCand = append(restCand, id)
+		default:
+			freshCand = append(freshCand, id)
+		}
+	}
+	var pool []int64
+	switch {
+	case len(wrongCand) > 0:
+		pool = wrongCand
+	case len(freshCand) > 0:
+		pool = freshCand
+	default:
+		pool = restCand
+	}
+	if len(pool) == 0 {
+		// 理论不可达（candidates 非空），兜底全候选
+		pool = candidates
+	}
+	pick := pool[randIntn(len(pool))]
+	// 入批（本批已抽）
+	ss.Drawn = append(drawn, pick)
+	if err := s.QS.SaveQuizSession(user.ID, qid, ss); err != nil {
+		return nil, err
+	}
+	problem, err := s.QS.Repo.GetOJProblem(pick)
+	if err != nil {
+		return nil, err
+	}
+	return &quizPickResult{Problem: problem, BatchNo: ss.BatchNo, NewBatch: newBatch, WrongCnt: len(ss.Wrong)}, nil
+}
+
 // handlePortalQuizProblem GET /api/portal/quiz/:qid/problem
-// → 从刷题项目取一题（tags 源：按标签筛域题库单选/判断随机；repo 源：模板题单客观题随机）。
-// 返回题目内容（不含答案），附该题是否已通过（uuid 去重，已过跳过）。
+// → 按默认刷题规则取一题（范围=项目题集；做过少做/错过多做/批内不重复）。
 func (s *Server) handlePortalQuizProblem(c *fiber.Ctx) error {
 	user := currentUser(c)
 	qid, err := paramID(c, "qid")
@@ -322,39 +414,17 @@ func (s *Server) handlePortalQuizProblem(c *fiber.Ctx) error {
 	if !vis {
 		return respondError(c, fiber.StatusNotFound, "刷题项目不存在")
 	}
-	ids, err := s.quizProblemIDs(qid)
+	res, err := s.pickQuizProblem(user, qid)
 	if err != nil {
 		return respondError(c, fiber.StatusInternalServerError, err.Error())
 	}
-	if len(ids) == 0 {
-		return respondData(c, fiber.StatusOK, fiber.Map{"problem": nil, "done": true})
-	}
-	// 已通过过滤
-	solved, err := s.QS.SolvedUUIDs(user.ID)
-	if err != nil {
-		return respondError(c, fiber.StatusInternalServerError, err.Error())
-	}
-	pending := make([]int64, 0, len(ids))
-	for _, id := range ids {
-		var u string
-		if err := s.QS.Repo.DB.QueryRow(`SELECT uuid FROM problems WHERE id=?`, id).Scan(&u); err != nil {
-			continue
-		}
-		if u != "" && solved[u] {
-			continue
-		}
-		pending = append(pending, id)
-	}
-	if len(pending) == 0 {
-		return respondData(c, fiber.StatusOK, fiber.Map{"problem": nil, "done": true})
-	}
-	// 随机取一题
-	idx := randIntn(len(pending))
-	problem, err := s.QS.Repo.GetOJProblem(pending[idx])
-	if err != nil {
-		return respondError(c, fiber.StatusNotFound, "题目不存在")
-	}
-	return respondData(c, fiber.StatusOK, fiber.Map{"problem": problem, "done": false})
+	return respondData(c, fiber.StatusOK, fiber.Map{
+		"problem":  res.Problem,
+		"done":     res.Done,
+		"newBatch": res.NewBatch,
+		"batchNo":  res.BatchNo,
+		"wrongCnt": res.WrongCnt,
+	})
 }
 
 // handlePortalQuizAnswer POST /api/portal/quiz/:qid/answer {problemId, answer}
@@ -417,11 +487,50 @@ func (s *Server) handlePortalQuizAnswer(c *fiber.Ctx) error {
 			return respondError(c, fiber.StatusInternalServerError, err.Error())
 		}
 	}
+	// 同步刷题会话：答对→从错题袋移除；答错→加入错题袋（下批优先复抽）
+	ss, serr := s.QS.GetQuizSession(user.ID, qid)
+	if serr != nil {
+		return respondError(c, fiber.StatusInternalServerError, err.Error())
+	}
+	if correct {
+		if quizstore.ContainsInt64(ss.Wrong, req.ProblemID) {
+			ss.Wrong = quizstore.RemoveInt64(ss.Wrong, req.ProblemID)
+			if err := s.QS.SaveQuizSession(user.ID, qid, ss); err != nil {
+				return respondError(c, fiber.StatusInternalServerError, err.Error())
+			}
+		}
+	} else if !quizstore.ContainsInt64(ss.Wrong, req.ProblemID) {
+		ss.Wrong = append(ss.Wrong, req.ProblemID)
+		if err := s.QS.SaveQuizSession(user.ID, qid, ss); err != nil {
+			return respondError(c, fiber.StatusInternalServerError, err.Error())
+		}
+	}
 	return respondData(c, fiber.StatusOK, fiber.Map{
 		"correct":       correct,
 		"correctAnswer": correctAnswer,
 		"firstTime":     correct && !already, // 首次通过（此前未记过）
+		"wrongCnt":      len(ss.Wrong),
 	})
+}
+
+// handlePortalQuizReset POST /api/portal/quiz/:qid/reset → 清空会话（重新开始一轮）。
+func (s *Server) handlePortalQuizReset(c *fiber.Ctx) error {
+	user := currentUser(c)
+	qid, err := paramID(c, "qid")
+	if err != nil {
+		return respondError(c, fiber.StatusBadRequest, "invalid quiz id")
+	}
+	spaceID, err := s.quizSpaceOf(qid)
+	if err != nil {
+		return respondError(c, fiber.StatusNotFound, "刷题项目不存在")
+	}
+	if _, err := s.resolveSpaceCtx(c, spaceID); err != nil {
+		return err
+	}
+	if err := s.QS.ResetQuizSession(user.ID, qid); err != nil {
+		return respondError(c, fiber.StatusInternalServerError, err.Error())
+	}
+	return c.SendStatus(fiber.StatusNoContent)
 }
 
 // ---------- 排行榜 ----------

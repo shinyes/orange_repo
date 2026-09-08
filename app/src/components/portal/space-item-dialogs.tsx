@@ -148,11 +148,79 @@ export function NewPracticeDialog(props: {
   )
 }
 
+// ---------- 新建刷题项目（门户管理员；默认规则：做过少做/错过多做/同批不重复） ----------
+
+export function NewQuizDialog(props: {
+  spaceId: number
+  open: boolean
+  onOpenChange: (v: boolean) => void
+  onCreated: () => void
+}) {
+  const [title, setTitle] = useState('')
+  const [tags, setTags] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    if (props.open) { setTitle(''); setTags('') }
+  }, [props.open])
+
+  async function create() {
+    const t = title.trim()
+    if (!t) {
+      toast.error('请输入刷题项目标题')
+      return
+    }
+    setBusy(true)
+    try {
+      const tagList = tags.split(/[,，\s]+/).map((x) => x.trim()).filter(Boolean)
+      await api.createSpaceQuiz(props.spaceId, {
+        title: t,
+        tags: tagList.length > 0 ? tagList : undefined,
+        sourceType: 'tags',
+      })
+      toast.success('刷题项目已创建（默认无成员可见，可点眼睛按钮分配）')
+      props.onCreated()
+      props.onOpenChange(false)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : '创建失败')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Dialog open={props.open} onOpenChange={props.onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>新建刷题项目</DialogTitle>
+          <DialogDescription>
+            范围内单选/判断题循环复习：做过少做、答错的下轮多做、同轮不重复。创建后默认无成员可见。
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <Label>项目标题</Label>
+            <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="如：C++ 基础刷题" autoFocus />
+          </div>
+          <div className="space-y-1.5">
+            <Label>范围标签（可选，逗号分隔）</Label>
+            <Input value={tags} onChange={(e) => setTags(e.target.value)} placeholder="如：语法基础, 循环 —— 留空=域内全部客观题" />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => props.onOpenChange(false)}>取消</Button>
+          <Button onClick={() => void create()} disabled={busy}>{busy ? '创建中…' : '创建'}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 // ---------- 可见成员分配（门户管理员） ----------
 
 export function VisibleUsersDialog(props: {
   spaceId: number
-  kind: 'training' | 'practice'
+  kind: 'training' | 'practice' | 'quiz'
   itemId: number
   title: string
   open: boolean

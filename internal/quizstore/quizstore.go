@@ -187,6 +187,16 @@ func (s *Store) migrate() error {
 			solved_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 			PRIMARY KEY(user_id, problem_uuid)
 		);`,
+		// ---------- 刷题会话（批式规则引擎：做对少做/答错多做/批内不重复） ----------
+		`CREATE TABLE IF NOT EXISTS quiz_sessions (
+			user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			quiz_id INTEGER NOT NULL,
+			batch_no INTEGER NOT NULL DEFAULT 1,
+			wrong_json TEXT NOT NULL DEFAULT '[]',
+			drawn_json TEXT NOT NULL DEFAULT '[]',
+			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			PRIMARY KEY(user_id, quiz_id)
+		);`,
 	}
 	for _, stmt := range stmts {
 		if _, err := s.DB.Exec(stmt); err != nil {

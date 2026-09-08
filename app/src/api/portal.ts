@@ -66,6 +66,8 @@ export const portalApi = {
       `/api/portal/quiz/${quizId}/answer`,
       json({ method: 'POST', body: JSON.stringify({ problemId, answer }) }),
     ),
+  portalQuizReset: (quizId: number | string) =>
+    req<void>(`/api/portal/quiz/${quizId}/reset`, { method: 'POST' }),
 
   // ---- OrangeOJ：题目做题（/api/oj/problem/:id 保留——做题页/空间内跳转复用） ----
   ojProblem: (id: number) => req<OjProblem>(`/api/oj/problem/${id}`),

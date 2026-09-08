@@ -184,8 +184,14 @@ export interface QuizProblem {
 
 export interface QuizProblemResponse {
   problem: QuizProblem | null
-  /** true = 本组题已全部通过，无题可刷 */
+  /** true = 本轮覆盖完成（无错题），可重新开始 */
   done: boolean
+  /** 开新批（错题复习优先） */
+  newBatch?: boolean
+  /** 当前批号 */
+  batchNo?: number
+  /** 会话中待纠正错题数 */
+  wrongCnt?: number
 }
 
 export interface QuizAnswerResult {
@@ -193,6 +199,8 @@ export interface QuizAnswerResult {
   correctAnswer: CorrectAnswer
   /** 答对且此前未通过（首次通过 +1） */
   firstTime: boolean
+  /** 会话中待纠正错题数 */
+  wrongCnt?: number
 }
 
 // ---------- 排行榜 ----------
