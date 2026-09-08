@@ -422,10 +422,18 @@ export function ProblemEditor({ problem, onSaved }: { problem: Problem; onSaved:
         <div className="space-y-1.5">
           <Label>正确答案</Label>
           <div className="flex gap-2">
-            <Button size="sm" variant={s.tfAnswer ? 'default' : 'outline'} onClick={() => patch({ tfAnswer: true })}>
+            <Button
+              size="sm"
+              onClick={() => patch({ tfAnswer: true })}
+              className={s.tfAnswer ? 'border-emerald-500 bg-emerald-500 text-white hover:bg-emerald-600' : 'border-emerald-300 bg-emerald-50 text-emerald-600 hover:bg-emerald-100'}
+            >
               ✓ 正确
             </Button>
-            <Button size="sm" variant={!s.tfAnswer ? 'default' : 'outline'} onClick={() => patch({ tfAnswer: false })}>
+            <Button
+              size="sm"
+              onClick={() => patch({ tfAnswer: false })}
+              className={!s.tfAnswer ? 'border-red-500 bg-red-500 text-white hover:bg-red-600' : 'border-red-300 bg-red-50 text-red-600 hover:bg-red-100'}
+            >
               ✗ 错误
             </Button>
           </div>
@@ -567,7 +575,7 @@ function ChoiceEditor({ s, patch }: { s: EditState; patch: (p: Partial<EditState
                 type="button"
                 onClick={() => patch({ answerIndex: i })}
                 className={`mt-1.5 flex size-6 shrink-0 items-center justify-center rounded-full text-xs ${
-                  i === s.answerIndex ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'
+                  i === s.answerIndex ? 'bg-emerald-500 text-white' : 'bg-muted text-muted-foreground'
                 }`}
                 title="设为正确答案"
               >

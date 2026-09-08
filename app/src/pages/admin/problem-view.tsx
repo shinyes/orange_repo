@@ -144,17 +144,17 @@ function AnswerView({ problem }: { problem: Problem }) {
           <div
             key={i}
             className={`flex items-start gap-2.5 rounded-lg border p-3 text-sm ${
-              i === idx ? 'border-primary bg-primary/5 font-medium' : ''
+              i === idx ? 'border-emerald-400 bg-emerald-50 font-medium' : ''
             }`}
           >
-            <span className={`mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full text-xs ${i === idx ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
+            <span className={`mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full text-xs ${i === idx ? 'bg-emerald-500 text-white' : 'bg-muted text-muted-foreground'}`}>
               {String.fromCharCode(65 + i)}
             </span>
             <span className="min-w-0 flex-1">
               {/* 选项支持 Markdown / KaTeX（与题面同一渲染管线）；孤立换行保真显示 */}
               <Markdown text={preserveLineBreaks(opt)} className="markdown-body text-sm" />
             </span>
-            {i === idx && <Badge className=" shrink-0">正确答案</Badge>}
+            {i === idx && <Badge className="shrink-0 bg-emerald-500 text-white hover:bg-emerald-500">正确答案</Badge>}
           </div>
         ))}
         {options.length === 0 && <Empty>未配置选项</Empty>}
@@ -164,10 +164,10 @@ function AnswerView({ problem }: { problem: Problem }) {
   const isTrue = answer.answer === true
   return (
     <div className="flex items-center gap-3">
-      <div className={`rounded-lg border px-5 py-3 text-lg font-semibold ${isTrue ? 'border-primary text-primary' : 'text-muted-foreground'}`}>
+      <div className={`rounded-lg border px-5 py-3 text-lg font-semibold ${isTrue ? 'border-emerald-400 bg-emerald-50 text-emerald-600' : 'border-border text-muted-foreground'}`}>
         ✓ 正确
       </div>
-      <div className={`rounded-lg border px-5 py-3 text-lg font-semibold ${!isTrue ? 'border-primary text-primary' : 'text-muted-foreground'}`}>
+      <div className={`rounded-lg border px-5 py-3 text-lg font-semibold ${!isTrue ? 'border-red-400 bg-red-50 text-red-600' : 'border-border text-muted-foreground'}`}>
         ✗ 错误
       </div>
     </div>

@@ -425,7 +425,7 @@ function PaperNav({ sections, verdictOf, answeredCount, objectiveTotal, onJump }
                       : v === 'correct'
                         ? 'border-emerald-300 bg-emerald-100 text-emerald-700'
                         : v === 'wrong' || v === 'missing'
-                          ? 'border-orange-400 bg-orange-50 text-orange-700'
+                          ? 'border-red-300 bg-red-50 text-red-600'
                           : v === 'answered'
                             ? 'border-sky-300 bg-sky-100 text-blue-700'
                             : 'border-border bg-white text-muted-foreground hover:border-primary/50 hover:text-foreground',
@@ -514,7 +514,7 @@ function ObjectiveBlock({ item, no, verdict, resultItem, selected, onToggle }: {
                   ))}
               </div>
               {wrong && resultItem && (
-                <p className="mt-2.5 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-xs text-orange-700">
+                <p className="mt-2.5 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600">
                   本题回答错误，正确答案：{correctAnswerText(resultItem)}
                 </p>
               )}
@@ -615,7 +615,8 @@ function VerdictChip({ verdict }: { verdict: Extract<Verdict, 'correct' | 'wrong
       className={cn(
         'inline-flex items-center rounded-md border px-1.5 py-0.5 text-[11px] font-semibold',
         verdict === 'correct' ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
-          : 'border-orange-300 bg-orange-50 text-orange-700',
+          : verdict === 'wrong' ? 'border-red-300 bg-red-50 text-red-600'
+            : 'border-border bg-muted text-muted-foreground',
       )}
     >
       {verdict === 'correct' ? '正确' : verdict === 'wrong' ? '回答错误' : '未作答'}
@@ -668,7 +669,11 @@ function ResultPanel({ result, items, onDismiss }: {
     <div
       className={cn(
         'flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-xl border px-4 py-3 shadow-sm',
-        perfect ? 'border-emerald-200 bg-emerald-50/60' : 'border-orange-200 bg-orange-50/50',
+        perfect
+          ? 'border-emerald-200 bg-emerald-50/60'
+          : wrong.length > 0
+            ? 'border-red-200 bg-red-50/50'
+            : 'border-amber-200 bg-amber-50/50',
       )}
     >
       <div className="min-w-0">
@@ -681,7 +686,7 @@ function ResultPanel({ result, items, onDismiss }: {
         </div>
         <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
           <ResultStat label={`答对 ${result.objectiveCorrect}`} className="border-emerald-300 bg-emerald-50 text-emerald-700" />
-          {wrong.length > 0 && <ResultStat label={`答错 ${wrong.length}`} className="border-orange-300 bg-orange-50 text-orange-700" />}
+          {wrong.length > 0 && <ResultStat label={`答错 ${wrong.length}`} className="border-red-300 bg-red-50 text-red-600" />}
           {unanswered.length > 0 && <ResultStat label={`未作答 ${unanswered.length}`} className="border-border bg-muted/50 text-muted-foreground" />}
         </div>
       </div>
