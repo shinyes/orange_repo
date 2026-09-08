@@ -201,7 +201,7 @@ function TrainingFlow({ sid, tid, data, urlNo }: {
               ) : (
                 <SplitPane
                   left={
-                    <PageContainer className="py-4">
+                    <div className="min-h-0 w-full overflow-y-auto px-4 py-4 lg:px-5">
                       {/* 题目头（题面文字缩放控件置右） */}
                       <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                         <span className="rounded bg-muted px-1.5 py-0.5 font-medium">{item.chapterTitle}</span>
@@ -213,10 +213,10 @@ function TrainingFlow({ sid, tid, data, urlNo }: {
                       <div style={{ zoom: statementScale }}>
                         <ProgrammingStatement problemId={item.problemId} itemSolved={itemSolved} />
                       </div>
-                    </PageContainer>
+                    </div>
                   }
                   right={
-                    <div className="flex h-full min-h-0 flex-col bg-background p-3">
+                    <div className="flex h-full min-h-0 flex-col bg-background px-4 py-4 lg:px-5">
                       <div className="mb-2 flex shrink-0 items-center gap-1.5 text-xs font-medium text-muted-foreground">
                         {itemSolved && (
                           <span className="inline-flex items-center gap-1 text-emerald-600">

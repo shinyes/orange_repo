@@ -7,6 +7,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import {
+  ChevronLeftIcon,
+  ClipboardIcon,
   FlaskConicalIcon,
   HistoryIcon,
   Loader2Icon,
@@ -16,7 +18,7 @@ import {
 import { useQuery } from '@tanstack/react-query'
 
 import { api } from '@/api'
-import type { CodeLang, Submission, SubmissionPoll } from '@/api/types'
+import type { CaseDetail, CodeLang, Submission, SubmissionPoll } from '@/api/types'
 import { CodeEditor } from '@/components/CodeEditor'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -253,20 +255,6 @@ function verdictText(v: string): string {
   return map[v] ?? v
 }
 
-// verdict 徽标配色（与做题页测评记录一致）。
-function verdictCls(v: string): string {
-  const map: Record<string, string> = {
-    AC: 'text-emerald-600 bg-emerald-50 border-emerald-200',
-    OK: 'text-emerald-600 bg-emerald-50 border-emerald-200',
-    WA: 'text-red-600 bg-red-50 border-red-200',
-    CE: 'text-amber-600 bg-amber-50 border-amber-200',
-    RE: 'text-red-600 bg-red-50 border-red-200',
-    TLE: 'text-amber-600 bg-amber-50 border-amber-200',
-    MLE: 'text-amber-600 bg-amber-50 border-amber-200',
-  }
-  return map[v] ?? 'text-muted-foreground bg-muted border-border'
-}
-
 function langText(lang: string): string {
   return lang === 'cpp' ? 'C++' : lang === 'python' ? 'Python 3' : lang
 }
@@ -297,7 +285,7 @@ function CustomInputDialog(props: { value: string; onChange: (v: string) => void
   )
 }
 
-// ---------- 测评记录（训练内） ----------
+// ---------- 测评记录（训练内；列表 + 展开详情，参考 CodingPage 交互） ----------
 
 function SubmissionHistoryDialog({ open, onOpenChange, problemId, trainingId }: {
   open: boolean
@@ -311,47 +299,175 @@ function SubmissionHistoryDialog({ open, onOpenChange, problemId, trainingId }: 
     enabled: open,
   })
   const list = submissionsQ.data?.submissions ?? []
+  const [selected, setSelected] = useState<Submission | null>(null)
+  // 打开时回到列表
+  const lastOpen = useRef(false)
+  if (open && !lastOpen.current) {
+    lastOpen.current = true
+    setSelected(null)
+  } else if (!open && lastOpen.current) {
+    lastOpen.current = false
+  }
+  const selectedSub = selected ?? null
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex max-h-[85vh] flex-col sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>测评记录</DialogTitle>
-          <DialogDescription>本训练内该题的提交记录（按训练维度查看）。</DialogDescription>
+          <DialogTitle className="flex items-center gap-2">
+            {selectedSub && (
+              <Button size="icon-xs" variant="ghost" title="返回列表" onClick={() => setSelected(null)}>
+                <ChevronLeftIcon className="size-4" />
+              </Button>
+            )}
+            {selectedSub ? `提交 #${selectedSub.id}` : '测评记录'}
+          </DialogTitle>
+          <DialogDescription>
+            {selectedSub ? '该次提交的代码与逐用例判定结果' : '本训练内该题的提交记录（点击条目查看详情）'}
+          </DialogDescription>
         </DialogHeader>
-        {list.length === 0 ? (
+
+        {selectedSub ? (
+          <SubmissionDetail sub={selectedSub} />
+        ) : list.length === 0 ? (
           <div className="p-8 text-center text-sm text-muted-foreground">
-            暂无记录
+            暂无测评记录
+            <p className="mt-1 text-xs opacity-70">点击「测试」或「运行」提交代码后，测评记录将在这里显示</p>
             {submissionsQ.isLoading && <Loader2Icon className="mx-auto mt-2 size-4 animate-spin" />}
           </div>
         ) : (
           <div className="max-h-[60vh] overflow-y-auto">
             {list.map((s) => (
-              <HistoryRow key={s.id} sub={s} />
+              <HistoryRow key={s.id} sub={s} onClick={() => setSelected(s)} />
             ))}
           </div>
         )}
+
         <DialogFooter className="mt-2">
-          <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>关闭</Button>
+          <Button variant="outline" size="sm" onClick={() => (selectedSub ? setSelected(null) : onOpenChange(false))}>
+            {selectedSub ? '返回列表' : '关闭'}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
   )
 }
 
-function HistoryRow({ sub }: { sub: Submission }) {
+// 列表行：灰色图标 + 「提交 #id · verdict」主行 + 元信息副行（verdict 纯文本，无彩色徽章）
+function HistoryRow({ sub, onClick }: { sub: Submission; onClick: () => void }) {
+  const cases = sub.caseDetails ?? []
+  const passCount = cases.filter((c) => c.verdict === 'AC' || c.verdict === 'OK').length
   return (
-    <div className="flex w-full items-center gap-3 border-b px-3 py-2.5 text-left">
-      <span className={cn('rounded-md border px-1.5 py-0.5 text-xs font-medium', verdictCls(sub.verdict))}>
-        {verdictText(sub.verdict)}
-      </span>
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex w-full items-center gap-3 border-b px-3 py-2.5 text-left transition-colors last:border-b-0 hover:bg-accent/60"
+    >
+      <HistoryIcon className="size-4 shrink-0 text-muted-foreground/60" />
       <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium">
+          提交 #{sub.id} · {verdictText(sub.verdict)}
+        </p>
         <p className="truncate text-xs text-muted-foreground">
-          #{sub.id} · {submitTypeText(sub.submitType)} · {langText(sub.language)} · {new Date(sub.createdAt).toLocaleString()}
+          {submitTypeText(sub.submitType)} · {langText(sub.language)} · {new Date(sub.createdAt).toLocaleString()}
+          {sub.timeMs > 0 || sub.memoryKiB > 0 ? ` · ${sub.timeMs}ms · ${sub.memoryKiB}KiB` : ''}
+          {cases.length > 0 ? ` · 测试点 ${passCount}/${cases.length}` : ''}
         </p>
       </div>
-      <span className="shrink-0 text-[11px] text-muted-foreground">
-        {sub.timeMs}ms{sub.score > 0 ? ` · ${sub.score} 分` : ''}
-      </span>
+    </button>
+  )
+}
+
+// 详情视图：顶部三徽标 + 逐用例切换 + 代码/输入/输出/预期输出/错误 Tabs
+function SubmissionDetail({ sub }: { sub: Submission }) {
+  const cases = sub.caseDetails ?? []
+  const passCount = cases.filter((c) => c.verdict === 'AC' || c.verdict === 'OK').length
+  const [caseIdx, setCaseIdx] = useState(0)
+  const [tab, setTab] = useState('code')
+  const cur: CaseDetail | undefined = cases[caseIdx]
+
+  const verdictVariant = (v: string) =>
+    v === 'AC' || v === 'OK' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'
+  const badgeCount = (text: string, variant: string) => (
+    <span className={cn('rounded-md border px-1.5 py-0.5 text-[11px] font-medium', variant)}>{text}</span>
+  )
+
+  const tabs: { key: string; label: string; content: string; empty: string; tone?: 'err' | 'ok' }[] = [
+    { key: 'code', label: '代码', content: sub.sourceCode ?? '', empty: '无代码' },
+    { key: 'input', label: '输入', content: cur?.input ?? '', empty: '（空）' },
+    { key: 'output', label: '输出', content: cur?.output ?? sub.stdout ?? '', empty: '（无输出）', tone: 'err' },
+    { key: 'expected', label: '预期输出', content: cur?.expectedOutput ?? '', empty: '（无预期输出）', tone: 'ok' },
+    { key: 'error', label: '错误', content: cur?.error ?? sub.stderr ?? '', empty: '（无错误）', tone: 'err' },
+  ]
+  const active = tabs.find((t) => t.key === tab) ?? tabs[0]
+
+  return (
+    <div className="flex min-h-0 flex-col gap-3">
+      <div className="flex flex-wrap items-center gap-1.5">
+        {badgeCount(`测试点 ${cases.length} 个`, 'border-border bg-background text-muted-foreground')}
+        {badgeCount(`通过 ${passCount} 个`, 'border-emerald-200 bg-emerald-50 text-emerald-700')}
+        {badgeCount(`未通过 ${cases.length - passCount} 个`, 'border-red-200 bg-red-50 text-red-700')}
+        <span className={cn('ml-auto rounded-md border px-2 py-0.5 text-xs font-semibold', verdictVariant(sub.verdict))}>
+          {verdictText(sub.verdict)}
+        </span>
+      </div>
+
+      {cases.length > 1 && (
+        <div className="flex flex-wrap gap-1.5">
+          {cases.map((c, i) => (
+            <button
+              key={c.caseNo}
+              type="button"
+              onClick={() => setCaseIdx(i)}
+              className={cn(
+                'rounded-md border px-2 py-1 text-xs transition-colors',
+                i === caseIdx ? 'border-primary bg-primary/10 font-medium text-primary' : 'text-muted-foreground hover:bg-muted',
+              )}
+            >
+              测试点 {c.caseNo} · {verdictText(c.verdict)}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-center gap-1 border-b pb-1">
+        {tabs.map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            onClick={() => setTab(t.key)}
+            className={cn(
+              'rounded-md px-2 py-1 text-xs transition-colors',
+              tab === t.key ? 'bg-muted font-medium text-foreground' : 'text-muted-foreground hover:text-foreground',
+            )}
+          >
+            {t.label}
+          </button>
+        ))}
+        {tab === 'code' && active.content && (
+          <button
+            type="button"
+            className="ml-auto inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary"
+            onClick={() => {
+              void navigator.clipboard?.writeText(active.content).then(() => toast.success('代码已复制'))
+            }}
+          >
+            <ClipboardIcon className="size-3.5" /> 复制
+          </button>
+        )}
+      </div>
+
+      <pre
+        className={cn(
+          'max-h-[38vh] overflow-auto whitespace-pre-wrap rounded-lg border p-3 font-mono text-xs leading-relaxed',
+          !active.content && 'text-muted-foreground',
+          active.tone === 'err' && active.content && 'border-red-200 bg-red-50 text-red-700',
+          active.tone === 'ok' && active.content && 'border-emerald-200 bg-emerald-50 text-emerald-700',
+          active.tone === undefined && 'bg-muted/40',
+        )}
+      >
+        {active.content || active.empty}
+      </pre>
     </div>
   )
 }
