@@ -147,8 +147,10 @@ function TrainingFlow({ sid, tid, data, urlNo }: {
                             onClick={() => go(idx)}
                             className={cn(
                               'flex h-7 w-full items-center justify-center rounded border text-xs font-medium transition-colors',
-                              it.solved && obj
+                              // 绿=已通过（任何题型；通过后再次答错/提交错误保持绿，solved 不回退）
+                              it.solved
                                 ? 'border-green-400 bg-green-50 text-green-700 hover:bg-green-100'
+                                // 红=客观题达上限仍未通过
                                 : !it.solved && it.locked && obj
                                   ? 'border-red-300 bg-red-50 text-red-600 hover:bg-red-100'
                                   : 'border-border bg-background hover:border-primary hover:bg-slate-50',
@@ -285,7 +287,7 @@ function TrainingFlow({ sid, tid, data, urlNo }: {
                           className={cn(
                             'flex aspect-square items-center justify-center rounded-md text-xs font-semibold transition-transform hover:scale-110',
                             idx === activeIdx && 'ring-2 ring-primary ring-offset-1',
-                            it.solved && obj ? 'bg-emerald-500 text-white'
+                            it.solved ? 'bg-emerald-500 text-white'
                               : !it.solved && it.locked && obj ? 'bg-red-500 text-white'
                                 : !obj ? 'border border-dashed bg-muted/40 text-muted-foreground'
                                   : 'bg-muted text-muted-foreground hover:bg-muted/70',

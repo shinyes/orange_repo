@@ -12,8 +12,6 @@ import {
   Loader2Icon,
   PlayIcon,
   SendIcon,
-  CheckCircle2Icon,
-  XCircleIcon,
 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 
@@ -55,8 +53,7 @@ export function TrainingProgrammingCard({ problemId, trainingId, solved, onSolve
   const [consoleText, setConsoleText] = useState('控制台已就绪')
   const [consoleVariant, setConsoleVariant] = useState<'default' | 'error' | 'success'>('default')
   const [busy, setBusy] = useState<string | null>(null) // run/test/submit
-  const [verdict, setVerdict] = useState<{ verdict: string; score: number; timeMs: number } | null>(null)
-  const [showCustomInput, setShowCustomInput] = useState(false)
+    const [showCustomInput, setShowCustomInput] = useState(false)
   const [customInput, setCustomInput] = useState('')
   const [historyOpen, setHistoryOpen] = useState(false)
   const codeRef = useRef(code)
@@ -129,8 +126,7 @@ export function TrainingProgrammingCard({ problemId, trainingId, solved, onSolve
       return
     }
     setBusy(kind)
-    setVerdict(null)
-    try {
+      try {
       let submissionId: number
       if (kind === 'run') {
         const r = await api.ojRun(problemId, lang, codeRef.current, inputOverride ?? customInput)
@@ -165,8 +161,7 @@ export function TrainingProgrammingCard({ problemId, trainingId, solved, onSolve
         lines.push(`运行完成（耗时 ${snap.timeMs} ms）`)
       }
       setConsoleText(lines.join('\n') || '（无输出）')
-      setVerdict({ verdict: snap.verdict, score: snap.score, timeMs: snap.timeMs })
-      if (kind === 'submit' && snap.verdict === 'AC' && !solved) {
+          if (kind === 'submit' && snap.verdict === 'AC' && !solved) {
         onSolved()
         toast.success('提交通过，本题已标记完成')
       } else if (snap.verdict !== 'AC' && kind !== 'run') {
@@ -180,8 +175,6 @@ export function TrainingProgrammingCard({ problemId, trainingId, solved, onSolve
       setBusy(null)
     }
   }
-
-  const isAccepted = verdict?.verdict === 'AC'
 
   return (
     <div>
@@ -210,14 +203,7 @@ export function TrainingProgrammingCard({ problemId, trainingId, solved, onSolve
         </Button>
       </div>
 
-      {/* 判定横幅 */}
-      {verdict && (
-        <div className={cn('mb-2 flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium', isAccepted ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-red-200 bg-red-50 text-red-700')}>
-          {isAccepted ? <CheckCircle2Icon className="size-4" /> : <XCircleIcon className="size-4" />}
-          <span>{verdictText(verdict.verdict)}（得分 {verdict.score}）</span>
-          <span className="text-xs font-normal opacity-70">耗时 {verdict.timeMs} ms</span>
-        </div>
-      )}
+      {/* 判定结果不单独横幅展示（避免编辑器上方遮挡）：控制台文本 + 左侧导航绿/红格已反馈 */}
 
       {/* 编辑器 */}
       <div className="h-64 overflow-hidden rounded-lg border bg-background md:h-80">
