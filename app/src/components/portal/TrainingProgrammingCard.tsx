@@ -212,12 +212,23 @@ export function TrainingProgrammingCard({ problemId, trainingId, solved, onSolve
         <CodeEditor language={lang} value={code} onChange={handleCodeChange} />
       </div>
 
-      {/* 控制台 */}
+      {/* 控制台（紧凑限高：默认两行高，内容多内部滚动） */}
       <div className="mt-2">
-        <div className="mb-1 text-[11px] font-medium text-muted-foreground">控制台输出</div>
+        <div className="mb-1 flex items-center gap-2 text-[11px] font-medium text-muted-foreground">
+          <span>控制台输出</span>
+          {consoleText !== '控制台已就绪' && (
+            <button
+              type="button"
+              className="ml-auto underline-offset-2 hover:underline"
+              onClick={() => { setConsoleText('控制台已就绪'); setConsoleVariant('default') }}
+            >
+              清空
+            </button>
+          )}
+        </div>
         <pre
           className={cn(
-            'min-h-[70px] overflow-auto whitespace-pre-wrap rounded-lg border bg-muted/40 p-2.5 font-mono text-xs',
+            'max-h-24 min-h-[44px] overflow-auto whitespace-pre-wrap rounded-lg border bg-muted/40 p-2 font-mono text-xs leading-relaxed',
             consoleVariant === 'error' && 'border-red-200 bg-red-50 text-red-700',
             consoleVariant === 'success' && 'border-emerald-200 bg-emerald-50 text-emerald-700',
           )}
