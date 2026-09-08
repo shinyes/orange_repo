@@ -176,11 +176,17 @@ func (s *Server) handlePortalTraining(c *fiber.Ctx) error {
 		cv := chapterView{ID: ch.ID, Title: ch.Title, Items: []itemView{}}
 		for _, it := range ch.Items {
 			iv := itemView{SpaceTrainingItem: it}
-			if it.ProblemType != "" && it.ProblemType != "programming" {
-				st, err := s.QS.GetTrainingAttempt(tid, user.ID, it.ProblemID)
-				if err == nil && st != nil {
-					iv.Solved = st.Solved
-					iv.Attempts = st.Attempts
+			if it.ProblemType == "" {
+				cv.Items = append(cv.Items, iv)
+				continue
+			}
+			// 客观题与编程题都读尝试状态：编程 AC 由 poll 写 attempts.solved=1，
+			// detail 须回传 solved=true 供导航格子变绿/标题“已通过”
+			st, err := s.QS.GetTrainingAttempt(tid, user.ID, it.ProblemID)
+			if err == nil && st != nil {
+				iv.Solved = st.Solved
+				iv.Attempts = st.Attempts
+				if it.ProblemType != "programming" {
 					max := tr.MaxAttempts
 					iv.Locked = st.Solved || (max > 0 && st.Attempts >= max)
 					// 已通过/达限 → 附正确答案供回顾标色
