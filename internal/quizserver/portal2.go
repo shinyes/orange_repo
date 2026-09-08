@@ -415,66 +415,97 @@ func (s *Server) pickQuizProblem(user *accounts.User, qid int64) (*quizPickResul
 	if err != nil {
 		return nil, err
 	}
+	// 每轮题数（0=不限制：整范围为一轮）
+	var roundSize int
+	_ = s.QS.Repo.DB.QueryRow(`SELECT COALESCE(round_size,0) FROM space_quizzes WHERE id=?`, qid).Scan(&roundSize)
+	if roundSize < 0 {
+		roundSize = 0
+	}
+	// coveredOf = 跨批已抽出集合（历史 covered ∪ 本批 drawn）
+	coveredOf := func() map[int64]bool {
+		m := map[int64]bool{}
+		for _, x := range ss.Covered {
+			m[x] = true
+		}
+		for _, x := range ss.Drawn {
+			m[x] = true
+		}
+		return m
+	}
+	allCovered := func() bool {
+		m := coveredOf()
+		for _, id := range ids {
+			if !m[id] {
+				return false
+			}
+		}
+		return true
+	}
+	// 尝试开新批（把本批已抽并入 covered；保留错题袋），至多重试 3 次后兜底 done
 	newBatch := false
-	drawn := ss.Drawn
-	// 候选 = 范围中本批未抽的题
-	candidates := make([]int64, 0, len(ids))
-	for _, id := range ids {
-		if !quizstore.ContainsInt64(drawn, id) {
-			candidates = append(candidates, id)
+	for attempt := 0; attempt < 3; attempt++ {
+		drawn := ss.Drawn
+		// 候选 = 范围中本批未抽的题
+		candidates := make([]int64, 0, len(ids))
+		for _, id := range ids {
+			if !quizstore.ContainsInt64(drawn, id) {
+				candidates = append(candidates, id)
+			}
 		}
-	}
-	if len(candidates) == 0 {
-		// 本批抽完
-		if len(ss.Wrong) > 0 {
-			// 有错题：开新批（错题优先复习）
-			ss.BatchNo++
-			drawn = []int64{}
-			candidates = ids
-			newBatch = true
-		} else {
-			// 全批刷完且无错 → 完成
-			return &quizPickResult{Done: true, BatchNo: ss.BatchNo}, nil
+		batchFull := roundSize > 0 && len(drawn) >= roundSize
+		if len(candidates) == 0 || batchFull {
+			// 本批结束（抽满每轮题数 / 本批池空）
+			ss.Covered = append(ss.Covered, drawn...)
+			ss.Drawn = []int64{}
+			needMore := len(ss.Wrong) > 0 || !allCovered()
+			if needMore {
+				ss.BatchNo++
+				newBatch = true
+				continue
+			}
+			// 全范围已刷且无错 → 完成
+			return &quizPickResult{Done: true, BatchNo: ss.BatchNo, WrongCnt: len(ss.Wrong)}, nil
 		}
-	}
-	// 分组加权：错题（本批未抽的）> 未通过 > 其余
-	var wrongCand, freshCand, restCand []int64
-	for _, id := range candidates {
-		var u string
-		_ = s.QS.Repo.DB.QueryRow(`SELECT uuid FROM problems WHERE id=?`, id).Scan(&u)
+		// 分组加权：错题（本批未抽的）> 未通过 > 其余
+		var wrongCand, freshCand, restCand []int64
+		for _, id := range candidates {
+			var u string
+			_ = s.QS.Repo.DB.QueryRow(`SELECT uuid FROM problems WHERE id=?`, id).Scan(&u)
+			switch {
+			case quizstore.ContainsInt64(ss.Wrong, id):
+				wrongCand = append(wrongCand, id)
+			case u != "" && solved[u]:
+				restCand = append(restCand, id)
+			default:
+				freshCand = append(freshCand, id)
+			}
+		}
+		var pool []int64
 		switch {
-		case quizstore.ContainsInt64(ss.Wrong, id):
-			wrongCand = append(wrongCand, id)
-		case u != "" && solved[u]:
-			restCand = append(restCand, id)
+		case len(wrongCand) > 0:
+			pool = wrongCand
+		case len(freshCand) > 0:
+			pool = freshCand
 		default:
-			freshCand = append(freshCand, id)
+			pool = restCand
 		}
+		if len(pool) == 0 {
+			// 理论不可达（candidates 非空），兜底全候选
+			pool = candidates
+		}
+		pick := pool[randIntn(len(pool))]
+		// 入批（本批已抽）
+		ss.Drawn = append(drawn, pick)
+		if err := s.QS.SaveQuizSession(user.ID, qid, ss); err != nil {
+			return nil, err
+		}
+		problem, err := s.QS.Repo.GetOJProblem(pick)
+		if err != nil {
+			return nil, err
+		}
+		return &quizPickResult{Problem: problem, BatchNo: ss.BatchNo, NewBatch: newBatch, WrongCnt: len(ss.Wrong)}, nil
 	}
-	var pool []int64
-	switch {
-	case len(wrongCand) > 0:
-		pool = wrongCand
-	case len(freshCand) > 0:
-		pool = freshCand
-	default:
-		pool = restCand
-	}
-	if len(pool) == 0 {
-		// 理论不可达（candidates 非空），兜底全候选
-		pool = candidates
-	}
-	pick := pool[randIntn(len(pool))]
-	// 入批（本批已抽）
-	ss.Drawn = append(drawn, pick)
-	if err := s.QS.SaveQuizSession(user.ID, qid, ss); err != nil {
-		return nil, err
-	}
-	problem, err := s.QS.Repo.GetOJProblem(pick)
-	if err != nil {
-		return nil, err
-	}
-	return &quizPickResult{Problem: problem, BatchNo: ss.BatchNo, NewBatch: newBatch, WrongCnt: len(ss.Wrong)}, nil
+	return &quizPickResult{Done: true, BatchNo: ss.BatchNo}, nil
 }
 
 // handlePortalQuizProblem GET /api/portal/quiz/:qid/problem

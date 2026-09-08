@@ -668,26 +668,41 @@ type SpaceQuiz struct {
 	SourceType   string   `json:"sourceType"` // tags | repo
 	RepoKind     string   `json:"repoKind,omitempty"`
 	RepoID       int64    `json:"repoId,omitempty"`
+	RoundSize    int      `json:"roundSize"` // 每轮题数（0=不限制：整范围一轮）
 	ProblemCount int      `json:"problemCount"`
 }
 
-// CreateSpaceQuiz 建刷题项目。
-func (s *Store) CreateSpaceQuiz(spaceID int64, title string, tags []string, sourceType, repoKind string, repoID int64) (int64, error) {
+// CreateSpaceQuiz 建刷题项目（roundSize：每轮题数，0=不限制）。
+func (s *Store) CreateSpaceQuiz(spaceID int64, title string, tags []string, sourceType, repoKind string, repoID int64, roundSize int) (int64, error) {
 	u, err := NewUUIDv7()
 	if err != nil {
 		return 0, err
 	}
-	res, err := s.DB.Exec(`INSERT INTO space_quizzes(uuid,space_id,title,tags_json,source_type,repo_kind,repo_id)
-		VALUES(?,?,?,?,?,?,?)`, u, spaceID, title, encodeTags(tags), sourceType, repoKind, repoID)
+	res, err := s.DB.Exec(`INSERT INTO space_quizzes(uuid,space_id,title,tags_json,source_type,repo_kind,repo_id,round_size)
+		VALUES(?,?,?,?,?,?,?,?)`, u, spaceID, title, encodeTags(tags), sourceType, repoKind, repoID, roundSize)
 	if err != nil {
 		return 0, err
 	}
 	return res.LastInsertId()
 }
 
+// UpdateSpaceQuiz 更新刷题项目标题/范围标签/每轮题数（内容结构由编辑对话框完整回传）。
+func (s *Store) UpdateSpaceQuiz(id int64, title string, tags []string, roundSize int) error {
+	res, err := s.DB.Exec(`UPDATE space_quizzes SET title=?,tags_json=?,round_size=? WHERE id=?`,
+		title, encodeTags(tags), roundSize, id)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // ListSpaceQuizzes 空间刷题项目列表。
 func (s *Store) ListSpaceQuizzes(spaceID int64) ([]SpaceQuiz, error) {
-	rows, err := s.DB.Query(`SELECT id,uuid,space_id,title,tags_json,source_type,repo_kind,repo_id
+	rows, err := s.DB.Query(`SELECT id,uuid,space_id,title,tags_json,source_type,repo_kind,repo_id,round_size
 		FROM space_quizzes WHERE space_id=? ORDER BY id`, spaceID)
 	if err != nil {
 		return nil, err
@@ -697,7 +712,7 @@ func (s *Store) ListSpaceQuizzes(spaceID int64) ([]SpaceQuiz, error) {
 	for rows.Next() {
 		var q SpaceQuiz
 		var tags string
-		if err := rows.Scan(&q.ID, &q.UUID, &q.SpaceID, &q.Title, &tags, &q.SourceType, &q.RepoKind, &q.RepoID); err != nil {
+		if err := rows.Scan(&q.ID, &q.UUID, &q.SpaceID, &q.Title, &tags, &q.SourceType, &q.RepoKind, &q.RepoID, &q.RoundSize); err != nil {
 			return nil, err
 		}
 		q.Tags = decodeTags(tags)

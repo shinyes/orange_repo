@@ -87,6 +87,7 @@ type SpaceQuizBrief struct {
 	SourceType   string   `json:"sourceType"`
 	RepoKind     string   `json:"repoKind,omitempty"`
 	RepoID       int64    `json:"repoId,omitempty"`
+	RoundSize    int      `json:"roundSize"`
 	ProblemCount int      `json:"problemCount"`
 }
 
@@ -339,7 +340,7 @@ func (r *RepoReader) GetSpacePracticeBrief(practiceID, userID int64) (*SpacePrac
 
 // ListSpaceQuizzesBrief 空间刷题项目列表（member 仅见已分配的）。
 func (r *RepoReader) ListSpaceQuizzesBrief(spaceID, userID int64) ([]SpaceQuizBrief, error) {
-	rows, err := r.DB.Query(`SELECT id,uuid,space_id,title,tags_json,source_type,repo_kind,repo_id
+	rows, err := r.DB.Query(`SELECT id,uuid,space_id,title,tags_json,source_type,repo_kind,repo_id,round_size
 		FROM space_quizzes WHERE space_id=?`+visibleClause("space_quiz_visible", "quiz", "space_quizzes", userID)+` ORDER BY id`, spaceID)
 	if err != nil {
 		return nil, err
@@ -349,7 +350,7 @@ func (r *RepoReader) ListSpaceQuizzesBrief(spaceID, userID int64) ([]SpaceQuizBr
 	for rows.Next() {
 		var b SpaceQuizBrief
 		var tags string
-		if err := rows.Scan(&b.ID, &b.UUID, &b.SpaceID, &b.Title, &tags, &b.SourceType, &b.RepoKind, &b.RepoID); err != nil {
+		if err := rows.Scan(&b.ID, &b.UUID, &b.SpaceID, &b.Title, &tags, &b.SourceType, &b.RepoKind, &b.RepoID, &b.RoundSize); err != nil {
 			return nil, err
 		}
 		b.Tags = decodeRepoTags(tags)

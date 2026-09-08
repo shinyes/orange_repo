@@ -1,18 +1,18 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { BookOpenCheckIcon, BookOpenIcon, EyeIcon, PlusIcon, Trash2Icon } from 'lucide-react'
+import { BookOpenCheckIcon, BookOpenIcon, EyeIcon, PencilIcon, PlusIcon, Trash2Icon } from 'lucide-react'
 import { toast } from 'sonner'
 
 import type { QuizBrief } from '@/api/types'
 import { api } from '@/api'
 import { Button } from '@/components/ui/button'
-import { NewQuizDialog, VisibleUsersDialog } from '@/components/portal/space-item-dialogs'
+import { NewQuizDialog, QuizEditDialog, VisibleUsersDialog } from '@/components/portal/space-item-dialogs'
 import { useSpaceHome } from './useSpaceHome'
 import { usePortalCtx } from './SpaceShell'
 import { usePortalSession } from './portal-context'
 
 // 空间刷题项目列表（空间壳内 tab 页），点击进入独立刷题页。
-// 管理员：顶部可新建刷题项目、卡片眼睛分配可见成员、删除。
+// 管理员：顶部新建；卡片右上常显 编辑/可见成员/删除。
 export function QuizList() {
   const { space } = usePortalCtx()
   const home = useSpaceHome(space)
@@ -20,6 +20,7 @@ export function QuizList() {
   const { user } = usePortalSession()
   const canEdit = user.role !== 'member'
   const [creating, setCreating] = useState(false)
+  const [editing, setEditing] = useState<QuizBrief | null>(null)
   const [visibleFor, setVisibleFor] = useState<QuizBrief | null>(null)
 
   async function remove(qz: QuizBrief) {
@@ -68,6 +69,7 @@ export function QuizList() {
             q={qz}
             spaceId={space.id}
             canEdit={canEdit}
+            onEdit={() => setEditing(qz)}
             onVisible={() => setVisibleFor(qz)}
             onRemove={() => void remove(qz)}
           />
@@ -80,6 +82,16 @@ export function QuizList() {
       )}
 
       <NewQuizDialog spaceId={space.id} open={creating} onOpenChange={setCreating} onCreated={() => void home.refetch()} />
+
+      {editing && (
+        <QuizEditDialog
+          spaceId={space.id}
+          quiz={editing}
+          open
+          onOpenChange={() => setEditing(null)}
+          onSaved={() => void home.refetch()}
+        />
+      )}
 
       {visibleFor && (
         <VisibleUsersDialog
@@ -96,22 +108,31 @@ export function QuizList() {
   )
 }
 
-function QuizCard({ q, spaceId, canEdit, onVisible, onRemove }: {
+function QuizCard({ q, spaceId, canEdit, onEdit, onVisible, onRemove }: {
   q: QuizBrief
   spaceId: number
   canEdit: boolean
+  onEdit: () => void
   onVisible: () => void
   onRemove: () => void
 }) {
   return (
-    <div className="group relative rounded-2xl border bg-card transition-colors hover:border-primary/50">
+    <div className="relative rounded-2xl border bg-card transition-colors hover:border-primary/50">
       {canEdit && (
         <div className="absolute top-2 right-2 z-10 flex items-center gap-1">
           <button
             type="button"
-            title="设置可见成员（默认无成员可见）"
+            title="编辑项目（每轮题数/范围/可见成员）"
+            onClick={onEdit}
+            className="flex size-7 items-center justify-center rounded-md border bg-background text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary"
+          >
+            <PencilIcon className="size-3.5" />
+          </button>
+          <button
+            type="button"
+            title="设置可见成员"
             onClick={onVisible}
-            className="flex size-7 items-center justify-center rounded-md border bg-background text-muted-foreground opacity-0 transition-opacity hover:border-primary/40 hover:text-primary focus:opacity-100 group-hover:opacity-100"
+            className="flex size-7 items-center justify-center rounded-md border bg-background text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary"
           >
             <EyeIcon className="size-3.5" />
           </button>
@@ -119,22 +140,20 @@ function QuizCard({ q, spaceId, canEdit, onVisible, onRemove }: {
             type="button"
             title="删除刷题项目"
             onClick={onRemove}
-            className="flex size-7 items-center justify-center rounded-md border bg-background text-muted-foreground opacity-0 transition-opacity hover:border-red-400/40 hover:text-red-500 focus:opacity-100 group-hover:opacity-100"
+            className="flex size-7 items-center justify-center rounded-md border bg-background text-muted-foreground transition-colors hover:border-red-400/40 hover:text-red-500"
           >
             <Trash2Icon className="size-3.5" />
           </button>
         </div>
       )}
-      <Link
-        to={`/s/${spaceId}/quiz/${q.id}`}
-        className="flex w-full flex-col gap-1.5 rounded-2xl p-4"
-      >
+      <Link to={`/s/${spaceId}/quiz/${q.id}`} className="flex w-full flex-col gap-1.5 rounded-2xl p-4 pr-28">
         <span className="flex items-center gap-2 font-medium">
           <BookOpenIcon className="size-4 shrink-0 text-primary" />
-          <span className="min-w-0 truncate pr-16">{q.title}</span>
+          <span className="min-w-0 truncate">{q.title}</span>
         </span>
         <span className="mt-1 text-xs text-muted-foreground">
           {q.sourceType === 'repo' ? '题单范围 · 循环复习' : '标签范围 · 循环复习'}
+          {q.roundSize ? ` · 每轮 ${q.roundSize} 题` : ''}
         </span>
       </Link>
     </div>

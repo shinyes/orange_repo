@@ -267,7 +267,9 @@ export const adminApi = {
     req<void>(`/api/space/practices/${pid}/items/order`, json({ method: 'PUT', body: JSON.stringify({ itemIds }) })),
   deleteSpaceItem: (itemId: number) => req<void>(`/api/space/space-items/${itemId}`, { method: 'DELETE' }),
   spaceQuizzes: (spaceId: number) => req<{ quizzes: SpaceQuiz[] }>(`/api/space/${spaceId}/quizzes`),
-  createSpaceQuiz: (spaceId: number, body: { title: string; tags?: string[]; sourceType: string; repoKind?: string; repoId?: number }) =>
+  createSpaceQuiz: (spaceId: number, body: { title: string; tags?: string[]; sourceType: string; repoKind?: string; repoId?: number; roundSize?: number }) =>
     req<{ id: number }>(`/api/space/${spaceId}/quizzes`, json({ method: 'POST', body: JSON.stringify(body) })),
+  updateSpaceQuiz: (spaceId: number, quizId: number, body: { title: string; tags?: string[]; roundSize?: number }) =>
+    req<void>(`/api/space/${spaceId}/quizzes/${quizId}`, json({ method: 'PUT', body: JSON.stringify(body) })),
   deleteSpaceQuiz: (spaceId: number, quizId: number) => req<void>(`/api/space/${spaceId}/quizzes/${quizId}`, { method: 'DELETE' }),
 }

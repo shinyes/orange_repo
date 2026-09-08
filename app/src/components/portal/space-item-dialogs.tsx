@@ -2,9 +2,11 @@
 // 与 SpaceAdmin（管理端）功能对齐的轻量版：标题/描述/训练限次；可见成员覆盖式。
 import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { EyeIcon } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { api } from '@/api'
+import type { QuizBrief } from '@/api/types'
 import { Button } from '@/components/ui/button'
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
@@ -158,16 +160,22 @@ export function NewQuizDialog(props: {
 }) {
   const [title, setTitle] = useState('')
   const [tags, setTags] = useState('')
+  const [roundSize, setRoundSize] = useState('')
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
-    if (props.open) { setTitle(''); setTags('') }
+    if (props.open) { setTitle(''); setTags(''); setRoundSize('') }
   }, [props.open])
 
   async function create() {
     const t = title.trim()
     if (!t) {
       toast.error('请输入刷题项目标题')
+      return
+    }
+    const rs = roundSize.trim() === '' ? 0 : Number(roundSize)
+    if (Number.isNaN(rs) || rs < 0 || rs > 200) {
+      toast.error('每轮题数须为 1~200 的整数（留空=不限制）')
       return
     }
     setBusy(true)
@@ -177,8 +185,9 @@ export function NewQuizDialog(props: {
         title: t,
         tags: tagList.length > 0 ? tagList : undefined,
         sourceType: 'tags',
+        roundSize: rs,
       })
-      toast.success('刷题项目已创建（默认无成员可见，可点眼睛按钮分配）')
+      toast.success(rs > 0 ? `刷题项目已创建（每轮 ${rs} 题，默认无成员可见，可点眼睛分配）` : '刷题项目已创建（默认无成员可见，可点眼睛分配）')
       props.onCreated()
       props.onOpenChange(false)
     } catch (e) {
@@ -206,6 +215,17 @@ export function NewQuizDialog(props: {
             <Label>范围标签（可选，逗号分隔）</Label>
             <Input value={tags} onChange={(e) => setTags(e.target.value)} placeholder="如：语法基础, 循环 —— 留空=域内全部客观题" />
           </div>
+          <div className="space-y-1.5">
+            <Label>每轮题目数量（留空=不限，整范围为一轮）</Label>
+            <Input
+              type="number"
+              min={1}
+              max={200}
+              value={roundSize}
+              onChange={(e) => setRoundSize(e.target.value)}
+              placeholder="如：10 —— 每轮最多抽 10 题，答完开下一轮"
+            />
+          </div>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => props.onOpenChange(false)}>取消</Button>
@@ -213,6 +233,105 @@ export function NewQuizDialog(props: {
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  )
+}
+
+// ---------- 编辑刷题项目（标题/范围标签/每轮题数 + 可见成员） ----------
+
+export function QuizEditDialog(props: {
+  spaceId: number
+  quiz: QuizBrief
+  open: boolean
+  onOpenChange: (v: boolean) => void
+  onSaved: () => void
+}) {
+  const [title, setTitle] = useState(props.quiz.title)
+  const [tags, setTags] = useState((props.quiz.tags ?? []).join(', '))
+  const [roundSize, setRoundSize] = useState(String(props.quiz.roundSize ?? 0))
+  const [busy, setBusy] = useState(false)
+  const [showVisible, setShowVisible] = useState(false)
+
+  useEffect(() => {
+    if (props.open) {
+      setTitle(props.quiz.title)
+      setTags((props.quiz.tags ?? []).join(', '))
+      setRoundSize(String(props.quiz.roundSize ?? 0))
+      setShowVisible(false)
+    }
+  }, [props.open, props.quiz])
+
+  async function save() {
+    const t = title.trim()
+    if (!t) {
+      toast.error('请输入刷题项目标题')
+      return
+    }
+    const rs = roundSize.trim() === '' ? 0 : Number(roundSize)
+    if (Number.isNaN(rs) || rs < 0 || rs > 200) {
+      toast.error('每轮题数须为 1~200 的整数（0=不限制）')
+      return
+    }
+    setBusy(true)
+    try {
+      const tagList = tags.split(/[,，\s]+/).map((x) => x.trim()).filter(Boolean)
+      await api.updateSpaceQuiz(props.spaceId, props.quiz.id, {
+        title: t,
+        tags: tagList,
+        roundSize: rs,
+      })
+      toast.success(rs > 0 ? '已保存（每轮 ' + rs + ' 题）' : '已保存（整范围一轮）')
+      props.onSaved()
+      props.onOpenChange(false)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : '保存失败')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <>
+      <Dialog open={props.open && !showVisible} onOpenChange={(v) => !v && props.onOpenChange(false)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>编辑刷题项目 · {props.quiz.title}</DialogTitle>
+            <DialogDescription>修改标题/范围标签与每轮题数；可见成员可在下方单独设置。</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label>项目标题</Label>
+              <Input value={title} onChange={(e) => setTitle(e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>范围标签（可选，逗号分隔）</Label>
+              <Input value={tags} onChange={(e) => setTags(e.target.value)} placeholder="留空=域内全部客观题" />
+            </div>
+            <div className="space-y-1.5">
+              <Label>每轮题目数量（0=不限，整范围为一轮）</Label>
+              <Input type="number" min={0} max={200} value={roundSize} onChange={(e) => setRoundSize(e.target.value)} placeholder="如：10" />
+            </div>
+            <Button variant="outline" size="sm" onClick={() => setShowVisible(true)}>
+              <EyeIcon className="size-3.5" /> 设置可见成员…
+            </Button>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => props.onOpenChange(false)}>取消</Button>
+            <Button onClick={() => void save()} disabled={busy}>{busy ? '保存中…' : '保存'}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      {showVisible && (
+        <VisibleUsersDialog
+          spaceId={props.spaceId}
+          kind="quiz"
+          itemId={props.quiz.id}
+          title={props.quiz.title}
+          open
+          onClose={() => setShowVisible(false)}
+          onSaved={() => props.onSaved()}
+        />
+      )}
+    </>
   )
 }
 

@@ -791,6 +791,7 @@ func (s *Server) handleCreateSpaceQuiz(c *fiber.Ctx) error {
 		SourceType string   `json:"sourceType"`
 		RepoKind   string   `json:"repoKind"`
 		RepoID     int64    `json:"repoId"`
+		RoundSize  int      `json:"roundSize"` // 每轮题数（0/负=整范围一轮）
 	}
 	if err := c.BodyParser(&req); err != nil {
 		return respondError(c, fiber.StatusBadRequest, "invalid request")
@@ -801,11 +802,66 @@ func (s *Server) handleCreateSpaceQuiz(c *fiber.Ctx) error {
 	if req.SourceType != "tags" && req.SourceType != "repo" {
 		return respondError(c, fiber.StatusBadRequest, "sourceType 须为 tags 或 repo")
 	}
-	id, err := s.Store.CreateSpaceQuiz(spaceID, req.Title, req.Tags, req.SourceType, req.RepoKind, req.RepoID)
+	if req.RoundSize < 0 || req.RoundSize > 200 {
+		return respondError(c, fiber.StatusBadRequest, "每轮题数须在 1~200（0=不限）")
+	}
+	id, err := s.Store.CreateSpaceQuiz(spaceID, req.Title, req.Tags, req.SourceType, req.RepoKind, req.RepoID, req.RoundSize)
 	if err != nil {
 		return err
 	}
 	return respondData(c, fiber.StatusCreated, fiber.Map{"id": id})
+}
+
+// handleUpdateSpaceQuiz PUT /api/space/:id/quizzes/:qid
+// {title, tags?, roundSize}——编辑标题/范围标签/每轮题数。
+func (s *Server) handleUpdateSpaceQuiz(c *fiber.Ctx) error {
+	spaceID, err := s.spaceParam(c)
+	if err != nil {
+		return respondError(c, fiber.StatusBadRequest, "invalid space id")
+	}
+	qid, err := paramID(c, "qid")
+	if err != nil {
+		return respondError(c, fiber.StatusBadRequest, "invalid quiz id")
+	}
+	user := currentUser(c)
+	if err := s.requireSpaceAccess(c, user, spaceID); err != nil {
+		return err
+	}
+	as, err := s.Store.SpaceIDOfQuiz(qid)
+	if err != nil {
+		if err == store.ErrNotFound {
+			return respondError(c, fiber.StatusNotFound, "刷题项目不存在")
+		}
+		return err
+	}
+	if err := s.requireResourceInSpace(c, spaceID, as); err != nil {
+		return err
+	}
+	var req struct {
+		Title     string   `json:"title"`
+		Tags      []string `json:"tags"`
+		RoundSize *int     `json:"roundSize"`
+	}
+	if err := c.BodyParser(&req); err != nil {
+		return respondError(c, fiber.StatusBadRequest, "invalid request")
+	}
+	if strings.TrimSpace(req.Title) == "" {
+		return respondError(c, fiber.StatusBadRequest, "标题不能为空")
+	}
+	roundSize := 0
+	if req.RoundSize != nil {
+		roundSize = *req.RoundSize
+	}
+	if roundSize < 0 || roundSize > 200 {
+		return respondError(c, fiber.StatusBadRequest, "每轮题数须在 1~200（0=不限）")
+	}
+	if err := s.Store.UpdateSpaceQuiz(qid, req.Title, req.Tags, roundSize); err != nil {
+		if err == store.ErrNotFound {
+			return respondError(c, fiber.StatusNotFound, "刷题项目不存在")
+		}
+		return err
+	}
+	return c.SendStatus(fiber.StatusNoContent)
 }
 
 // handleDeleteSpaceQuiz DELETE /api/space/:id/quizzes/:qid

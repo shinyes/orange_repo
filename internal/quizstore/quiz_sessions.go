@@ -15,16 +15,17 @@ type QuizSession struct {
 	BatchNo int     `json:"batchNo"`
 	Wrong   []int64 `json:"wrong"`
 	Drawn   []int64 `json:"drawn"`
+	Covered []int64 `json:"covered"` // 跨批累计抽出的题目（每轮题数模式下判“范围全部刷过”）
 }
 
 // GetQuizSession 读会话（无记录返回零值）。
 func (s *Store) GetQuizSession(userID, quizID int64) (*QuizSession, error) {
-	var wrongJSON, drawnJSON string
+	var wrongJSON, drawnJSON, coveredJSON string
 	var batch int
-	err := s.DB.QueryRow(`SELECT batch_no,wrong_json,drawn_json FROM quiz_sessions
-		WHERE user_id=? AND quiz_id=?`, userID, quizID).Scan(&batch, &wrongJSON, &drawnJSON)
+	err := s.DB.QueryRow(`SELECT batch_no,wrong_json,drawn_json,COALESCE(covered_json,'[]') FROM quiz_sessions
+		WHERE user_id=? AND quiz_id=?`, userID, quizID).Scan(&batch, &wrongJSON, &drawnJSON, &coveredJSON)
 	if errors.Is(err, sql.ErrNoRows) {
-		return &QuizSession{BatchNo: 1, Wrong: []int64{}, Drawn: []int64{}}, nil
+		return &QuizSession{BatchNo: 1, Wrong: []int64{}, Drawn: []int64{}, Covered: []int64{}}, nil
 	}
 	if err != nil {
 		return nil, err
@@ -32,24 +33,30 @@ func (s *Store) GetQuizSession(userID, quizID int64) (*QuizSession, error) {
 	ss := &QuizSession{BatchNo: batch}
 	_ = json.Unmarshal([]byte(wrongJSON), &ss.Wrong)
 	_ = json.Unmarshal([]byte(drawnJSON), &ss.Drawn)
+	_ = json.Unmarshal([]byte(coveredJSON), &ss.Covered)
 	if ss.Wrong == nil {
 		ss.Wrong = []int64{}
 	}
 	if ss.Drawn == nil {
 		ss.Drawn = []int64{}
 	}
+	if ss.Covered == nil {
+		ss.Covered = []int64{}
+	}
 	return ss, nil
 }
 
-// SaveQuizSession upsert 会话（wrong/drawn 全量）。
+// SaveQuizSession upsert 会话（wrong/drawn/covered 全量）。
 func (s *Store) SaveQuizSession(userID, quizID int64, ss *QuizSession) error {
 	wrongJSON, _ := json.Marshal(ss.Wrong)
 	drawnJSON, _ := json.Marshal(ss.Drawn)
-	_, err := s.DB.Exec(`INSERT INTO quiz_sessions(user_id,quiz_id,batch_no,wrong_json,drawn_json,updated_at)
-		VALUES(?,?,?,?,?,CURRENT_TIMESTAMP)
+	coveredJSON, _ := json.Marshal(ss.Covered)
+	_, err := s.DB.Exec(`INSERT INTO quiz_sessions(user_id,quiz_id,batch_no,wrong_json,drawn_json,covered_json,updated_at)
+		VALUES(?,?,?,?,?,?,CURRENT_TIMESTAMP)
 		ON CONFLICT(user_id,quiz_id) DO UPDATE SET
 		batch_no=excluded.batch_no,wrong_json=excluded.wrong_json,drawn_json=excluded.drawn_json,
-		updated_at=CURRENT_TIMESTAMP`, userID, quizID, ss.BatchNo, string(wrongJSON), string(drawnJSON))
+		covered_json=excluded.covered_json,updated_at=CURRENT_TIMESTAMP`,
+		userID, quizID, ss.BatchNo, string(wrongJSON), string(drawnJSON), string(coveredJSON))
 	return err
 }
 

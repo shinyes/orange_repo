@@ -194,6 +194,7 @@ func (s *Store) migrate() error {
 			batch_no INTEGER NOT NULL DEFAULT 1,
 			wrong_json TEXT NOT NULL DEFAULT '[]',
 			drawn_json TEXT NOT NULL DEFAULT '[]',
+			covered_json TEXT NOT NULL DEFAULT '[]',
 			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 			PRIMARY KEY(user_id, quiz_id)
 		);`,
@@ -267,6 +268,18 @@ func (s *Store) migrate() error {
 				if _, err := s.DB.Exec(st); err != nil {
 					return fmt.Errorf("quiz migrate code_drafts ctx: %w; stmt: %s", err, st)
 				}
+			}
+		}
+	}
+	// 刷题会话跨批覆盖追踪（每轮题数 round_size>0 时需要判断「范围是否全部刷过」）
+	{
+		var c int
+		if err := s.DB.QueryRow(`SELECT COUNT(1) FROM pragma_table_info('quiz_sessions') WHERE name='covered_json'`).Scan(&c); err != nil {
+			return err
+		}
+		if c == 0 {
+			if _, err := s.DB.Exec(`ALTER TABLE quiz_sessions ADD COLUMN covered_json TEXT NOT NULL DEFAULT '[]'`); err != nil {
+				return fmt.Errorf("quiz migrate add quiz_sessions.covered_json: %w", err)
 			}
 		}
 	}

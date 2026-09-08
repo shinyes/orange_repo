@@ -74,7 +74,7 @@ func newPortalEnv(t *testing.T) (*fiber.App, map[string]int64, int64, string) {
 	}
 	ids["practice"] = prID
 	_ = main.AddSpacePracticeItems(prID, []int64{ids["p1"], ids["p2"]})
-	qID, err := main.CreateSpaceQuiz(spaceID, "每日刷题", nil, "tags", "", 0)
+	qID, err := main.CreateSpaceQuiz(spaceID, "每日刷题", nil, "tags", "", 0, 0)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -329,6 +329,7 @@ func (s *Store) migrateSpaceContent() error {
 			source_type TEXT NOT NULL DEFAULT 'tags',
 			repo_kind TEXT NOT NULL DEFAULT '',
 			repo_id INTEGER NOT NULL DEFAULT 0,
+			round_size INTEGER NOT NULL DEFAULT 0,
 			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 		);`,
 		// ---------- 空间内容可见成员授权（空=默认无成员可见；管理员始终可见） ----------
@@ -355,6 +356,10 @@ func (s *Store) migrateSpaceContent() error {
 		if _, err := s.DB.Exec(stmt); err != nil {
 			return fmt.Errorf("migrate space content failed: %w; stmt: %s", err, stmt)
 		}
+	}
+	// 刷题项目每轮题数（0=不限制：整范围一轮）
+	if err := s.ensureColumn("space_quizzes", "round_size", `round_size INTEGER NOT NULL DEFAULT 0`); err != nil {
+		return err
 	}
 	return nil
 }

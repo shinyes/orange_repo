@@ -62,6 +62,8 @@ export interface QuizBrief {
   sourceType: 'tags' | 'repo'
   repoKind?: string
   repoId?: number
+  /** 每轮题数（0=不限制：整范围一轮） */
+  roundSize?: number
   problemCount: number
 }
 
