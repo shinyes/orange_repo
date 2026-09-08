@@ -178,9 +178,34 @@ func (s *Server) handleDeleteDomain(c *fiber.Ctx) error {
 		return respondError(c, fiber.StatusBadRequest, "invalid id")
 	}
 	if c.Query("deleteProblems") == "true" {
-		// 级联删除域内题目（空间经 FK 级联）
+		// 级联删除域内题目（空间经 FK 级联）；先收集 id/uuid 供刷题侧数据清理
+		rows, err := s.Store.DB.Query(`SELECT id, COALESCE(uuid,'') FROM problems WHERE domain_id=?`, id)
+		if err != nil {
+			return err
+		}
+		var pids []int64
+		var uuids []string
+		for rows.Next() {
+			var pid int64
+			var u string
+			if err := rows.Scan(&pid, &u); err != nil {
+				rows.Close()
+				return err
+			}
+			pids = append(pids, pid)
+			if u != "" {
+				uuids = append(uuids, u)
+			}
+		}
+		rows.Close()
 		if err := s.Store.DeleteDomainProblems(id); err != nil {
 			return err
+		}
+		// 附带数据全清：判题历史/进度/草稿/错题集/会话/通过记录（引用被删题）
+		if s.QuizStore != nil {
+			if err := s.QuizStore.CleanupDomainProblems(pids, uuids); err != nil {
+				return err
+			}
 		}
 	}
 	n, err := s.Store.CountDomainProblems(id)

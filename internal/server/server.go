@@ -13,6 +13,7 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/recover"
 
 	"orangeoj/internal/accounts"
+	"orangeoj/internal/quizstore"
 	"orangeoj/internal/store"
 )
 
@@ -25,6 +26,8 @@ type Server struct {
 	Accounts   *accounts.Store
 	UploadsDir string
 	WebDist    string
+	// 刷题侧数据（submissions/草稿/错题集等）清理（组合层注入；nil=跳过清理）
+	QuizStore *quizstore.Store
 
 	// 全量导入异步任务表（单进程内存态，惰性初始化，见 import_task.go）
 	importTaskMu sync.Mutex

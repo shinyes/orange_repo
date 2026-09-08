@@ -66,7 +66,7 @@ func Open(cfg Config) (*App, error) {
 		Store:    st,
 		QS:       qs,
 		Accounts: acc,
-		MainSrv:  &server.Server{Store: st, Accounts: acc, UploadsDir: uploadsDir},
+		MainSrv:  &server.Server{Store: st, Accounts: acc, UploadsDir: uploadsDir, QuizStore: qs},
 		QuizSrv:  &quizserver.Server{QS: qs, UploadsDir: uploadsDir},
 	}
 

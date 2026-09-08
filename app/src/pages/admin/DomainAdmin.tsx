@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { api, ApiError } from '@/api'
+import { api } from '@/api'
 import { useDomain } from '@/pages/admin/domain-context'
 import type { Domain } from '@/api/types'
 import { DomainBackupMenu } from '@/pages/admin/BackupMenu'
@@ -28,7 +28,6 @@ export function DomainAdmin() {
   const [creating, setCreating] = useState(false)
   const [renaming, setRenaming] = useState<Domain | null>(null)
   const [deleting, setDeleting] = useState<Domain | null>(null)
-  const [forceDelete, setForceDelete] = useState(false)
   const [adminsOf, setAdminsOf] = useState<Domain | null>(null)
 
   const invalidate = () => {
@@ -37,23 +36,17 @@ export function DomainAdmin() {
   }
 
   const del = useMutation({
-    mutationFn: ({ id, force }: { id: number; force: boolean }) => api.deleteDomain(id, force),
-    onSuccess: (_d, v) => {
-      toast.success('域已删除')
-      if (domainId === v.id) setDomainId(null)
+    // 删除域即连带删除域内题目与全部附带数据（空间/作答/判题记录等）
+    mutationFn: (id: number) => api.deleteDomain(id, true),
+    onSuccess: (_d, id) => {
+      toast.success('域及其题目数据已删除')
+      if (domainId === id) setDomainId(null)
       invalidate()
       setDeleting(null)
-      setForceDelete(false)
     },
     onError: (e) => {
-      if (e instanceof ApiError && e.status === 409) {
-        setForceDelete(true)
-        toast.error(`${e.message}。请勾选强制删除后重试。`)
-      } else {
-        toast.error(e instanceof Error ? e.message : '删除失败')
-        setDeleting(null)
-        setForceDelete(false)
-      }
+      toast.error(e instanceof Error ? e.message : '删除失败')
+      setDeleting(null)
     },
   })
 
@@ -117,7 +110,6 @@ export function DomainAdmin() {
                         className="text-destructive"
                         onClick={() => {
                           setDeleting(d)
-                          setForceDelete(false)
                         }}
                       >
                         <Trash2Icon data-icon="inline-start" /> 删除
@@ -132,7 +124,7 @@ export function DomainAdmin() {
       </div>
 
       <p className="mt-3 text-xs text-muted-foreground">
-        域内题目/标签/题册目录相互隔离。删除域将级联删除域内题目与空间（提示需强制时勾选确认）；
+        域内题目/标签/题册目录相互隔离。删除域将连带删除域内题目、空间及全部作答/判题记录（不可撤销）；
         每行「备份」图标可导出该域单文件或导入备份到该域（仓库内容与域一一对应）。
       </p>
 
@@ -142,12 +134,8 @@ export function DomainAdmin() {
       {deleting && (
         <DeleteDomainDialog
           domain={deleting}
-          force={forceDelete}
-          onClose={() => {
-            setDeleting(null)
-            setForceDelete(false)
-          }}
-          onConfirm={() => del.mutate({ id: deleting.id, force: forceDelete })}
+          onClose={() => setDeleting(null)}
+          onConfirm={() => del.mutate(deleting.id)}
         />
       )}
 
@@ -412,11 +400,10 @@ function DomainAdminsDialog(props: { domain: Domain | null; onOpenChange: (v: bo
   )
 }
 
-// ---------- 删除域（须输入域名确认；409 时提示强制删除） ----------
+// ---------- 删除域（连带删除域内题目与全部数据；输入域名确认） ----------
 
 function DeleteDomainDialog(props: {
   domain: Domain
-  force: boolean
   onClose: () => void
   onConfirm: () => void
 }) {
@@ -429,9 +416,8 @@ function DeleteDomainDialog(props: {
         <DialogHeader>
           <DialogTitle className="text-destructive">删除域「{props.domain.name}」？</DialogTitle>
           <DialogDescription>
-            {props.force
-              ? '该域内题目、空间及全部数据将被一并删除，操作不可撤销！'
-              : '该域的题目与空间将一并删除；若域内仍有题目，后端会拒绝并提示需强制删除。'}
+            该域的题目、空间及全部作答/判题/错题等数据将<b className="text-foreground">一并永久删除</b>
+            ，即使域内有题目也允许删除。
             <br />
             此操作不可撤销，请输入 <span className="font-medium text-foreground">{props.domain.name}</span>{' '}
             以确认。
@@ -450,12 +436,8 @@ function DeleteDomainDialog(props: {
           <Button variant="outline" onClick={props.onClose}>
             取消
           </Button>
-          <Button
-            variant="destructive"
-            disabled={!matched}
-            onClick={props.onConfirm}
-          >
-            {props.force ? '确认连同题目删除' : '确认删除'}
+          <Button variant="destructive" disabled={!matched} onClick={props.onConfirm}>
+            确认连同题目与数据删除
           </Button>
         </DialogFooter>
       </DialogContent>
