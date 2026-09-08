@@ -147,7 +147,7 @@ function AnswerView({ problem }: { problem: Problem }) {
               i === idx ? 'border-emerald-400 bg-emerald-50 font-medium' : ''
             }`}
           >
-            <span className={`mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full text-xs ${i === idx ? 'bg-emerald-500 text-white' : 'bg-muted text-muted-foreground'}`}>
+            <span className={`flex size-5 shrink-0 items-center justify-center rounded-full text-[13px] font-semibold leading-none ${i === idx ? 'bg-emerald-500 text-white' : 'bg-muted text-muted-foreground'}`}>
               {String.fromCharCode(65 + i)}
             </span>
             <span className="min-w-0 flex-1">
