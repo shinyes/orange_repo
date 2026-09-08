@@ -147,12 +147,12 @@ function AnswerView({ problem }: { problem: Problem }) {
               i === idx ? 'border-emerald-400 bg-emerald-50 font-medium' : ''
             }`}
           >
-            <span className={`flex size-5 shrink-0 items-center justify-center rounded-full text-[13px] font-semibold leading-none ${i === idx ? 'bg-emerald-500 text-white' : 'bg-muted text-muted-foreground'}`}>
+            <span className={`mt-px flex size-5 shrink-0 items-center justify-center rounded-full text-sm font-semibold leading-5 ${i === idx ? 'bg-emerald-500 text-white' : 'bg-muted text-muted-foreground'}`}>
               {String.fromCharCode(65 + i)}
             </span>
-            <span className="min-w-0 flex-1">
+            <span className="min-w-0 flex-1 leading-5">
               {/* 选项支持 Markdown / KaTeX（与题面同一渲染管线）；孤立换行保真显示 */}
-              <Markdown text={preserveLineBreaks(opt)} className="markdown-body text-sm md-clean" />
+              <Markdown text={preserveLineBreaks(opt)} className="markdown-body text-sm md-clean leading-5" />
             </span>
             {i === idx && <Badge className="shrink-0 bg-emerald-500 text-white hover:bg-emerald-500">正确答案</Badge>}
           </div>
