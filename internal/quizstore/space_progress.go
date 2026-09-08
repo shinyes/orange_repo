@@ -195,8 +195,11 @@ func (s *Store) ListPracticeSubmissions(practiceID, userID int64) ([]PracticeSub
 		if err := rows.Scan(&sub.ID, &sub.PracticeID, &sub.UserID, &sub.ObjectiveCorrect, &rawCreated); err != nil {
 			return nil, err
 		}
-		// SQLite CURRENT_TIMESTAMP 存 "YYYY-MM-DD HH:MM:SS"（UTC）→ 转 time.Time（RFC3339 输出）
-		if t, err := time.ParseInLocation("2006-01-02 15:04:05", rawCreated, time.UTC); err == nil {
+		// created_at 兼容两种存量格式：SQLite CURRENT_TIMESTAMP("YYYY-MM-DD HH:MM:SS" UTC)
+		// 与早期 ISO("YYYY-MM-DDTHH:MM:SSZ")——统一转 time.Time（RFC3339 输出）
+		if t, err := time.Parse(time.RFC3339, rawCreated); err == nil {
+			sub.CreatedAt = t
+		} else if t, err := time.ParseInLocation("2006-01-02 15:04:05", rawCreated, time.UTC); err == nil {
 			sub.CreatedAt = t
 		}
 		out = append(out, sub)
