@@ -152,7 +152,7 @@ function AnswerView({ problem }: { problem: Problem }) {
             </span>
             <span className="min-w-0 flex-1">
               {/* 选项支持 Markdown / KaTeX（与题面同一渲染管线）；孤立换行保真显示 */}
-              <Markdown text={preserveLineBreaks(opt)} className="markdown-body text-sm" />
+              <Markdown text={preserveLineBreaks(opt)} className="markdown-body text-sm md-clean" />
             </span>
             {i === idx && <Badge className="shrink-0 bg-emerald-500 text-white hover:bg-emerald-500">正确答案</Badge>}
           </div>
