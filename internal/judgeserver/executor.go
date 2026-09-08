@@ -124,6 +124,11 @@ func (e *Executor) Execute(ctx context.Context, task judge.JudgeTask) (judge.Run
 		return judge.RunResult{}, err
 	}
 	defer os.RemoveAll(jobDir)
+	// MkdirTemp 默认 0700（root 属主）——沙箱内以 uid 65534 执行，
+	// 无法进入目录会导致运行阶段 Permission denied/not found；放开为 0755。
+	if err := os.Chmod(jobDir, 0o755); err != nil {
+		return judge.RunResult{}, err
+	}
 
 	sourceFile, compileCmd, runCmd, err := e.buildCommands(task.Language)
 	if err != nil {
@@ -253,7 +258,7 @@ func (e *Executor) buildCommands(language string) (sourceFile string, compileCmd
 		}
 		return "main.cpp",
 			[]string{gpp, "-std=c++11", "-O2", "main.cpp", "-o", "main.out"},
-			[]string{filepath.Join(".", "main.out")}, nil
+			[]string{"./main.out"}, nil // 注意：勿用 filepath.Join（会清掉 ./ 变成裸名，sh 按 PATH 找不到）
 	case "python", "python3", "py":
 		py := e.toolchains["python"]
 		if py == "" {
