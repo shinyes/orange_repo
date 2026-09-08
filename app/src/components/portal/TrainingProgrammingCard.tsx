@@ -84,6 +84,16 @@ export function TrainingProgrammingCard({ problemId, trainingId, solved, onSolve
     }
   }, [code, lang, cloudDraft.cloudLoaded, cloudDraft.initialCode, problemQ.data, problemId, trainingId])
 
+  // 云端草稿到达但用户已先输入（慢网竞态）：保留当前编辑并提示，避免云草稿被静默丢弃/覆盖
+  const draftWarnedRef = useRef(false)
+  useEffect(() => {
+    if (!draftWarnedRef.current && touchedRef.current && cloudDraft.cloudLoaded
+      && cloudDraft.initialCode && cloudDraft.initialCode.trim() !== '' && cloudDraft.initialCode !== code) {
+      draftWarnedRef.current = true
+      toast.warning('检测到云端草稿（其它页面/设备保存过）：保留当前编辑，后续保存将覆盖云端草稿')
+    }
+  }, [code, cloudDraft.cloudLoaded, cloudDraft.initialCode])
+
   // 编辑器输入：实时写本地草稿 + 云端 debounce 自动保存（失败静默，本地已缓存）。
   function handleCodeChange(next: string) {
     touchedRef.current = true

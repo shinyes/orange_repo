@@ -21,6 +21,18 @@ export function SplitPane({
   const [rightPct, setRightPct] = useState(initialRightPct)
   const dragging = useRef(false)
   const [active, setActive] = useState(false)
+  // 单实例：按断点只挂载一份 right（桌面拖拽分栏 / 移动端整宽堆叠），
+  // 避免重型编辑器（Monaco）被同时实例化两份
+  const [isDesktop, setIsDesktop] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches,
+  )
+
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 1024px)')
+    const onChange = () => setIsDesktop(mq.matches)
+    mq.addEventListener('change', onChange)
+    return () => mq.removeEventListener('change', onChange)
+  }, [])
 
   const clamp = useCallback(
     (pct: number) => Math.min(maxRightPct, Math.max(minRightPct, pct)),
@@ -76,11 +88,14 @@ export function SplitPane({
         <span className="pointer-events-none h-14 w-0.5 rounded-full bg-muted-foreground/40" />
       </div>
 
-      {/* 右：编辑器（桌面宽度=百分比；移动端整宽在下） */}
-      <div className="hidden min-h-0 flex-col lg:flex lg:h-full lg:shrink-0" style={{ width: `${rightPct}%` }}>
-        {right}
-      </div>
-      <div className="min-h-0 w-full flex-col lg:hidden">{right}</div>
+      {/* 右：编辑器（桌面=宽度百分比分栏；移动端=整宽堆叠）——仅按断点渲染一份 */}
+      {isDesktop ? (
+        <div className="flex min-h-0 flex-col lg:h-full lg:shrink-0" style={{ width: `${rightPct}%` }}>
+          {right}
+        </div>
+      ) : (
+        <div className="flex min-h-0 w-full flex-col">{right}</div>
+      )}
     </div>
   )
 }

@@ -245,6 +245,16 @@ function ProgrammingSolve({ problem, backTo, review, practiceId }: { problem: Oj
     localStorage.setItem(draftLocal(problem.id, lang), cloudDraft.initialCode)
   }, [cloudDraft.cloudLoaded, cloudDraft.initialCode, lang, problem.id, ctxTag])
 
+  // 云端草稿到达但用户已先输入（慢网竞态）：保留当前编辑并提示，避免云草稿被静默丢弃
+  const draftWarnedRef = useRef(false)
+  useEffect(() => {
+    if (!review && !draftWarnedRef.current && touchedRef.current && cloudDraft.cloudLoaded
+      && cloudDraft.initialCode && cloudDraft.initialCode.trim() !== '' && cloudDraft.initialCode !== code) {
+      draftWarnedRef.current = true
+      toast.warning('检测到云端草稿（其它页面/设备保存过）：保留当前编辑，后续保存将覆盖云端草稿')
+    }
+  }, [code, cloudDraft.cloudLoaded, cloudDraft.initialCode])
+
   // 编辑器输入：实时写本地草稿 + 云端 debounce 自动保存（静默失败，本地已缓存）。
   function handleCodeChange(next: string) {
     if (review) return // 回顾只读，不写草稿

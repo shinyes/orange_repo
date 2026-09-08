@@ -146,7 +146,7 @@ function RecordSheet({ sid, pid, data }: {
           <div className="space-y-3 p-3">
             {items.map((it) =>
               it.type === 'programming' ? (
-                <ProgrammingReviewCard key={it.problemId} item={it} practiceId={pid} onOpen={() => openProgReview(it.problemId)} />
+                <ProgrammingReviewCard key={it.problemId} item={it} practiceId={pid} asOf={data?.createdAt} onOpen={() => openProgReview(it.problemId)} />
               ) : (
                 <ReviewCard key={it.problemId} item={it} />
               ),
@@ -235,16 +235,21 @@ function NavCard({ items, correct, wrong, missing, createdAt, onJump, onOpenProg
   )
 }
 
-// 编程题回顾卡：状态圆（该题账号提交记录：AC=通过绿 / 有提交未AC=未通过红 / 无=未作答灰）
-// + 题号，与客观题一致；点击进入做题页只读回顾
-function ProgrammingReviewCard({ item, practiceId, onOpen }: { item: PracticeRecordItem; practiceId: number; onOpen: () => void }) {
+// 编程题回顾卡：状态圆（该次交卷时点为止的账号提交记录：AC=通过绿 / 有提交未AC=未通过红 / 无=未作答灰）
+// + 题号，与客观题一致；点击进入做题页只读回顾。asOf 为该次交卷时间——之后的新提交不影响本卡状态。
+function ProgrammingReviewCard({ item, practiceId, asOf, onOpen }: {
+  item: PracticeRecordItem
+  practiceId: number
+  asOf?: string
+  onOpen: () => void
+}) {
   const subsQ = useQuery({
     queryKey: ['oj-submissions', 'p', item.problemId, practiceId],
     queryFn: () => api.ojSubmissions(item.problemId, undefined, practiceId),
   })
   const subs = subsQ.data?.submissions ?? []
   // 仅正式提交（submit）计入作答状态：run/test（运行/自测/评测基准）不算"做过"
-  const submits = subs.filter((s) => s.submitType === 'submit')
+  const submits = subs.filter((s) => s.submitType === 'submit' && (!asOf || (s.createdAt ?? '') <= asOf))
   const passed = submits.some((s) => s.verdict === 'AC' || s.verdict === 'OK')
   const attempted = !passed && submits.some((s) => s.status === 'done')
   const stateMeta = passed
