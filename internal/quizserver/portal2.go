@@ -473,6 +473,21 @@ func (s *Server) handlePortalQuizAnswer(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil {
 		return respondError(c, fiber.StatusBadRequest, "invalid request")
 	}
+	// 归属校验：题目必须属于该项目题集（防用任意域/任意题枚举答案密钥）
+	scopeIDs, err := s.quizProblemIDs(qid)
+	if err != nil {
+		return respondError(c, fiber.StatusInternalServerError, err.Error())
+	}
+	inScope := false
+	for _, id := range scopeIDs {
+		if id == req.ProblemID {
+			inScope = true
+			break
+		}
+	}
+	if !inScope {
+		return respondError(c, fiber.StatusBadRequest, "题目不在该刷题项目范围内")
+	}
 	p, err := s.QS.Repo.GetOJProblem(req.ProblemID)
 	if err != nil || p.Type == "programming" {
 		return respondError(c, fiber.StatusBadRequest, "题目不可作答")

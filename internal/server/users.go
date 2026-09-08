@@ -109,6 +109,10 @@ func (s *Server) handleDeleteUser(c *fiber.Ctx) error {
 	if err := s.Store.RemoveUserFromAllSpaces(id); err != nil {
 		return err
 	}
+	// 清除其在空间内容（训练/练习/刷题）可见名单中的授权
+	if err := s.Store.RemoveUserFromAllVisible(id); err != nil {
+		return err
+	}
 	return c.SendStatus(fiber.StatusNoContent)
 }
 

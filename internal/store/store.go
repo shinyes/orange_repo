@@ -552,7 +552,7 @@ const problemSummaryCols = `id,uuid,domain_id,type,title,tags_json,time_limit_ms
 
 func scanProblemSummaries(rows *sql.Rows) ([]model.ProblemSummary, error) {
 	defer rows.Close()
-	var out []model.ProblemSummary
+	out := []model.ProblemSummary{}
 	for rows.Next() {
 		var p model.ProblemSummary
 		var tagsJSON string

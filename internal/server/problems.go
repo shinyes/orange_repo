@@ -206,6 +206,13 @@ func (s *Server) handleDeleteProblem(c *fiber.Ctx) error {
 	if err := s.Store.DeleteProblem(id); err != nil {
 		return err
 	}
+	// 刷题侧数据同步清理（判题历史/草稿/错题集/作答/通过记录引用被删题）
+	if s.QuizStore != nil {
+		u := existing.UUID
+		if err := s.QuizStore.CleanupProblems([]int64{id}, []string{u}); err != nil {
+			return err
+		}
+	}
 	return c.SendStatus(fiber.StatusNoContent)
 }
 

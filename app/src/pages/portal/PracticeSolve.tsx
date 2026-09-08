@@ -86,6 +86,8 @@ type PracticeCtxValue = {
   openConfirm: () => void
   openHistory: () => void
   openNav: () => void
+  /** 手动保存当前作答到本地草稿（顶栏「保存」） */
+  saveNow: () => void
 }
 
 const PracticeCtx = createContext<PracticeCtxValue | null>(null)
@@ -94,6 +96,25 @@ function usePracticeCtx(): PracticeCtxValue {
   const v = useContext(PracticeCtx)
   if (!v) throw new Error('usePracticeCtx must be used within PracticeProvider')
   return v
+}
+
+function practiceDraftKey(sid: number, pid: number) {
+  return `oj-practice-answers:${sid}:${pid}`
+}
+
+function loadPracticeDraft(sid: number, pid: number): Record<number, ObjectiveAnswer> {
+  try {
+    const raw = localStorage.getItem(practiceDraftKey(sid, pid))
+    if (!raw) return {}
+    const obj = JSON.parse(raw) as Record<string, number | boolean>
+    const out: Record<number, ObjectiveAnswer> = {}
+    for (const [k, v] of Object.entries(obj)) {
+      if (typeof v === 'number' || typeof v === 'boolean') out[Number(k)] = v
+    }
+    return out
+  } catch {
+    return {}
+  }
 }
 
 function PracticeProvider({ sid, pid, data, children }: {
@@ -109,19 +130,31 @@ function PracticeProvider({ sid, pid, data, children }: {
   )
   const qc = useQueryClient()
 
-  // 每客观题已选题（单选=number，判断=boolean）
-  const [answers, setAnswers] = useState<Record<number, ObjectiveAnswer>>({})
+  // 每客观题已选题（单选=number，判断=boolean）；本地草稿持久化（刷新/重进不丢）
+  const [answers, setAnswers] = useState<Record<number, ObjectiveAnswer>>(() =>
+    loadPracticeDraft(sid, pid),
+  )
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [navOpen, setNavOpen] = useState(false)
   const [historyAllOpen, setHistoryAllOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [result, setResult] = useState<PracticeResult | null>(null)
 
+  function persist(next: Record<number, ObjectiveAnswer>) {
+    try {
+      if (Object.keys(next).length === 0) localStorage.removeItem(practiceDraftKey(sid, pid))
+      else localStorage.setItem(practiceDraftKey(sid, pid), JSON.stringify(next))
+    } catch {
+      // localStorage 不可用（隐私模式等）时忽略，仅内存作答
+    }
+  }
+
   function toggleAnswer(problemId: number, a: ObjectiveAnswer) {
     setAnswers((prev) => {
       const next = { ...prev }
       if (next[problemId] === a) delete next[problemId]
       else next[problemId] = a
+      persist(next)
       return next
     })
   }
@@ -136,6 +169,8 @@ function PracticeProvider({ sid, pid, data, children }: {
       })).filter((a) => a.answer !== undefined)
       const r = await api.portalPracticeSubmit(sid, pid, payload)
       setResult(r)
+      // 交卷后清空本地草稿（已提交内容入历史）
+      localStorage.removeItem(practiceDraftKey(sid, pid))
       void qc.invalidateQueries({ queryKey: ['portal-practice-submissions', sid, pid] })
       toast.success(`交卷成功：答对 ${r.objectiveCorrect}/${r.objectiveTotal}`)
     } catch (err) {
@@ -167,6 +202,10 @@ function PracticeProvider({ sid, pid, data, children }: {
     openConfirm: () => setConfirmOpen(true),
     openHistory: () => setHistoryAllOpen(true),
     openNav: () => setNavOpen(true),
+    saveNow: () => {
+      persist(answers)
+      toast.success(`已保存 ${answeredCount} 道作答到本地（刷新不丢失）`)
+    },
   }
 
   return <PracticeCtx.Provider value={value}>{children}</PracticeCtx.Provider>
@@ -175,7 +214,7 @@ function PracticeProvider({ sid, pid, data, children }: {
 // ---------- 外壳顶栏右侧操作按钮（全部提交记录 / 保存 / 提交；移动端含「导航」） ----------
 
 function HeaderActionBar() {
-  const { submitting, canSubmit, openConfirm, openHistory, openNav } = usePracticeCtx()
+  const { submitting, canSubmit, openConfirm, openHistory, openNav, saveNow } = usePracticeCtx()
   return (
     <div className="flex shrink-0 items-center gap-1.5">
       <Button
@@ -200,7 +239,8 @@ function HeaderActionBar() {
         variant="secondary"
         size="sm"
         className="text-muted-foreground"
-        title="当前答案已保存在本地，提交前可随时修改"
+        title="将当前作答保存到本地草稿（刷新不丢失；修改会自动保存）"
+        onClick={saveNow}
       >
         <SaveIcon className="size-3.5" />
         <span className="hidden sm:inline">保存</span>

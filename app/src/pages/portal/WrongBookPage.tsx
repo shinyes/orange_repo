@@ -1,6 +1,6 @@
 // 全局错题集：按刷题项目分组展示；点「重刷」进入该组（或全部）错题重刷——
 // 单题即时判分，答对即从错题集移除并自动下一题；答错可再试/换一题。
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { ArrowLeftIcon, BookOpenIcon , Loader2Icon, PartyPopperIcon, RefreshCwIcon, SkipForwardIcon } from 'lucide-react'
@@ -66,7 +66,13 @@ function WrongList({ onPractice }: { onPractice: (group: WrongGroup | null) => v
           <Loader2Icon className="size-4 animate-spin" /> 加载中…
         </div>
       )}
-      {!q.isLoading && (!data || data.groups.length === 0) && (
+      {q.isError && (
+        <div className="py-16 text-center text-sm text-red-500">
+          加载失败{q.error instanceof Error ? `：${q.error.message}` : ''}
+          <button type="button" className="ml-2 text-primary underline" onClick={() => void q.refetch()}>重试</button>
+        </div>
+      )}
+      {!q.isLoading && !q.isError && (!data || data.groups.length === 0) && (
         <div className="mt-6 rounded-xl border border-dashed p-12 text-center text-sm text-muted-foreground">
           暂无错题 🎉 刷题答错后会自动收进这里
         </div>
@@ -107,14 +113,26 @@ function WrongPractice({ group, onExit }: { group: WrongGroup | null; onExit: ()
   const [feedback, setFeedback] = useState<{ correct: boolean; correctAnswer?: CorrectAnswer } | null>(null)
 
   const label = group ? `「${group.title}」错题重刷` : '全部错题重刷'
+  const aliveRef = useRef(true)
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    aliveRef.current = true
+    return () => {
+      aliveRef.current = false
+      if (timerRef.current) clearTimeout(timerRef.current)
+    }
+  }, [])
 
   async function next() {
+    if (!aliveRef.current) return
     setLoading(true)
     setFeedback(null)
     setSelected(null)
     setDone(false)
     try {
       const r = await api.portalWrongNext(group?.quizId)
+      if (!aliveRef.current) return
       if (r.done || !r.problem) {
         setDone(true)
         setProblem(null)
@@ -122,9 +140,9 @@ function WrongPractice({ group, onExit }: { group: WrongGroup | null; onExit: ()
         setProblem(r.problem)
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '抽题失败')
+      if (aliveRef.current) toast.error(err instanceof Error ? err.message : '抽题失败')
     } finally {
-      setLoading(false)
+      if (aliveRef.current) setLoading(false)
     }
   }
 
@@ -134,23 +152,25 @@ function WrongPractice({ group, onExit }: { group: WrongGroup | null; onExit: ()
   }, [group?.quizId])
 
   async function answer(a: ObjectiveAnswer) {
-    if (!problem || busy || feedback) return
+    if (!problem || busy || feedback || !aliveRef.current) return
     setSelected(a)
     setBusy(true)
     try {
       const r = await api.portalWrongAnswer(problem.id, a)
+      if (!aliveRef.current) return
       setFeedback(r)
       if (r.correct) {
         toast.success('答对，已从错题集移除')
-        setTimeout(() => void next(), 700)
+        timerRef.current = setTimeout(() => void next(), 700)
       } else {
         toast.error('回答错误，错题保留')
       }
     } catch (err) {
+      if (!aliveRef.current) return
       toast.error(err instanceof Error ? err.message : '提交失败')
       setSelected(null)
     } finally {
-      setBusy(false)
+      if (aliveRef.current) setBusy(false)
     }
   }
 

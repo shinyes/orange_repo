@@ -239,7 +239,7 @@ function NavCard({ items, correct, wrong, missing, createdAt, onJump, onOpenProg
 // + 题号，与客观题一致；点击进入做题页只读回顾
 function ProgrammingReviewCard({ item, practiceId, onOpen }: { item: PracticeRecordItem; practiceId: number; onOpen: () => void }) {
   const subsQ = useQuery({
-    queryKey: ['oj-submissions', item.problemId, practiceId],
+    queryKey: ['oj-submissions', 'p', item.problemId, practiceId],
     queryFn: () => api.ojSubmissions(item.problemId, undefined, practiceId),
   })
   const subs = subsQ.data?.submissions ?? []
@@ -311,6 +311,11 @@ function ReviewCard({ item }: { item: PracticeRecordItem }) {
         </span>
       </div>
       {contentQ.isLoading && <p className="py-4 text-center text-xs text-muted-foreground">题目加载中…</p>}
+      {contentQ.isError && (
+        <p className="py-4 text-center text-xs text-muted-foreground">
+          题目内容不可见（{contentQ.error instanceof Error ? contentQ.error.message : '加载失败'}）
+        </p>
+      )}
       {contentQ.data && (
         <div className="mt-2">
           <Markdown

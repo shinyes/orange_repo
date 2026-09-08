@@ -37,7 +37,7 @@ func (s *Store) ListDomains() ([]model.Domain, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	var out []model.Domain
+	out := []model.Domain{}
 	for rows.Next() {
 		var d model.Domain
 		if err := rows.Scan(&d.ID, &d.Name, &d.CreatedAt); err != nil {

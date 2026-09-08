@@ -93,6 +93,14 @@ func (s *Server) handleWrongAnswer(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil {
 		return respondError(c, fiber.StatusBadRequest, "invalid request")
 	}
+	// 归属校验：只能作答自己错题集里的题（防用任意题拿答案密钥/伪造通过）
+	owned, err := s.QS.IsWrongProblem(user.ID, req.ProblemID)
+	if err != nil {
+		return respondError(c, fiber.StatusInternalServerError, err.Error())
+	}
+	if !owned {
+		return respondError(c, fiber.StatusNotFound, "题目不在你的错题集中")
+	}
 	p, err := s.QS.Repo.GetOJProblem(req.ProblemID)
 	if err != nil || p.Type == "programming" {
 		return respondError(c, fiber.StatusBadRequest, "题目不可作答")

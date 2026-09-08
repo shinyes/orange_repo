@@ -60,7 +60,8 @@ func (s *Server) handleCreateSpaceTraining(c *fiber.Ctx) error {
 		Title       string `json:"title"`
 		Description string `json:"description"`
 		Tags        []string `json:"tags"`
-		MaxAttempts int    `json:"maxAttempts"`
+		// 缺省（null/不传）=3 次；显式 0=不限作答次数
+		MaxAttempts *int `json:"maxAttempts"`
 		FromRepo    *struct {
 			Kind string `json:"kind"` // training | practice
 			ID   int64  `json:"id"`
@@ -76,7 +77,11 @@ func (s *Server) handleCreateSpaceTraining(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	id, err := s.Store.CreateSpaceTraining(spaceID, req.Title, req.Description, req.Tags, req.MaxAttempts)
+	maxAttempts := 3
+	if req.MaxAttempts != nil {
+		maxAttempts = *req.MaxAttempts
+	}
+	id, err := s.Store.CreateSpaceTraining(spaceID, req.Title, req.Description, req.Tags, maxAttempts)
 	if err != nil {
 		return err
 	}

@@ -131,8 +131,11 @@ export function ObjectiveQuestion({
             {!feedback!.correct && (
               <span className="ml-1 text-xs opacity-80">
                 （正确项：{problem.type === 'single_choice'
-                  ? `选项 ${OPTION_LABELS[feedback!.correctAnswer?.answerIndex ?? -1] ?? feedback!.correctAnswer?.answerIndex}`
-                  : feedback!.correctAnswer?.answer ? '对' : '错'}）
+                  ? (() => {
+                    const idx = feedback!.correctAnswer?.answerIndex
+                    return idx != null ? `选项 ${OPTION_LABELS[idx] ?? idx}` : '—'
+                  })()
+                  : feedback!.correctAnswer?.answer == null ? '—' : (feedback!.correctAnswer.answer ? '对' : '错')}）
               </span>
             )}
           </span>

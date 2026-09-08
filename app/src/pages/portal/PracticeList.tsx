@@ -34,6 +34,12 @@ export function PracticeList() {
       </div>
       <p className="mb-4 text-xs text-muted-foreground">整卷作答后统一交卷评分，可重复交卷（每次记录）</p>
       {home.isLoading && <p className="py-10 text-center text-sm text-muted-foreground">加载中…</p>}
+      {home.isError && (
+        <div className="py-10 text-center text-sm text-red-500">
+          加载失败{home.error instanceof Error ? `：${home.error.message}` : ''}
+          <button type="button" className="ml-2 text-primary underline" onClick={() => void home.refetch()}>重试</button>
+        </div>
+      )}
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         {list.map((p) => (
           <PracticeCard

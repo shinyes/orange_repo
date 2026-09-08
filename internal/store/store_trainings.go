@@ -27,7 +27,7 @@ func (s *Store) CreateTraining(title, description string, tags []string, folderI
 
 func scanTrainingRows(rows *sql.Rows) ([]model.Training, error) {
 	defer rows.Close()
-	var out []model.Training
+	out := []model.Training{}
 	for rows.Next() {
 		var t model.Training
 		var tagsJSON string
@@ -49,7 +49,7 @@ func (s *Store) ListTrainings() ([]model.Training, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	var out []model.Training
+	out := []model.Training{}
 	for rows.Next() {
 		var t model.Training
 		var tagsJSON string
@@ -369,7 +369,7 @@ func (s *Store) ListChapters(trainingID int64) ([]model.Chapter, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	var chapters []model.Chapter
+	chapters := []model.Chapter{}
 	for rows.Next() {
 		var c model.Chapter
 		if err := rows.Scan(&c.ID, &c.TrainingID, &c.Title, &c.OrderNo); err != nil {

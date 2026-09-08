@@ -12,6 +12,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
+	"orangeoj/internal/accounts"
 	"orangeoj/internal/model"
 	"orangeoj/internal/store"
 	"orangeoj/internal/zipio"
@@ -312,11 +313,17 @@ func exportFilename(prefix, name string) string {
 }
 
 // handleExportProblems 导出题目：?ids=1,2 或按过滤参数，无参导出全部。
+// 域隔离：scope 强制（domain_admin 本域 / global 按 query 或默认域）——防止越域导出答案密钥。
 func (s *Server) handleExportProblems(c *fiber.Ctx) error {
 	filter, err := parseProblemFilter(c)
 	if err != nil {
 		return respondError(c, fiber.StatusBadRequest, err.Error())
 	}
+	scope, err := s.domainOrDefault(c, currentUser(c))
+	if err != nil {
+		return respondError(c, fiber.StatusBadRequest, err.Error())
+	}
+	filter.DomainID = scope
 	list, err := s.Store.ListProblems(filter)
 	if err != nil {
 		return err
@@ -340,6 +347,7 @@ func (s *Server) handleExportProblems(c *fiber.Ctx) error {
 }
 
 // handleExportTraining 导出训练：problems.json + trainingPlan.json（章节按下标引用）。
+// 域隔离：domain_admin 仅可导出其本域模板（模板题目须属其域）。
 func (s *Server) handleExportTraining(c *fiber.Ctx) error {
 	id, err := paramID(c, "id")
 	if err != nil {
@@ -356,6 +364,15 @@ func (s *Server) handleExportTraining(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
+	// 域管理员强制：模板题目必须属于其域（防越域导出答案/题解）
+	user := currentUser(c)
+	var scope *int64
+	if user.Role == accounts.RoleDomainAdmin {
+		scope, err = s.domainOrDefault(c, user)
+		if err != nil {
+			return respondError(c, fiber.StatusBadRequest, err.Error())
+		}
+	}
 	var entries []zipio.ExportProblem
 	var planChapters []zipio.PlanChapter
 	for _, ch := range chapters {
@@ -367,6 +384,9 @@ func (s *Server) handleExportTraining(c *fiber.Ctx) error {
 					continue // 题目已被删除的悬空条目直接跳过
 				}
 				return err
+			}
+			if scope != nil && (p.DomainID == nil || *p.DomainID != *scope) {
+				return respondError(c, fiber.StatusForbidden, "训练含不属于你域的题目，无法导出")
 			}
 			indexes = append(indexes, len(entries))
 			entries = append(entries, problemToExport(p))
@@ -400,6 +420,15 @@ func (s *Server) handleExportPractice(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
+	// 域管理员强制：模板题目必须属于其域（防越域导出答案/题解）
+	user := currentUser(c)
+	var scope *int64
+	if user.Role == accounts.RoleDomainAdmin {
+		scope, err = s.domainOrDefault(c, user)
+		if err != nil {
+			return respondError(c, fiber.StatusBadRequest, err.Error())
+		}
+	}
 	var entries []zipio.ExportProblem
 	indexes := make([]int, 0, len(items))
 	for _, it := range items {
@@ -409,6 +438,9 @@ func (s *Server) handleExportPractice(c *fiber.Ctx) error {
 				continue
 			}
 			return err
+		}
+		if scope != nil && (full.DomainID == nil || *full.DomainID != *scope) {
+			return respondError(c, fiber.StatusForbidden, "练习含不属于你域的题目，无法导出")
 		}
 		indexes = append(indexes, len(entries))
 		entries = append(entries, problemToExport(full))

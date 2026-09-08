@@ -277,6 +277,9 @@ func (s *Server) handleOJObjectiveSubmit(c *fiber.Ctx) error {
 
 // gradeObjective 客观题判定（单选 answerIndex / 判断 answer 布尔）。
 func (s *Server) gradeObjective(problemType string, problemID int64, answer json.RawMessage) (bool, error) {
+	if len(answer) > 1024 {
+		return false, errors.New("答案数据过大")
+	}
 	env, err := s.QS.Repo.GetObjectiveAnswer(problemID)
 	if err != nil {
 		return false, errors.New("题目答案缺失")

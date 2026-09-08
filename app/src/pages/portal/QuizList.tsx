@@ -55,6 +55,12 @@ export function QuizList() {
         范围内单选/判断题循环复习：做过少做 · 错题下轮多做 · 同轮不重复
       </p>
       {home.isLoading && <p className="py-10 text-center text-sm text-muted-foreground">加载中…</p>}
+      {home.isError && (
+        <div className="py-10 text-center text-sm text-red-500">
+          加载失败{home.error instanceof Error ? `：${home.error.message}` : ''}
+          <button type="button" className="ml-2 text-primary underline" onClick={() => void home.refetch()}>重试</button>
+        </div>
+      )}
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         {list.map((qz) => (
           <QuizCard

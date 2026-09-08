@@ -309,7 +309,7 @@ function SubmissionHistoryDialog({ open, onOpenChange, problemId, trainingId }: 
   trainingId: number
 }) {
   const submissionsQ = useQuery({
-    queryKey: ['oj-submissions', problemId, trainingId],
+    queryKey: ['oj-submissions', 't', problemId, trainingId],
     queryFn: () => api.ojSubmissions(problemId, trainingId),
     enabled: open,
   })

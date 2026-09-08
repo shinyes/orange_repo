@@ -34,40 +34,38 @@ func (s *Store) GetTrainingAttempt(trainingID, userID, problemID int64) (*Attemp
 	return st, nil
 }
 
-// RecordTrainingAttempt 记录一次客观题作答：attempts+1；答对标 solved 并写通过记录。
+// RecordTrainingAttempt 记录一次客观题作答：attempts+1（原子，防并发丢更新）；答对标 solved 并写通过记录。
 // problemUUID 由调用方从主库题目读出传入（避开跨库查题）；
 // 已达上限或已 solved 由调用方先拦截止步，此处幂等处理已 solved 情形不重复计数。
 // 返回 (attempts, solved, err)。
 func (s *Store) RecordTrainingAttempt(trainingID, userID, problemID int64, problemUUID string, correct bool) (int, bool, error) {
-	var curAttempts int
-	var curSolved bool
-	err := s.DB.QueryRow(`SELECT attempts,solved FROM space_training_attempts
-		WHERE training_id=? AND user_id=? AND problem_id=?`, trainingID, userID, problemID).
-		Scan(&curAttempts, &curSolved)
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return 0, false, err
-	}
-	// 已答对：幂等返回现状，不再 +1（上层禁选）
-	if curSolved {
-		return curAttempts, true, nil
-	}
-	newAttempts := curAttempts + 1
-	newSolved := correct
-	_, err = s.DB.Exec(`INSERT INTO space_training_attempts(training_id,user_id,problem_id,attempts,solved)
-		VALUES(?,?,?,?,?)
+	// 单条原子 upsert：attempts 在库内自增；答对时 solved=1（幂等：已 solved 不再 +1/不再置位变化）
+	_, err := s.DB.Exec(`INSERT INTO space_training_attempts(training_id,user_id,problem_id,attempts,solved)
+		VALUES(?,?,?,1,?)
 		ON CONFLICT(training_id,user_id,problem_id) DO UPDATE SET
-		attempts=excluded.attempts, solved=excluded.solved, updated_at=CURRENT_TIMESTAMP`,
-		trainingID, userID, problemID, newAttempts, b2i(newSolved))
+		attempts=CASE WHEN space_training_attempts.solved=1 THEN space_training_attempts.attempts
+			ELSE space_training_attempts.attempts+1 END,
+		solved=CASE WHEN excluded.solved=1 THEN 1 ELSE space_training_attempts.solved END,
+		updated_at=CURRENT_TIMESTAMP`,
+		trainingID, userID, problemID, b2i(correct))
 	if err != nil {
 		return 0, false, err
 	}
-	// 答对 → 写通过记录（uuid 去重；uuid 空则跳过）
-	if newSolved && problemUUID != "" {
+	// 读回最新计数（原子自增后的一致性值；并发下展示值可能略超前于本请求，属可接受）
+	var attempts int
+	var solved bool
+	if err := s.DB.QueryRow(`SELECT attempts,solved FROM space_training_attempts
+		WHERE training_id=? AND user_id=? AND problem_id=?`, trainingID, userID, problemID).
+		Scan(&attempts, &solved); err != nil {
+		return 0, false, err
+	}
+	// 答对 → 写通过记录（uuid 去重幂等；uuid 空则跳过）
+	if correct && problemUUID != "" {
 		if err := s.RecordSolved(userID, problemUUID); err != nil {
 			return 0, false, err
 		}
 	}
-	return newAttempts, newSolved, nil
+	return attempts, solved, nil
 }
 
 // b2i bool → 0/1。

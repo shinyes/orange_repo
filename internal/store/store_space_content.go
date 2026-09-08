@@ -42,9 +42,9 @@ type SpaceChapterItem struct {
 	ProblemUUID  string `json:"problemUuid,omitempty"`
 }
 
-// CreateSpaceTraining 建空间训练（默认 max_attempts=3；0=不限）。
+// CreateSpaceTraining 建空间训练（max_attempts：0=不限；负值兜底默认 3）。
 func (s *Store) CreateSpaceTraining(spaceID int64, title, description string, tags []string, maxAttempts int) (int64, error) {
-	if maxAttempts <= 0 {
+	if maxAttempts < 0 {
 		maxAttempts = 3
 	}
 	u, err := NewUUIDv7()

@@ -8,15 +8,50 @@ import (
 	"fmt"
 )
 
-// CleanupDomainProblems 清理引用 problemIDs 的作答侧数据；uuids 用于 student_solved。
-// 无论题目列表是否为空都会执行孤儿清理（引用的刷题项目/练习已随域空间删除）。
+// CleanupProblems 清理引用 problemIDs 的作答侧数据；uuids 用于 student_solved。
+// 单题删除与删域题目共用（不含孤儿清理——孤儿清理仅删域/空间场景需要）。
+func (s *Store) CleanupProblems(problemIDs []int64, uuids []string) error {
+	tx, err := s.DB.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := cleanupProblemDataTx(tx, problemIDs, uuids); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// CleanupOrphans 清理引用了已删空间/刷题项目/练习的作答侧孤儿（空间删除无 FK 级联）。
+func (s *Store) CleanupOrphans() error {
+	tx, err := s.DB.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := cleanupOrphansTx(tx); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// CleanupDomainProblems 删域总清理：题目引用数据 + 孤儿（域与空间均已删）。
 func (s *Store) CleanupDomainProblems(problemIDs []int64, uuids []string) error {
 	tx, err := s.DB.Begin()
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
+	if err := cleanupProblemDataTx(tx, problemIDs, uuids); err != nil {
+		return err
+	}
+	if err := cleanupOrphansTx(tx); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
 
+func cleanupProblemDataTx(tx *sql.Tx, problemIDs []int64, uuids []string) error {
 	// 直接按 problem_id 删的表（judge_jobs/user_problem_progress 经 submissions FK 级联）
 	for _, pid := range problemIDs {
 		for _, stmt := range []string{
@@ -40,9 +75,10 @@ func (s *Store) CleanupDomainProblems(problemIDs []int64, uuids []string) error 
 		}
 	}
 	// 快照/会话 JSON 内嵌引用：拉取解码后过滤写回（行数有限）
-	if err := s.cleanupJSONRefs(tx, problemIDs); err != nil {
-		return err
-	}
+	return cleanupJSONRefs(tx, problemIDs)
+}
+
+func cleanupOrphansTx(tx *sql.Tx) error {
 	// 孤儿清理：刷题会话/练习交卷记录引用的项目已随域空间删除（这些表无 FK 级联）
 	if _, err := tx.Exec(`DELETE FROM quiz_sessions
 		WHERE quiz_id NOT IN (SELECT id FROM space_quizzes)`); err != nil {
@@ -52,13 +88,13 @@ func (s *Store) CleanupDomainProblems(problemIDs []int64, uuids []string) error 
 		WHERE practice_id NOT IN (SELECT id FROM space_practices)`); err != nil {
 		return fmt.Errorf("cleanup orphan practice submissions: %w", err)
 	}
-	return tx.Commit()
+	return nil
 }
 
 // cleanupJSONRefs 清理 practice 提交快照与刷题会话 JSON 里引用已删题目的行：
 // space_practice_submissions.answers_json（元素 problemId）、
 // quiz_sessions.wrong_json/drawn_json（纯 id 数组）。行级过滤回写。
-func (s *Store) cleanupJSONRefs(tx *sql.Tx, problemIDs []int64) error {
+func cleanupJSONRefs(tx *sql.Tx, problemIDs []int64) error {
 	del := map[int64]bool{}
 	for _, id := range problemIDs {
 		del[id] = true

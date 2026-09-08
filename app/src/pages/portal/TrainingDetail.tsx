@@ -188,7 +188,7 @@ function TrainingFlow({ sid, tid, data, urlNo }: {
                     </div>
                     <div style={{ zoom: statementScale }}>
                       <ObjectiveCard
-                        key={`${item.problemId}`}
+                        key={`i${item.id}`}
                         sid={sid} tid={tid} item={item} maxAttempts={training.maxAttempts}
                         onAnswered={invalidate}
                       />
@@ -224,7 +224,7 @@ function TrainingFlow({ sid, tid, data, urlNo }: {
                       </div>
                       <div className="min-h-0 flex-1">
                         <TrainingProgrammingCard
-                          key={`${item.problemId}`}
+                          key={`i${item.id}`}
                           problemId={item.problemId}
                           trainingId={tid}
                           solved={itemSolved}
@@ -381,8 +381,9 @@ function SampleBox({ label, text }: { label: string; text: string }) {
 
 // ---------- 客观题内嵌作答卡（先选答案 → 提交即判） ----------
 
-// 本会话内判分结果记忆（切题/重进仍显示绿/红标；服务端不返回答案故仅会话级）
-const lastResultCache = new Map<number, { selected: ObjectiveAnswer; feedback: { correct: boolean; correctAnswer?: CorrectAnswer } }>()
+// 本会话内判分结果记忆（切题/重进回顾仍显示红绿；key 含 空间×训练×题，
+// 避免同题跨训练/跨空间串用旧判定——且仅回顾态（已通过/达限）读取，防止阻塞继续作答）
+const lastResultCache = new Map<string, { selected: ObjectiveAnswer; feedback: { correct: boolean; correctAnswer?: CorrectAnswer } }>()
 
 function ObjectiveCard({ sid, tid, item, maxAttempts, onAnswered }: {
   sid: number
@@ -391,7 +392,10 @@ function ObjectiveCard({ sid, tid, item, maxAttempts, onAnswered }: {
   maxAttempts: number
   onAnswered: () => void
 }) {
-  const cached = lastResultCache.get(item.problemId)
+  const readOnly = item.solved || (item.locked && maxAttempts > 0 && item.attempts >= maxAttempts)
+  const cacheKey = `${sid}:${tid}:${item.problemId}`
+  // 仅回顾态（已通过/达限不可再作答）才从缓存恢复判定展示；可作答题一律干净开始
+  const cached = readOnly ? lastResultCache.get(cacheKey) : undefined
   const [selected, setSelected] = useState<ObjectiveAnswer | null>(cached?.selected ?? null)
   const [feedback, setFeedback] = useState<{ correct: boolean; correctAnswer?: CorrectAnswer } | null>(cached?.feedback ?? null)
   const [busy, setBusy] = useState(false)
@@ -402,7 +406,6 @@ function ObjectiveCard({ sid, tid, item, maxAttempts, onAnswered }: {
     retry: 1,
   })
 
-  const readOnly = item.solved || (item.locked && maxAttempts > 0 && item.attempts >= maxAttempts)
   // 回顾态：无本地判分但服务端带正确答案（此前答过）→ 静默标出正确项
   const reviewFeedback = readOnly && !feedback && item.correctAnswer
     ? ({ correct: false, correctAnswer: item.correctAnswer } as { correct: boolean; correctAnswer?: CorrectAnswer })
@@ -417,7 +420,7 @@ function ObjectiveCard({ sid, tid, item, maxAttempts, onAnswered }: {
       const r = await api.portalTrainingAnswer(sid, tid, item.problemId, selected)
       const fb = { correct: r.correct, correctAnswer: r.correctAnswer }
       setFeedback(fb)
-      lastResultCache.set(item.problemId, { selected, feedback: fb })
+      lastResultCache.set(cacheKey, { selected, feedback: fb })
       if (r.correct) toast.success('回答正确')
       else toast.error(r.locked ? '回答错误，本题次数已用尽' : '回答错误')
       onAnswered()

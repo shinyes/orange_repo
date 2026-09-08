@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { BookOpenIcon, CheckCircle2Icon, LayersIcon, Loader2Icon, PartyPopperIcon, RefreshCwIcon, RotateCcwIcon, SkipForwardIcon } from 'lucide-react'
@@ -49,6 +49,12 @@ function QuizRound({ qid, quizName }: { qid: number; quizName: string }) {
   const [busy, setBusy] = useState(false)
   const [selected, setSelected] = useState<ObjectiveAnswer | null>(null)
   const [feedback, setFeedback] = useState<{ correct: boolean; correctAnswer?: CorrectAnswer; firstTime?: boolean } | null>(null)
+  const aliveRef = useRef(true)
+
+  useEffect(() => {
+    aliveRef.current = true
+    return () => { aliveRef.current = false }
+  }, [])
 
   async function fetchProblem(fresh?: boolean, reset?: boolean) {
     setLoading(true)
@@ -59,6 +65,7 @@ function QuizRound({ qid, quizName }: { qid: number; quizName: string }) {
     try {
       if (reset) await api.portalQuizReset(qid)
       const r = await api.portalQuizProblem(qid, fresh)
+      if (!aliveRef.current) return
       if (r.emptyRange) {
         setEmptyRange(true)
         setDone(true)
@@ -94,6 +101,7 @@ function QuizRound({ qid, quizName }: { qid: number; quizName: string }) {
     setBusy(true)
     try {
       const r = await api.portalQuizAnswer(qid, problem.id, a)
+      if (!aliveRef.current) return
       setFeedback(r)
       if (typeof r.wrongCnt === 'number') setWrongCnt(r.wrongCnt)
       if (r.correct) {

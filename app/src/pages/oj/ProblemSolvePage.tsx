@@ -51,6 +51,14 @@ export function ProblemSolvePage() {
   })
   const problem = problemQ.data
 
+  if (!Number.isFinite(pid) || pid <= 0) {
+    return (
+      <Center>
+        <p className="text-sm text-muted-foreground">题目不存在或不可见</p>
+        <Button variant="outline" className="mt-3" onClick={() => navigate(backTo)}>返回</Button>
+      </Center>
+    )
+  }
   if (problemQ.isLoading) return <Center>题目加载中…</Center>
   if (problemQ.isError || !problem) {
     return (
@@ -515,7 +523,7 @@ function CustomInputDialog({ open, onOpenChange, value, onChange, onSubmit, busy
 function SubmissionHistoryDialog({ problemId, practiceId, open, onOpenChange }: { problemId: number; practiceId?: number; open: boolean; onOpenChange: (v: boolean) => void }) {
   const [selected, setSelected] = useState<Submission | null>(null)
   const submissionsQ = useQuery({
-    queryKey: ['oj-submissions', problemId, practiceId],
+    queryKey: ['oj-submissions', practiceId ? 'p' : 'g', problemId, practiceId ?? 0],
     queryFn: () => api.ojSubmissions(problemId, undefined, practiceId),
     enabled: open,
   })
