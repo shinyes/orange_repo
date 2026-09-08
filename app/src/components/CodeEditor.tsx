@@ -64,6 +64,8 @@ export function CodeEditor({
       onChange={(v) => onChangeRef.current(v ?? '')}
       options={{
         minimap: { enabled: false },
+        // 关闭顶部面包屑（当前所在函数/类路径提示条）
+        breadcrumbs: { enabled: false },
         fontSize: BASE_FONT,
         lineHeight: 22,
         tabSize: 4,
