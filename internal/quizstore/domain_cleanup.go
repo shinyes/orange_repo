@@ -9,10 +9,8 @@ import (
 )
 
 // CleanupDomainProblems 清理引用 problemIDs 的作答侧数据；uuids 用于 student_solved。
+// 无论题目列表是否为空都会执行孤儿清理（引用的刷题项目/练习已随域空间删除）。
 func (s *Store) CleanupDomainProblems(problemIDs []int64, uuids []string) error {
-	if len(problemIDs) == 0 && len(uuids) == 0 {
-		return nil
-	}
 	tx, err := s.DB.Begin()
 	if err != nil {
 		return err
@@ -44,6 +42,15 @@ func (s *Store) CleanupDomainProblems(problemIDs []int64, uuids []string) error 
 	// 快照/会话 JSON 内嵌引用：拉取解码后过滤写回（行数有限）
 	if err := s.cleanupJSONRefs(tx, problemIDs); err != nil {
 		return err
+	}
+	// 孤儿清理：刷题会话/练习交卷记录引用的项目已随域空间删除（这些表无 FK 级联）
+	if _, err := tx.Exec(`DELETE FROM quiz_sessions
+		WHERE quiz_id NOT IN (SELECT id FROM space_quizzes)`); err != nil {
+		return fmt.Errorf("cleanup orphan quiz sessions: %w", err)
+	}
+	if _, err := tx.Exec(`DELETE FROM space_practice_submissions
+		WHERE practice_id NOT IN (SELECT id FROM space_practices)`); err != nil {
+		return fmt.Errorf("cleanup orphan practice submissions: %w", err)
 	}
 	return tx.Commit()
 }

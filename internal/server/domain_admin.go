@@ -177,42 +177,36 @@ func (s *Server) handleDeleteDomain(c *fiber.Ctx) error {
 	if err != nil {
 		return respondError(c, fiber.StatusBadRequest, "invalid id")
 	}
-	if c.Query("deleteProblems") == "true" {
-		// 级联删除域内题目（空间经 FK 级联）；先收集 id/uuid 供刷题侧数据清理
-		rows, err := s.Store.DB.Query(`SELECT id, COALESCE(uuid,'') FROM problems WHERE domain_id=?`, id)
-		if err != nil {
-			return err
-		}
-		var pids []int64
-		var uuids []string
-		for rows.Next() {
-			var pid int64
-			var u string
-			if err := rows.Scan(&pid, &u); err != nil {
-				rows.Close()
-				return err
-			}
-			pids = append(pids, pid)
-			if u != "" {
-				uuids = append(uuids, u)
-			}
-		}
-		rows.Close()
-		if err := s.Store.DeleteDomainProblems(id); err != nil {
-			return err
-		}
-		// 附带数据全清：判题历史/进度/草稿/错题集/会话/通过记录（引用被删题）
-		if s.QuizStore != nil {
-			if err := s.QuizStore.CleanupDomainProblems(pids, uuids); err != nil {
-				return err
-			}
-		}
-	}
-	n, err := s.Store.CountDomainProblems(id)
+	// 收集域内题目 id/uuid（供刷题侧数据清理；无论是否强制删除都需要）
+	rows, err := s.Store.DB.Query(`SELECT id, COALESCE(uuid,'') FROM problems WHERE domain_id=?`, id)
 	if err != nil {
 		return err
 	}
-	if n > 0 {
+	var pids []int64
+	var uuids []string
+	for rows.Next() {
+		var pid int64
+		var u string
+		if err := rows.Scan(&pid, &u); err != nil {
+			rows.Close()
+			return err
+		}
+		pids = append(pids, pid)
+		if u != "" {
+			uuids = append(uuids, u)
+		}
+	}
+	rows.Close()
+	if c.Query("deleteProblems") == "true" {
+		// 级联删除域内题目（空间/条目引用一并清理）
+		if err := s.Store.DeleteDomainProblems(id); err != nil {
+			return err
+		}
+		// 空壳仓库模板（原仅含该域题的训练/练习）一并清掉
+		if err := s.Store.DeleteEmptyWarehouseBooklets(); err != nil {
+			return err
+		}
+	} else if len(pids) > 0 {
 		return respondError(c, fiber.StatusConflict, "域内仍有题目，无法删除（可加 ?deleteProblems=true 强制）")
 	}
 	if err := s.Store.DeleteDomain(id); err != nil {
@@ -224,6 +218,13 @@ func (s *Server) handleDeleteDomain(c *fiber.Ctx) error {
 	// 域管理员的 domain_id 置空并降级为 member（账号保留）
 	if err := s.Accounts.ClearDomainAdmins(id); err != nil {
 		return err
+	}
+	// 刷题侧数据全清（域与空间已删，孤儿会话/练习快照在此阶段一并清理）：
+	// 判题历史/进度/草稿/错题集/通过记录/会话/交卷快照 中引用该域题的数据
+	if s.QuizStore != nil {
+		if err := s.QuizStore.CleanupDomainProblems(pids, uuids); err != nil {
+			return err
+		}
 	}
 	return c.SendStatus(fiber.StatusNoContent)
 }

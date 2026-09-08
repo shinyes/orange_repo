@@ -395,3 +395,30 @@ func (s *Store) DeleteDomainProblems(domainID int64) error {
 	}
 	return tx.Commit()
 }
+
+// DeleteEmptyWarehouseBooklets 删除仓库中不再含任何题目的空壳训练/练习模板
+//（域题目删除后，原仅含该域题的模板会变空壳——域隔离语义下应一并清掉；
+// 其章节/条目已由删题流程清理，此处删无条目模板行与空目录按需保留）。
+func (s *Store) DeleteEmptyWarehouseBooklets() error {
+	tx, err := s.DB.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	// 训练：无章节或章节无条目 → 空壳（级联删 chapters）
+	if _, err := tx.Exec(`DELETE FROM trainings WHERE id IN (
+		SELECT t.id FROM trainings t
+		LEFT JOIN training_chapters c ON c.training_id=t.id
+		LEFT JOIN training_items i ON i.chapter_id=c.id
+		GROUP BY t.id HAVING COUNT(i.id)=0)`); err != nil {
+		return err
+	}
+	// 练习：无条目 → 空壳
+	if _, err := tx.Exec(`DELETE FROM practices WHERE id IN (
+		SELECT p.id FROM practices p
+		LEFT JOIN practice_items i ON i.practice_id=p.id
+		GROUP BY p.id HAVING COUNT(i.id)=0)`); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
