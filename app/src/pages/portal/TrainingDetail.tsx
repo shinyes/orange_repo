@@ -20,6 +20,7 @@ import { toast } from 'sonner'
 
 import { api } from '@/api'
 import type { CorrectAnswer, ObjectiveAnswer, TrainingItemView } from '@/api/types'
+import { usePortalSession } from '@/pages/portal/portal-context'
 import { TrainingProgrammingCard } from '@/components/portal/TrainingProgrammingCard'
 import { SplitPane } from '@/components/portal/SplitPane'
 import { ObjectiveQuestion } from '@/components/portal/objective'
@@ -393,9 +394,13 @@ function ObjectiveCard({ sid, tid, item, maxAttempts, onAnswered }: {
   onAnswered: () => void
 }) {
   const readOnly = item.solved || (item.locked && maxAttempts > 0 && item.attempts >= maxAttempts)
-  const cacheKey = `${sid}:${tid}:${item.problemId}`
-  // 仅回顾态（已通过/达限不可再作答）才从缓存恢复判定展示；可作答题一律干净开始
-  const cached = readOnly ? lastResultCache.get(cacheKey) : undefined
+  const { user: curUser } = usePortalSession()
+  const cacheKey = `${curUser?.id ?? 0}:${sid}:${tid}:${item.problemId}`
+  // 缓存恢复规则：回顾态（已通过/达限）或 缓存为答错（未锁定）时恢复判定展示——
+  // 答错未达限时切走再回来仍可见错题反馈并可直接再答；已答对的未锁定态不恢复
+  // （避免复用"正确"判定造成无法继续作答/重复提交的卡死窗口）。
+  const cachedRaw = lastResultCache.get(cacheKey)
+  const cached = readOnly || (cachedRaw && !cachedRaw.feedback.correct) ? cachedRaw : undefined
   const [selected, setSelected] = useState<ObjectiveAnswer | null>(cached?.selected ?? null)
   const [feedback, setFeedback] = useState<{ correct: boolean; correctAnswer?: CorrectAnswer } | null>(cached?.feedback ?? null)
   const [busy, setBusy] = useState(false)

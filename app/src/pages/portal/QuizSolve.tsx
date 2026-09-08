@@ -85,7 +85,7 @@ function QuizRound({ qid, quizName }: { qid: number; quizName: string }) {
     } catch (err) {
       setFetchError(err instanceof Error ? err.message : '抽题失败')
     } finally {
-      setLoading(false)
+      if (aliveRef.current) setLoading(false)
     }
   }
 

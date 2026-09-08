@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, type ReactNode } from 'react'
+import { createContext, useContext, useRef, useState, type ReactNode } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
@@ -134,10 +134,15 @@ function PracticeProvider({ sid, pid, data, children }: {
   const [answers, setAnswers] = useState<Record<number, ObjectiveAnswer>>(() =>
     loadPracticeDraft(sid, pid),
   )
+  // answers 同步镜像（事件内即时读最新，供 toggleAnswer 快照式计算）
+  const answersRef = useRef(answers)
+  answersRef.current = answers
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [navOpen, setNavOpen] = useState(false)
   const [historyAllOpen, setHistoryAllOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  // submitting 同步 ref（toggleAnswer 事件内即时判定，避免 state 闭包延迟）
+  const submittingRef = useRef(false)
   const [result, setResult] = useState<PracticeResult | null>(null)
 
   function persist(next: Record<number, ObjectiveAnswer>) {
@@ -150,17 +155,21 @@ function PracticeProvider({ sid, pid, data, children }: {
   }
 
   function toggleAnswer(problemId: number, a: ObjectiveAnswer) {
-    setAnswers((prev) => {
-      const next = { ...prev }
-      if (next[problemId] === a) delete next[problemId]
-      else next[problemId] = a
-      persist(next)
-      return next
-    })
+    // 交卷进行中锁定作答（防与草稿清空/payload 快照竞态）
+    if (submittingRef.current) return
+    // 基于当前快照计算 next 并持久化（保持 updater 纯函数；单用户交互下无并发覆盖风险）
+    const prev = answersRef.current
+    const next = { ...prev }
+    if (next[problemId] === a) delete next[problemId]
+    else next[problemId] = a
+    answersRef.current = next
+    setAnswers(next)
+    persist(next)
   }
 
   async function doSubmit() {
     setSubmitting(true)
+    submittingRef.current = true
     try {
       const payload = objectiveItems.map((it) => ({
         problemId: it.problemId,
@@ -177,6 +186,7 @@ function PracticeProvider({ sid, pid, data, children }: {
       toast.error(err instanceof Error ? err.message : '交卷失败')
     } finally {
       setSubmitting(false)
+      submittingRef.current = false
       setConfirmOpen(false)
     }
   }
@@ -203,6 +213,10 @@ function PracticeProvider({ sid, pid, data, children }: {
     openHistory: () => setHistoryAllOpen(true),
     openNav: () => setNavOpen(true),
     saveNow: () => {
+      if (result) {
+        toast.info('已交卷，作答已提交；如需重做请进入新一轮')
+        return
+      }
       persist(answers)
       toast.success(`已保存 ${answeredCount} 道作答到本地（刷新不丢失）`)
     },

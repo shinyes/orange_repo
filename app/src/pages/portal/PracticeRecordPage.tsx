@@ -248,8 +248,12 @@ function ProgrammingReviewCard({ item, practiceId, asOf, onOpen }: {
     queryFn: () => api.ojSubmissions(item.problemId, undefined, practiceId),
   })
   const subs = subsQ.data?.submissions ?? []
-  // 仅正式提交（submit）计入作答状态：run/test（运行/自测/评测基准）不算"做过"
-  const submits = subs.filter((s) => s.submitType === 'submit' && (!asOf || (s.createdAt ?? '') <= asOf))
+  // 仅正式提交（submit）计入作答状态：run/test（运行/自测/评测基准）不算"做过"；
+  // 截至该次交卷时点（RFC3339 数值比较，避免字符串格式/小数秒失真）
+  const asOfMs = asOf ? new Date(asOf).getTime() : NaN
+  const submits = subs.filter(
+    (s) => s.submitType === 'submit' && (!asOf || (Number.isFinite(asOfMs) && new Date(s.createdAt ?? '').getTime() <= asOfMs)),
+  )
   const passed = submits.some((s) => s.verdict === 'AC' || s.verdict === 'OK')
   const attempted = !passed && submits.some((s) => s.status === 'done')
   const stateMeta = passed

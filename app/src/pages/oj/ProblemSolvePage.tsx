@@ -233,6 +233,7 @@ function ProgrammingSolve({ problem, backTo, review, practiceId }: { problem: Oj
   const touchedRef = useRef(false)
   function enterLang() {
     touchedRef.current = false
+    draftWarnedRef.current = false
   }
 
   // 云端草稿到达后回填：仅当用户未输入且本地无草稿时，用云端内容覆盖题目/通用模板并写入本地草稿。

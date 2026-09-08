@@ -105,6 +105,7 @@ export function TrainingProgrammingCard({ problemId, trainingId, solved, onSolve
   function switchLang(l: CodeLang) {
     if (l === lang) return
     touchedRef.current = false
+    draftWarnedRef.current = false
     setLang(l)
     setCode(localStorage.getItem(draftKey(problemId, l, trainingId)) ?? genericStarter(l))
     localStorage.setItem(`${DRAFT_PREFIX}lang-${trainingId}-${problemId}`, l)
