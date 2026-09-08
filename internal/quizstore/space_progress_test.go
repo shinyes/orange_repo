@@ -105,7 +105,7 @@ func TestSavePracticeSubmissionWritesSolved(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(subs) != 1 || subs[0].ID != subID || subs[0].PracticeID != practiceID ||
-		subs[0].UserID != uid || subs[0].ObjectiveCorrect != 1 || subs[0].CreatedAt == "" {
+		subs[0].UserID != uid || subs[0].ObjectiveCorrect != 1 || subs[0].CreatedAt.IsZero() {
 		t.Fatalf("subs = %+v", subs)
 	}
 	// 通过记录仅答对且带 uuid 的那题

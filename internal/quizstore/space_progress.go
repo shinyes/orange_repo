@@ -9,6 +9,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"time"
 )
 
 // ---------- 训练客观题尝试记录（限次/标色） ----------
@@ -137,11 +138,11 @@ func (s *Store) SolvedUUIDs(userID int64) (map[string]bool, error) {
 
 // PracticeSubmission 练习交卷记录视图。
 type PracticeSubmission struct {
-	ID               int64  `json:"id"`
-	PracticeID       int64  `json:"practiceId"`
-	UserID           int64  `json:"userId"`
-	ObjectiveCorrect int    `json:"objectiveCorrect"`
-	CreatedAt        string `json:"createdAt"`
+	ID               int64     `json:"id"`
+	PracticeID       int64     `json:"practiceId"`
+	UserID           int64     `json:"userId"`
+	ObjectiveCorrect int       `json:"objectiveCorrect"`
+	CreatedAt        time.Time `json:"createdAt"` // RFC3339（与判题 submissions 同格式，供前端按时点过滤）
 }
 
 // SavePracticeSubmission 保存一次交卷（answersJSON 为快照 JSON，元素 {problemId,correct,uuid}），
@@ -190,8 +191,13 @@ func (s *Store) ListPracticeSubmissions(practiceID, userID int64) ([]PracticeSub
 	var out []PracticeSubmission
 	for rows.Next() {
 		var sub PracticeSubmission
-		if err := rows.Scan(&sub.ID, &sub.PracticeID, &sub.UserID, &sub.ObjectiveCorrect, &sub.CreatedAt); err != nil {
+		var rawCreated string
+		if err := rows.Scan(&sub.ID, &sub.PracticeID, &sub.UserID, &sub.ObjectiveCorrect, &rawCreated); err != nil {
 			return nil, err
+		}
+		// SQLite CURRENT_TIMESTAMP 存 "YYYY-MM-DD HH:MM:SS"（UTC）→ 转 time.Time（RFC3339 输出）
+		if t, err := time.ParseInLocation("2006-01-02 15:04:05", rawCreated, time.UTC); err == nil {
+			sub.CreatedAt = t
 		}
 		out = append(out, sub)
 	}

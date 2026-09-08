@@ -4,6 +4,7 @@ package quizserver
 import (
 	"encoding/json"
 	"errors"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 
@@ -199,7 +200,7 @@ func (s *Server) handlePortalPracticeSubmissionDetail(c *fiber.Ctx) error {
 	owned := false
 	for _, sb := range subs {
 		if sb.ID == sid {
-			createdAt = sb.CreatedAt
+			createdAt = sb.CreatedAt.Format(time.RFC3339)
 			owned = true
 			break
 		}
