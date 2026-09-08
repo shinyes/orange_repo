@@ -2,7 +2,6 @@
 // 与 SpaceAdmin（管理端）功能对齐的轻量版：标题/描述/训练限次；可见成员覆盖式。
 import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { EyeIcon } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { api } from '@/api'
@@ -236,7 +235,7 @@ export function NewQuizDialog(props: {
   )
 }
 
-// ---------- 编辑刷题项目（标题/范围标签/每轮题数 + 可见成员） ----------
+// ---------- 编辑刷题项目（标题/范围标签/每轮题数；可见成员走卡片独立按钮） ----------
 
 export function QuizEditDialog(props: {
   spaceId: number
@@ -249,14 +248,12 @@ export function QuizEditDialog(props: {
   const [tags, setTags] = useState((props.quiz.tags ?? []).join(', '))
   const [roundSize, setRoundSize] = useState(String(props.quiz.roundSize ?? 0))
   const [busy, setBusy] = useState(false)
-  const [showVisible, setShowVisible] = useState(false)
 
   useEffect(() => {
     if (props.open) {
       setTitle(props.quiz.title)
       setTags((props.quiz.tags ?? []).join(', '))
       setRoundSize(String(props.quiz.roundSize ?? 0))
-      setShowVisible(false)
     }
   }, [props.open, props.quiz])
 
@@ -290,48 +287,32 @@ export function QuizEditDialog(props: {
   }
 
   return (
-    <>
-      <Dialog open={props.open && !showVisible} onOpenChange={(v) => !v && props.onOpenChange(false)}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>编辑刷题项目 · {props.quiz.title}</DialogTitle>
-            <DialogDescription>修改标题/范围标签与每轮题数；可见成员可在下方单独设置。</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3">
-            <div className="space-y-1.5">
-              <Label>项目标题</Label>
-              <Input value={title} onChange={(e) => setTitle(e.target.value)} />
-            </div>
-            <div className="space-y-1.5">
-              <Label>范围标签（可选，逗号分隔）</Label>
-              <Input value={tags} onChange={(e) => setTags(e.target.value)} placeholder="留空=域内全部客观题" />
-            </div>
-            <div className="space-y-1.5">
-              <Label>每轮题目数量（0=不限，整范围为一轮）</Label>
-              <Input type="number" min={0} max={200} value={roundSize} onChange={(e) => setRoundSize(e.target.value)} placeholder="如：10" />
-            </div>
-            <Button variant="outline" size="sm" onClick={() => setShowVisible(true)}>
-              <EyeIcon className="size-3.5" /> 设置可见成员…
-            </Button>
+    <Dialog open={props.open} onOpenChange={(v) => !v && props.onOpenChange(false)}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>编辑刷题项目 · {props.quiz.title}</DialogTitle>
+          <DialogDescription>修改标题/范围标签与每轮题数；可见成员请在卡片右侧的 👁 按钮设置。</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <Label>项目标题</Label>
+            <Input value={title} onChange={(e) => setTitle(e.target.value)} />
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => props.onOpenChange(false)}>取消</Button>
-            <Button onClick={() => void save()} disabled={busy}>{busy ? '保存中…' : '保存'}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-      {showVisible && (
-        <VisibleUsersDialog
-          spaceId={props.spaceId}
-          kind="quiz"
-          itemId={props.quiz.id}
-          title={props.quiz.title}
-          open
-          onClose={() => setShowVisible(false)}
-          onSaved={() => props.onSaved()}
-        />
-      )}
-    </>
+          <div className="space-y-1.5">
+            <Label>范围标签（可选，逗号分隔）</Label>
+            <Input value={tags} onChange={(e) => setTags(e.target.value)} placeholder="留空=域内全部客观题" />
+          </div>
+          <div className="space-y-1.5">
+            <Label>每轮题目数量（0=不限，整范围为一轮）</Label>
+            <Input type="number" min={0} max={200} value={roundSize} onChange={(e) => setRoundSize(e.target.value)} placeholder="如：10" />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => props.onOpenChange(false)}>取消</Button>
+          <Button onClick={() => void save()} disabled={busy}>{busy ? '保存中…' : '保存'}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 
