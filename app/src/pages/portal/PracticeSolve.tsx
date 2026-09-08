@@ -1,8 +1,8 @@
-import { createContext, useContext, useRef, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  HistoryIcon, LayoutGridIcon, Loader2Icon, SaveIcon, SendIcon,
+  HistoryIcon, LayoutGridIcon, Loader2Icon, SendIcon,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -86,8 +86,6 @@ type PracticeCtxValue = {
   openConfirm: () => void
   openHistory: () => void
   openNav: () => void
-  /** 手动保存当前作答到本地草稿（顶栏「保存」） */
-  saveNow: () => void
 }
 
 const PracticeCtx = createContext<PracticeCtxValue | null>(null)
@@ -154,6 +152,68 @@ function PracticeProvider({ sid, pid, data, children }: {
     }
   }
 
+  // ---------- 云端草稿（换设备续答；变更防抖 1.5s 全量上传） ----------
+  const cloudTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const saveCloudDraft = useCallback((next: Record<number, ObjectiveAnswer>) => {
+    if (cloudTimer.current) clearTimeout(cloudTimer.current)
+    cloudTimer.current = setTimeout(() => {
+      void api.portalSavePracticeDraft(sid, pid, next).catch(() => {
+        // 静默失败：本地草稿仍在，下次作答/保存重试
+      })
+    }, 800)
+  }, [sid, pid])
+  const pushCloudNow = useCallback((next: Record<number, ObjectiveAnswer>) => {
+    if (cloudTimer.current) {
+      clearTimeout(cloudTimer.current)
+      cloudTimer.current = null
+    }
+    return api.portalSavePracticeDraft(sid, pid, next).catch(() => {
+      // 静默
+    })
+  }, [sid, pid])
+  const cloudBackfillDone = useRef(false)
+  // 挂载时拉云端草稿回填：本地空 → 云；云更全/相等 → 云（云端为同步源）；本地更全（离线新增）→ 保留并上传本地
+  useEffect(() => {
+    let alive = true
+    api.portalPracticeDraft(sid, pid)
+      .then((v) => {
+        if (!alive) return
+        cloudBackfillDone.current = true
+        const cloud: Record<number, ObjectiveAnswer> = {}
+        for (const [k, val] of Object.entries(v.answers ?? {})) {
+          const n = Number(k)
+          if (Number.isFinite(n) && (typeof val === 'number' || typeof val === 'boolean')) cloud[n] = val
+        }
+        const local = answersRef.current
+        const localN = Object.keys(local).length
+        const cloudN = Object.keys(cloud).length
+        if (cloudN === 0) return
+        if (localN === 0 || cloudN >= localN) {
+          answersRef.current = cloud
+          setAnswers(cloud)
+          persist(cloud)
+        } else {
+          // 本地比云全（如离线新作答）：以本地为准并上云（下次换设备可续）
+          void pushCloudNow(local)
+        }
+      })
+      .catch(() => {
+        if (alive) cloudBackfillDone.current = true
+      })
+    return () => {
+      alive = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sid, pid])
+  // 卸载前 flush 云端草稿
+  useEffect(() => () => {
+    if (cloudTimer.current) {
+      clearTimeout(cloudTimer.current)
+      void api.portalSavePracticeDraft(sid, pid, answersRef.current).catch(() => {})
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sid, pid])
+
   function toggleAnswer(problemId: number, a: ObjectiveAnswer) {
     // 交卷进行中锁定作答（防与草稿清空/payload 快照竞态）
     if (submittingRef.current) return
@@ -165,6 +225,7 @@ function PracticeProvider({ sid, pid, data, children }: {
     answersRef.current = next
     setAnswers(next)
     persist(next)
+    saveCloudDraft(next)
   }
 
   async function doSubmit() {
@@ -178,8 +239,10 @@ function PracticeProvider({ sid, pid, data, children }: {
       })).filter((a) => a.answer !== undefined)
       const r = await api.portalPracticeSubmit(sid, pid, payload)
       setResult(r)
-      // 交卷后清空本地草稿（已提交内容入历史）
+      // 交卷后清空本地与云端草稿（已提交内容入历史）
       localStorage.removeItem(practiceDraftKey(sid, pid))
+      answersRef.current = {}
+      void pushCloudNow({})
       void qc.invalidateQueries({ queryKey: ['portal-practice-submissions', sid, pid] })
       toast.success(`交卷成功：答对 ${r.objectiveCorrect}/${r.objectiveTotal}`)
     } catch (err) {
@@ -212,14 +275,6 @@ function PracticeProvider({ sid, pid, data, children }: {
     openConfirm: () => setConfirmOpen(true),
     openHistory: () => setHistoryAllOpen(true),
     openNav: () => setNavOpen(true),
-    saveNow: () => {
-      if (result) {
-        toast.info('已交卷，作答已提交；如需重做请进入新一轮')
-        return
-      }
-      persist(answers)
-      toast.success(`已保存 ${answeredCount} 道作答到本地（刷新不丢失）`)
-    },
   }
 
   return <PracticeCtx.Provider value={value}>{children}</PracticeCtx.Provider>
@@ -228,7 +283,7 @@ function PracticeProvider({ sid, pid, data, children }: {
 // ---------- 外壳顶栏右侧操作按钮（全部提交记录 / 保存 / 提交；移动端含「导航」） ----------
 
 function HeaderActionBar() {
-  const { submitting, canSubmit, openConfirm, openHistory, openNav, saveNow } = usePracticeCtx()
+  const { submitting, canSubmit, openConfirm, openHistory, openNav } = usePracticeCtx()
   return (
     <div className="flex shrink-0 items-center gap-1.5">
       <Button
@@ -248,16 +303,6 @@ function HeaderActionBar() {
       >
         <HistoryIcon className="size-3.5" />
         <span className="hidden md:inline">全部提交记录</span>
-      </Button>
-      <Button
-        variant="secondary"
-        size="sm"
-        className="text-muted-foreground"
-        title="将当前作答保存到本地草稿（刷新不丢失；修改会自动保存）"
-        onClick={saveNow}
-      >
-        <SaveIcon className="size-3.5" />
-        <span className="hidden sm:inline">保存</span>
       </Button>
       <Button
         size="sm"

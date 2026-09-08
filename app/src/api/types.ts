@@ -164,6 +164,12 @@ export interface PracticeRecordItem {
   correctAnswer?: number | boolean
 }
 
+export interface PracticeDraftView {
+  /** 键为题目 id（字符串），值为 选项序号/布尔 */
+  answers: Record<string, number | boolean>
+  updatedAt?: string
+}
+
 export interface PracticeRecordDetail {
   submissionId: number
   practiceId: number

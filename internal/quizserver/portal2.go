@@ -4,6 +4,7 @@ package quizserver
 import (
 	"encoding/json"
 	"errors"
+	"strconv"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -140,6 +141,86 @@ func (s *Server) handlePortalPracticeSubmit(c *fiber.Ctx) error {
 		"objectiveCorrect": correctCount,
 		"objectiveTotal":  objectiveTotal,
 	})
+}
+
+// handlePortalPracticeDraftGet GET /api/portal/space/:id/practice/:pid/draft
+// → 我的练习整卷作答草稿（云端续答：换设备后恢复已选答案）。
+func (s *Server) handlePortalPracticeDraftGet(c *fiber.Ctx) error {
+	spaceID, err := s.resolveSpace(c)
+	if err != nil {
+		return err
+	}
+	pid, err := paramID(c, "pid")
+	if err != nil {
+		return respondError(c, fiber.StatusBadRequest, "invalid practice id")
+	}
+	user := currentUser(c)
+	p, _, err := s.QS.Repo.GetSpacePracticeBrief(pid, viewerID(user))
+	if err != nil {
+		return respondError(c, fiber.StatusNotFound, "练习不存在")
+	}
+	if p.SpaceID != spaceID {
+		return respondError(c, fiber.StatusNotFound, "练习不存在")
+	}
+	answers, updated, ok, err := s.QS.LoadPracticeDraft(user.ID, pid)
+	if err != nil {
+		return respondError(c, fiber.StatusInternalServerError, err.Error())
+	}
+	if !ok {
+		answers = "{}"
+	}
+	return respondData(c, fiber.StatusOK, fiber.Map{"answers": json.RawMessage(answers), "updatedAt": updated})
+}
+
+// handlePortalPracticeDraftPut PUT /api/portal/space/:id/practice/:pid/draft {answers}
+// → 保存整卷作答草稿（提交空对象/空表=清除草稿）。
+func (s *Server) handlePortalPracticeDraftPut(c *fiber.Ctx) error {
+	spaceID, err := s.resolveSpace(c)
+	if err != nil {
+		return err
+	}
+	pid, err := paramID(c, "pid")
+	if err != nil {
+		return respondError(c, fiber.StatusBadRequest, "invalid practice id")
+	}
+	user := currentUser(c)
+	p, _, err := s.QS.Repo.GetSpacePracticeBrief(pid, viewerID(user))
+	if err != nil {
+		return respondError(c, fiber.StatusNotFound, "练习不存在")
+	}
+	if p.SpaceID != spaceID {
+		return respondError(c, fiber.StatusNotFound, "练习不存在")
+	}
+	var req struct {
+		Answers json.RawMessage `json:"answers"`
+	}
+	if err := c.BodyParser(&req); err != nil {
+		return respondError(c, fiber.StatusBadRequest, "invalid request")
+	}
+	// 校验 answers 为对象且字段值仅 number|boolean，防任意大/异常载荷
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal(req.Answers, &m); err != nil {
+		return respondError(c, fiber.StatusBadRequest, "answers 格式错误")
+	}
+	if len(m) > 1000 {
+		return respondError(c, fiber.StatusBadRequest, "answers 过多")
+	}
+	for k, v := range m {
+		if _, err := strconv.ParseInt(k, 10, 64); err != nil {
+			return respondError(c, fiber.StatusBadRequest, "answers 键必须为题目 id")
+		}
+		var num json.Number
+		var b bool
+		if err := json.Unmarshal(v, &num); err != nil {
+			if err2 := json.Unmarshal(v, &b); err2 != nil {
+				return respondError(c, fiber.StatusBadRequest, "answers 值必须为序号或布尔")
+			}
+		}
+	}
+	if err := s.QS.SavePracticeDraft(user.ID, pid, string(req.Answers)); err != nil {
+		return respondError(c, fiber.StatusInternalServerError, err.Error())
+	}
+	return c.SendStatus(fiber.StatusNoContent)
 }
 
 // handlePortalPracticeSubmissions GET /api/portal/space/:id/practice/:pid/submissions

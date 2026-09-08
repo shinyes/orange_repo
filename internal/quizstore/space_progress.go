@@ -9,6 +9,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"strings"
 	"time"
 )
 
@@ -214,4 +215,32 @@ func (s *Store) GetPracticeSubmission(submissionID int64) (answersJSON string, e
 		return "", ErrNotFound
 	}
 	return answersJSON, err
+}
+
+// SavePracticeDraft 保存练习整卷作答草稿（answersJSON 形如 {"problemId": 1|true}）。
+// 空对象/空数组时删除草稿（交卷清除语义）。
+func (s *Store) SavePracticeDraft(userID, practiceID int64, answersJSON string) error {
+	if strings.TrimSpace(answersJSON) == "" || strings.TrimSpace(answersJSON) == "{}" || strings.TrimSpace(answersJSON) == "[]" {
+		_, err := s.DB.Exec(`DELETE FROM space_practice_drafts WHERE practice_id=? AND user_id=?`, practiceID, userID)
+		return err
+	}
+	_, err := s.DB.Exec(`INSERT INTO space_practice_drafts(practice_id,user_id,answers_json,updated_at)
+		VALUES(?,?,?,CURRENT_TIMESTAMP)
+		ON CONFLICT(practice_id,user_id) DO UPDATE SET
+		answers_json=excluded.answers_json, updated_at=CURRENT_TIMESTAMP`, practiceID, userID, answersJSON)
+	return err
+}
+
+// LoadPracticeDraft 读取练习草稿（无记录返回空 JSON 与 false）。
+func (s *Store) LoadPracticeDraft(userID, practiceID int64) (string, string, bool, error) {
+	var answers, updated string
+	err := s.DB.QueryRow(`SELECT answers_json,COALESCE(updated_at,'') FROM space_practice_drafts
+		WHERE practice_id=? AND user_id=?`, practiceID, userID).Scan(&answers, &updated)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "{}", "", false, nil
+		}
+		return "", "", false, err
+	}
+	return answers, updated, true, nil
 }

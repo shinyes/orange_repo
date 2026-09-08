@@ -205,6 +205,14 @@ func (s *Store) migrate() error {
 			wrong_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 			PRIMARY KEY(user_id, problem_id)
 		);`,
+		// ---------- 练习整卷作答云端草稿（换设备续答；交卷即清） ----------
+		`CREATE TABLE IF NOT EXISTS space_practice_drafts (
+			user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			practice_id INTEGER NOT NULL,
+			answers_json TEXT NOT NULL DEFAULT '{}',
+			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			PRIMARY KEY(practice_id, user_id)
+		);`,
 	}
 	for _, stmt := range stmts {
 		if _, err := s.DB.Exec(stmt); err != nil {

@@ -11,6 +11,7 @@ import type {
   OjProblem,
   PortalSpace,
   PracticeDetail,
+  PracticeDraftView,
   PracticeRecordDetail,
   PracticeSubmission,
   PracticeSubmitResult,
@@ -58,6 +59,14 @@ export const portalApi = {
     req<{ submissions: PracticeSubmission[] }>(`/api/portal/space/${spaceId}/practice/${practiceId}/submissions`),
   portalPracticeSubmissionDetail: (spaceId: number | string, practiceId: number | string, submissionId: number | string) =>
     req<PracticeRecordDetail>(`/api/portal/space/${spaceId}/practice/${practiceId}/submissions/${submissionId}`),
+  // 整卷作答云端草稿（换设备续答）
+  portalPracticeDraft: (spaceId: number | string, practiceId: number | string) =>
+    req<PracticeDraftView>(`/api/portal/space/${spaceId}/practice/${practiceId}/draft`),
+  portalSavePracticeDraft: (spaceId: number | string, practiceId: number | string, answers: Record<number, ObjectiveAnswer>) =>
+    req<void>(
+      `/api/portal/space/${spaceId}/practice/${practiceId}/draft`,
+      json({ method: 'PUT', body: JSON.stringify({ answers }) }),
+    ),
 
   // ---- 门户：空间刷题 ----
   portalSpaceQuizzes: (spaceId: number | string) => req<{ quizzes: QuizBrief[] }>(`/api/portal/space/${spaceId}/quizzes`),
