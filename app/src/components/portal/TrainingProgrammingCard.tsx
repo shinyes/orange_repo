@@ -179,7 +179,7 @@ export function TrainingProgrammingCard({ problemId, trainingId, solved, onSolve
   }
 
   return (
-    <div>
+    <div className="flex h-full min-h-0 flex-col">
       {/* 编辑器工具栏 */}
       <div className="mb-2 flex flex-wrap items-center gap-1.5">
         <Select value={lang} onValueChange={(v) => switchLang(v as CodeLang)}>
@@ -207,8 +207,8 @@ export function TrainingProgrammingCard({ problemId, trainingId, solved, onSolve
 
       {/* 判定结果不单独横幅展示（避免编辑器上方遮挡）：控制台文本 + 左侧导航绿/红格已反馈 */}
 
-      {/* 编辑器 */}
-      <div className="h-64 overflow-hidden rounded-lg border bg-background md:h-80">
+      {/* 编辑器（弹性占满剩余高度；控制台固定矮块贴底——与做题页布局一致） */}
+      <div className="min-h-[160px] flex-1 overflow-hidden rounded-lg border bg-background">
         <CodeEditor language={lang} value={code} onChange={handleCodeChange} />
       </div>
 
