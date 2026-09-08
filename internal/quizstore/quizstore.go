@@ -148,14 +148,17 @@ func (s *Store) migrate() error {
 			updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			PRIMARY KEY(user_id, problem_id)
 		);`,
-		// ---------- 云端代码草稿（按 用户×题目×语言；跨端恢复） ----------
+		// ---------- 云端代码草稿（按 用户×题目×语言×上下文；跨端恢复） ----------
+		// ctx_kind: ''=全局做题页 / training=训练 / practice=练习；ctx_id 为对应项目 id
 		`CREATE TABLE IF NOT EXISTS code_drafts (
 			user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
 			problem_id INTEGER NOT NULL,
 			language TEXT NOT NULL,
+			ctx_kind TEXT NOT NULL DEFAULT '',
+			ctx_id INTEGER NOT NULL DEFAULT 0,
 			code TEXT NOT NULL DEFAULT '',
 			updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-			PRIMARY KEY(user_id, problem_id, language)
+			PRIMARY KEY(user_id, problem_id, language, ctx_kind, ctx_id)
 		);`,
 		// ---------- 空间训练/练习学生作答（主库仅存空间内容结构；作答与 users 同库） ----------
 		// training_id/practice_id 指主库空间训练/练习 id，无跨库外键；
@@ -208,6 +211,36 @@ func (s *Store) migrate() error {
 		if m == 0 {
 			if _, err := s.DB.Exec(`ALTER TABLE submissions ADD COLUMN practice_id INTEGER NOT NULL DEFAULT 0`); err != nil {
 				return fmt.Errorf("quiz migrate add submissions.practice_id: %w", err)
+			}
+		}
+	}
+	// 存量草稿表升级：code_drafts 旧结构（无 ctx）→ ctx 结构（旧数据视为全局 ctx=''）
+	{
+		var k int
+		if err := s.DB.QueryRow(`SELECT COUNT(1) FROM pragma_table_info('code_drafts') WHERE name='ctx_kind'`).Scan(&k); err != nil {
+			return err
+		}
+		if k == 0 {
+			stmts := []string{
+				`ALTER TABLE code_drafts RENAME TO code_drafts_old;`,
+				`CREATE TABLE code_drafts (
+					user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+					problem_id INTEGER NOT NULL,
+					language TEXT NOT NULL,
+					ctx_kind TEXT NOT NULL DEFAULT '',
+					ctx_id INTEGER NOT NULL DEFAULT 0,
+					code TEXT NOT NULL DEFAULT '',
+					updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+					PRIMARY KEY(user_id, problem_id, language, ctx_kind, ctx_id)
+				);`,
+				`INSERT INTO code_drafts(user_id,problem_id,language,ctx_kind,ctx_id,code,updated_at)
+					SELECT user_id,problem_id,language,'',0,code,updated_at FROM code_drafts_old;`,
+				`DROP TABLE code_drafts_old;`,
+			}
+			for _, st := range stmts {
+				if _, err := s.DB.Exec(st); err != nil {
+					return fmt.Errorf("quiz migrate code_drafts ctx: %w; stmt: %s", err, st)
+				}
 			}
 		}
 	}

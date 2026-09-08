@@ -69,9 +69,10 @@ export const portalApi = {
 
   // ---- OrangeOJ：题目做题（/api/oj/problem/:id 保留——做题页/空间内跳转复用） ----
   ojProblem: (id: number) => req<OjProblem>(`/api/oj/problem/${id}`),
-  ojDraft: (id: number, lang: CodeLang) => req<OjDraft>(`/api/oj/problem/${id}/draft?lang=${lang}`),
-  ojSaveDraft: (id: number, lang: CodeLang, code: string) =>
-    req<void>(`/api/oj/problem/${id}/draft`, json({ method: 'PUT', body: JSON.stringify({ language: lang, code }) })),
+  ojDraft: (id: number, lang: CodeLang, ctxKind?: string, ctxId?: number) =>
+    req<OjDraft>(`/api/oj/problem/${id}/draft?lang=${lang}${ctxKind ? `&ctxKind=${ctxKind}&ctxId=${ctxId ?? 0}` : ''}`),
+  ojSaveDraft: (id: number, lang: CodeLang, code: string, ctxKind?: string, ctxId?: number) =>
+    req<void>(`/api/oj/problem/${id}/draft`, json({ method: 'PUT', body: JSON.stringify({ language: lang, code, ...(ctxKind ? { ctxKind, ctxId: ctxId ?? 0 } : {}) }) })),
   ojRun: (id: number, language: CodeLang, sourceCode: string, inputData: string) =>
     req<{ submissionId: number; status: string }>(`/api/oj/problem/${id}/run`, json({ method: 'POST', body: JSON.stringify({ language, sourceCode, inputData }) })),
   ojTest: (id: number, language: CodeLang, sourceCode: string) =>

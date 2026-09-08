@@ -394,7 +394,27 @@ func (s *Server) handleOJSubmissionPoll(c *fiber.Ctx) error {
 	})
 }
 
-// handleOJGetDraft GET /api/oj/problem/:id/draft?lang=python|cpp → 云端草稿（无=空串）。
+// draftCtx 解析草稿上下文（kind: training/practice/空=全局；id 对应项目）。
+func draftCtx(kindRaw, idRaw string) (string, int64, bool) {
+	kind := strings.TrimSpace(kindRaw)
+	if kind != "" && kind != "training" && kind != "practice" {
+		return "", 0, false
+	}
+	id := int64(0)
+	if idRaw = strings.TrimSpace(idRaw); idRaw != "" {
+		v, err := strconv.ParseInt(idRaw, 10, 64)
+		if err != nil || v <= 0 {
+			return "", 0, false
+		}
+		id = v
+	}
+	if kind != "" && id <= 0 {
+		return "", 0, false
+	}
+	return kind, id, true
+}
+
+// handleOJGetDraft GET /api/oj/problem/:id/draft?lang=python|cpp[&ctxKind=&ctxId=] → 云端草稿（无=空串）。
 func (s *Server) handleOJGetDraft(c *fiber.Ctx) error {
 	user := currentUser(c)
 	problemID, err := paramID(c, "id")
@@ -405,6 +425,10 @@ func (s *Server) handleOJGetDraft(c *fiber.Ctx) error {
 	if !ok {
 		return respondError(c, fiber.StatusBadRequest, "仅支持 Python 与 C++")
 	}
+	ctxKind, ctxID, okCtx := draftCtx(c.Query("ctxKind"), c.Query("ctxId"))
+	if !okCtx {
+		return respondError(c, fiber.StatusBadRequest, "无效的草稿上下文")
+	}
 	visible, err := s.problemVisibleToUser(user, problemID)
 	if err != nil {
 		return respondError(c, fiber.StatusInternalServerError, err.Error())
@@ -412,14 +436,14 @@ func (s *Server) handleOJGetDraft(c *fiber.Ctx) error {
 	if !visible {
 		return respondError(c, fiber.StatusNotFound, "题目不存在或不可见")
 	}
-	code, err := s.QS.GetDraft(user.ID, problemID, lang)
+	code, err := s.QS.GetDraft(user.ID, problemID, lang, ctxKind, ctxID)
 	if err != nil {
 		return respondError(c, fiber.StatusInternalServerError, err.Error())
 	}
 	return respondData(c, fiber.StatusOK, fiber.Map{"code": code, "language": lang})
 }
 
-// handleOJSaveDraft PUT /api/oj/problem/:id/draft {language, code} → 保存云端草稿。
+// handleOJSaveDraft PUT /api/oj/problem/:id/draft {language, code[, ctxKind, ctxId]} → 保存云端草稿。
 func (s *Server) handleOJSaveDraft(c *fiber.Ctx) error {
 	user := currentUser(c)
 	problemID, err := paramID(c, "id")
@@ -429,6 +453,8 @@ func (s *Server) handleOJSaveDraft(c *fiber.Ctx) error {
 	var req struct {
 		Language string `json:"language"`
 		Code     string `json:"code"`
+		CtxKind  string `json:"ctxKind"`
+		CtxID    *int64 `json:"ctxId"`
 	}
 	if err := c.BodyParser(&req); err != nil {
 		return respondError(c, fiber.StatusBadRequest, "invalid request")
@@ -436,6 +462,20 @@ func (s *Server) handleOJSaveDraft(c *fiber.Ctx) error {
 	lang, ok := normalizeLanguage(req.Language)
 	if !ok {
 		return respondError(c, fiber.StatusBadRequest, "仅支持 Python 与 C++")
+	}
+	// 上下文解析：kind 空=全局（忽略 id）；training/practice 必须带正 id；非法 kind 拒绝
+	var ctxKind string
+	var ctxID int64
+	switch strings.TrimSpace(req.CtxKind) {
+	case "":
+	case "training", "practice":
+		if req.CtxID == nil || *req.CtxID <= 0 {
+			return respondError(c, fiber.StatusBadRequest, "无效的草稿上下文")
+		}
+		ctxKind = strings.TrimSpace(req.CtxKind)
+		ctxID = *req.CtxID
+	default:
+		return respondError(c, fiber.StatusBadRequest, "无效的草稿上下文")
 	}
 	if len(req.Code) > 512*1024 {
 		return respondError(c, fiber.StatusBadRequest, "草稿过大")
@@ -447,7 +487,7 @@ func (s *Server) handleOJSaveDraft(c *fiber.Ctx) error {
 	if !visible {
 		return respondError(c, fiber.StatusNotFound, "题目不存在或不可见")
 	}
-	if err := s.QS.SaveDraft(user.ID, problemID, lang, req.Code); err != nil {
+	if err := s.QS.SaveDraft(user.ID, problemID, lang, ctxKind, ctxID, req.Code); err != nil {
 		return respondError(c, fiber.StatusInternalServerError, err.Error())
 	}
 	return c.SendStatus(fiber.StatusNoContent)

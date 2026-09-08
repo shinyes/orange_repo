@@ -202,9 +202,15 @@ function ObjectiveSolve({ problem, backTo }: { problem: OjProblem; backTo: strin
 
 function ProgrammingSolve({ problem, backTo, review, practiceId }: { problem: OjProblem; backTo: string; review?: boolean; practiceId?: number }) {
   const samples = (problem.bodyJson.samples as { input?: string; output?: string }[] | undefined) ?? []
-  const [lang, setLang] = useState<CodeLang>(() => (localStorage.getItem(DRAFT_KEY + `-lang-${problem.id}`) as CodeLang) || 'python')
+  // 草稿上下文：练习进入=按练习隔离（云端 ctx practice+id）；做题页直达=全局
+  const ctxKind = practiceId ? 'practice' : ''
+  const ctxId = practiceId
+  const ctxTag = practiceId ? `p${practiceId}` : 'g'
+  // 本地草稿 key（含上下文，防跨练习/全局互串）
+  const draftLocal = (pid: number, l: CodeLang) => `${DRAFT_KEY}-${ctxTag}-${pid}-${l}`
+  const [lang, setLang] = useState<CodeLang>(() => (localStorage.getItem(`${DRAFT_KEY}-${ctxTag}-lang-${problem.id}`) as CodeLang) || 'python')
   // 初始 code：本地草稿 →（异步）云草稿 → 题目模板（starterPy/starterCpp）→ 通用模板。
-  const [code, setCode] = useState(() => localStorage.getItem(DRAFT_KEY + `-${problem.id}-${lang}`) ?? resolveStarter(lang, problem))
+  const [code, setCode] = useState(() => localStorage.getItem(draftLocal(problem.id, lang)) ?? resolveStarter(lang, problem))
   const [consoleText, setConsoleText] = useState('控制台已就绪')
   const [consoleVariant, setConsoleVariant] = useState<'default' | 'error' | 'success'>('default')
   const [busyAction, setBusyAction] = useState<string | null>(null) // run/test/submit 进行中
@@ -213,8 +219,8 @@ function ProgrammingSolve({ problem, backTo, review, practiceId }: { problem: Oj
   const [customInput, setCustomInput] = useState('')
   const [historyOpen, setHistoryOpen] = useState(false)
 
-  // 云端草稿（按 题×语言 GET）：加载完成后回填——本地已有草稿（含本会话已输入/此前已回填）则保留本地。
-  const cloudDraft = useCloudDraft(problem.id, lang)
+  // 云端草稿（按 题×语言×上下文 GET）：加载完成后回填——本地已有草稿则保留本地。
+  const cloudDraft = useCloudDraft(problem.id, lang, ctxKind, ctxId)
   // 本会话内当前语言是否已被用户手动编辑（一旦输入，云端草稿不再覆盖；切语言时重置）。
   const touchedRef = useRef(false)
   function enterLang() {
@@ -224,28 +230,28 @@ function ProgrammingSolve({ problem, backTo, review, practiceId }: { problem: Oj
   // 云端草稿到达后回填：仅当用户未输入且本地无草稿时，用云端内容覆盖题目/通用模板并写入本地草稿。
   useEffect(() => {
     if (!cloudDraft.cloudLoaded || touchedRef.current) return
-    const local = localStorage.getItem(DRAFT_KEY + `-${problem.id}-${lang}`)
+    const local = localStorage.getItem(draftLocal(problem.id, lang))
     if (local != null && local.trim() !== '') return
     if (!cloudDraft.initialCode || cloudDraft.initialCode.trim() === '') return // 云端无草稿：停留当前模板
     setCode(cloudDraft.initialCode)
-    localStorage.setItem(DRAFT_KEY + `-${problem.id}-${lang}`, cloudDraft.initialCode)
-  }, [cloudDraft.cloudLoaded, cloudDraft.initialCode, lang, problem.id])
+    localStorage.setItem(draftLocal(problem.id, lang), cloudDraft.initialCode)
+  }, [cloudDraft.cloudLoaded, cloudDraft.initialCode, lang, problem.id, ctxTag])
 
-  // 编辑器输入：实时写本地草稿（既有 oj-draft key）+ 云端 debounce 自动保存（静默失败，本地已缓存）。
+  // 编辑器输入：实时写本地草稿 + 云端 debounce 自动保存（静默失败，本地已缓存）。
   function handleCodeChange(next: string) {
     if (review) return // 回顾只读，不写草稿
     touchedRef.current = true
     setCode(next)
-    localStorage.setItem(DRAFT_KEY + `-${problem.id}-${lang}`, next)
-    saveDraftDebounced(problem.id, lang, next)
+    localStorage.setItem(draftLocal(problem.id, lang), next)
+    saveDraftDebounced(problem.id, lang, next, ctxKind, ctxId)
   }
 
   function switchLang(l: CodeLang) {
     if (l === lang) return
     setLang(l)
-    setCode(localStorage.getItem(DRAFT_KEY + `-${problem.id}-${l}`) ?? resolveStarter(l, problem))
+    setCode(localStorage.getItem(draftLocal(problem.id, l)) ?? resolveStarter(l, problem))
     enterLang()
-    localStorage.setItem(DRAFT_KEY + `-lang-${problem.id}`, l)
+    localStorage.setItem(`${DRAFT_KEY}-${ctxTag}-lang-${problem.id}`, l)
     setConsoleText('语言已切换，代码草稿分别保存')
   }
 

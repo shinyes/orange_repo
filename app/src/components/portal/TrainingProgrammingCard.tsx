@@ -30,8 +30,9 @@ import { genericStarter, resolveStarter, saveDraftDebounced, useCloudDraft } fro
 
 const DRAFT_PREFIX = 'orangeoj:draft:'
 
-function draftKey(problemId: number, lang: CodeLang) {
-  return `${DRAFT_PREFIX}${problemId}-${lang}`
+// 草稿按 训练×题 隔离（同题在不同训练各自保存）
+function draftKey(problemId: number, lang: CodeLang, trainingId: number) {
+  return `${DRAFT_PREFIX}t${trainingId}-${problemId}-${lang}`
 }
 
 export function TrainingProgrammingCard({ problemId, trainingId, solved, onSolved }: {
@@ -48,9 +49,9 @@ export function TrainingProgrammingCard({ problemId, trainingId, solved, onSolve
     retry: 1,
   })
 
-  const [lang, setLang] = useState<CodeLang>(() => (localStorage.getItem(`${DRAFT_PREFIX}lang-${problemId}`) as CodeLang) || 'python')
+  const [lang, setLang] = useState<CodeLang>(() => (localStorage.getItem(`${DRAFT_PREFIX}lang-${trainingId}-${problemId}`) as CodeLang) || 'python')
   // 初始 code：本地草稿 →（下方 reconcile）云草稿 → 题目模板 → 通用模板
-  const [code, setCode] = useState(() => localStorage.getItem(draftKey(problemId, lang)) ?? genericStarter(lang))
+  const [code, setCode] = useState(() => localStorage.getItem(draftKey(problemId, lang, trainingId)) ?? genericStarter(lang))
   const [consoleText, setConsoleText] = useState('控制台已就绪')
   const [consoleVariant, setConsoleVariant] = useState<'default' | 'error' | 'success'>('default')
   const [busy, setBusy] = useState<string | null>(null) // run/test/submit
@@ -64,10 +65,10 @@ export function TrainingProgrammingCard({ problemId, trainingId, solved, onSolve
 
   // 云端草稿：本地为空且用户未输入时，随 cloudLoaded/题目数据到达逐级回填（云草稿 → 题目模板 → 通用）；
   // 仅云草稿回填写本地草稿，模板本身不落本地（避免挡住后续云草稿）。
-  const cloudDraft = useCloudDraft(problemId, lang)
+  const cloudDraft = useCloudDraft(problemId, lang, 'training', trainingId)
   useEffect(() => {
     if (touchedRef.current) return
-    const local = localStorage.getItem(draftKey(problemId, lang))
+    const local = localStorage.getItem(draftKey(problemId, lang, trainingId))
     if (local != null && local.trim() !== '') return
     let next: string | null = null
     if (cloudDraft.cloudLoaded && cloudDraft.initialCode && cloudDraft.initialCode.trim() !== '') {
@@ -79,24 +80,24 @@ export function TrainingProgrammingCard({ problemId, trainingId, solved, onSolve
     setCode(next)
     // 云草稿（用户的真实内容）持久化；模板无需持久化（随时可按题目数据重算）。
     if (cloudDraft.cloudLoaded && cloudDraft.initialCode.trim() !== '') {
-      localStorage.setItem(draftKey(problemId, lang), cloudDraft.initialCode)
+      localStorage.setItem(draftKey(problemId, lang, trainingId), cloudDraft.initialCode)
     }
-  }, [code, lang, cloudDraft.cloudLoaded, cloudDraft.initialCode, problemQ.data, problemId])
+  }, [code, lang, cloudDraft.cloudLoaded, cloudDraft.initialCode, problemQ.data, problemId, trainingId])
 
   // 编辑器输入：实时写本地草稿 + 云端 debounce 自动保存（失败静默，本地已缓存）。
   function handleCodeChange(next: string) {
     touchedRef.current = true
     setCode(next)
-    localStorage.setItem(draftKey(problemId, lang), next)
-    saveDraftDebounced(problemId, lang, next)
+    localStorage.setItem(draftKey(problemId, lang, trainingId), next)
+    saveDraftDebounced(problemId, lang, next, 'training', trainingId)
   }
 
   function switchLang(l: CodeLang) {
     if (l === lang) return
     touchedRef.current = false
     setLang(l)
-    setCode(localStorage.getItem(draftKey(problemId, l)) ?? genericStarter(l))
-    localStorage.setItem(`${DRAFT_PREFIX}lang-${problemId}`, l)
+    setCode(localStorage.getItem(draftKey(problemId, l, trainingId)) ?? genericStarter(l))
+    localStorage.setItem(`${DRAFT_PREFIX}lang-${trainingId}-${problemId}`, l)
     setConsoleText('语言已切换，草稿分别保存')
     setConsoleVariant('default')
   }

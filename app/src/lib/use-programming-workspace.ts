@@ -31,11 +31,11 @@ export function resolveStarter(
 }
 
 /**
- * 云端草稿加载：挂载 / 语言切换后 GET 一次该 题×语言 的草稿。
- * 返回 { cloudLoaded, initialCode }——由调用方组合初始代码：
- *   cloudLoaded=false 期间保留本地/通用占位；到达后 initialCode 非空即覆盖（需自行守好“用户未编辑”条件）。
+ * 云端草稿加载：挂载 / 语言切换后 GET 一次该 题×语言×上下文 的草稿。
+ * ctxKind/ctxId：''=全局做题页 / training=训练 / practice=练习（草稿按上下文隔离）。
+ * 返回 { cloudLoaded, initialCode }——由调用方组合初始代码。
  */
-export function useCloudDraft(problemId: number, lang: CodeLang): { cloudLoaded: boolean; initialCode: string } {
+export function useCloudDraft(problemId: number, lang: CodeLang, ctxKind?: string, ctxId?: number): { cloudLoaded: boolean; initialCode: string } {
   const [state, setState] = useState<{ cloudLoaded: boolean; initialCode: string }>({ cloudLoaded: false, initialCode: '' })
   useEffect(() => {
     let alive = true
@@ -45,7 +45,7 @@ export function useCloudDraft(problemId: number, lang: CodeLang): { cloudLoaded:
       return
     }
     api
-      .ojDraft(problemId, lang)
+      .ojDraft(problemId, lang, ctxKind, ctxId)
       .then((d) => {
         if (alive) setState({ cloudLoaded: true, initialCode: d?.code ?? '' })
       })
@@ -56,23 +56,24 @@ export function useCloudDraft(problemId: number, lang: CodeLang): { cloudLoaded:
     return () => {
       alive = false
     }
-  }, [problemId, lang])
+  }, [problemId, lang, ctxKind, ctxId])
   return state
 }
 
 /**
  * 云端草稿 debounce 保存（PUT /api/oj/problem/:id/draft）。
+ * ctxKind/ctxId：草稿上下文（训练/练习/全局隔离）。
  * 静默失败（本地草稿已实时写入 localStorage 作离线缓存）。
  */
-export function saveDraftDebounced(problemId: number, lang: CodeLang, code: string): void {
-  const key = `${problemId}:${lang}`
+export function saveDraftDebounced(problemId: number, lang: CodeLang, code: string, ctxKind?: string, ctxId?: number): void {
+  const key = `${problemId}:${lang}:${ctxKind ?? ''}:${ctxId ?? 0}`
   const timer = draftTimers.get(key)
   if (timer) clearTimeout(timer)
   draftTimers.set(
     key,
     setTimeout(() => {
       draftTimers.delete(key)
-      void api.ojSaveDraft(problemId, lang, code).catch(() => {
+      void api.ojSaveDraft(problemId, lang, code, ctxKind, ctxId).catch(() => {
         // 静默：本地已缓存，下次编辑会再次尝试
       })
     }, DRAFT_SAVE_DEBOUNCE_MS),
