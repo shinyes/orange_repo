@@ -7,6 +7,7 @@ import {
   HistoryIcon,
   Loader2Icon,
   PlayIcon,
+  RotateCcwIcon,
   SendIcon,
   XCircleIcon,
   FlaskConicalIcon,
@@ -31,6 +32,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { cn } from '@/lib/utils'
 import { langLabel, typeLabel, verdictCls, verdictText } from './oj-utils'
 import { resolveStarter, saveDraftDebounced, useCloudDraft } from '@/lib/use-programming-workspace'
+import { CONSOLE_DEFAULT_H, useConsoleResize } from '@/hooks/use-console-resize'
 
 const DRAFT_KEY = 'oj-draft'
 
@@ -221,6 +223,8 @@ function ProgrammingSolve({ problem, backTo, review, practiceId }: { problem: Oj
   const [code, setCode] = useState(() => localStorage.getItem(draftLocal(problem.id, lang)) ?? resolveStarter(lang, problem))
   const [consoleText, setConsoleText] = useState('控制台已就绪')
   const [consoleVariant, setConsoleVariant] = useState<'default' | 'error' | 'success'>('default')
+  // 控制台高度（默认≈5 行；上下拖拽调整 / 重置）——与训练内嵌卡一致
+  const { consoleH, startDrag: startConsoleDrag, reset: resetConsoleH } = useConsoleResize(CONSOLE_DEFAULT_H)
   const [busyAction, setBusyAction] = useState<string | null>(null) // run/test/submit 进行中
   const [verdictBanner, setVerdictBanner] = useState<{ verdict: string; score: number; timeMs: number } | null>(null)
   const [showCustomInput, setShowCustomInput] = useState(false)
@@ -422,19 +426,54 @@ function ProgrammingSolve({ problem, backTo, review, practiceId }: { problem: Oj
             </div>
           )}
 
-          <div className="min-h-[260px] flex-1 border-y bg-background">
+          <div className="min-h-[200px] flex-1 border-y bg-background">
             <CodeEditor language={lang} value={code} onChange={handleCodeChange} readOnly={review} />
           </div>
 
-          {/* 控制台 */}
+          {/* 拖拽句柄：调整 编辑器/控制台 占比 */}
+          <div
+            role="separator"
+            aria-orientation="horizontal"
+            title="拖动调整控制台高度（双击重置）"
+            onPointerDown={startConsoleDrag}
+            onDoubleClick={resetConsoleH}
+            className="group -mx-1 flex h-3 shrink-0 cursor-ns-resize touch-none items-center justify-center"
+          >
+            <div className="h-1 w-12 rounded-full bg-muted-foreground/25 transition-colors group-hover:bg-primary/50 group-active:bg-primary/70" />
+          </div>
+
+          {/* 控制台（默认≈5 行；高度可拖拽，标题行右侧可清空/重置） */}
           <div className="shrink-0 border-t p-2">
-            <div className="mb-1 text-[11px] font-medium text-muted-foreground">控制台输出</div>
+            <div className="mb-1 flex items-center gap-2 text-[11px] font-medium text-muted-foreground">
+              <span>控制台输出</span>
+              <span className="text-[10px] font-normal opacity-60">{consoleH}px</span>
+              <span className="ml-auto flex items-center gap-1">
+                {consoleText !== '控制台已就绪' && (
+                  <button
+                    type="button"
+                    className="underline-offset-2 hover:underline"
+                    onClick={() => { setConsoleText('控制台已就绪'); setConsoleVariant('default') }}
+                  >
+                    清空
+                  </button>
+                )}
+                <button
+                  type="button"
+                  title="重置为默认占比（约 5 行）"
+                  className="inline-flex size-5 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  onClick={resetConsoleH}
+                >
+                  <RotateCcwIcon className="size-3" />
+                </button>
+              </span>
+            </div>
             <pre
+              style={{ height: consoleH }}
               className={cn(
-                'min-h-[90px] overflow-auto rounded-lg border p-2.5 font-mono text-xs whitespace-pre-wrap',
+                'overflow-auto whitespace-pre-wrap rounded-lg border p-2 font-mono text-xs leading-relaxed',
                 consoleVariant === 'error' && 'border-red-200 bg-red-50 text-red-700',
                 consoleVariant === 'success' && 'border-emerald-200 bg-emerald-50 text-emerald-700',
-                consoleVariant === 'default' && 'bg-muted',
+                consoleVariant === 'default' && 'bg-muted/40',
               )}
             >
               {consoleText}

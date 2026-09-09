@@ -4,7 +4,7 @@
 // + 控制台输出与判定结果；提交带 trainingId（服务端落 submissions.training_id），
 // 提交 AC 后轮询带 trainingId 使训练条目标记通过（格子变绿）。
 // 测评记录：工具栏 History 按钮 → Dialog 拉该训练×题提交历史（ojSubmissions(id, trainingId)）。
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import {
   ChevronLeftIcon,
@@ -28,13 +28,9 @@ import {
 } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
 import { genericStarter, resolveStarter, saveDraftDebounced, useCloudDraft } from '@/lib/use-programming-workspace'
+import { CONSOLE_DEFAULT_H, useConsoleResize } from '@/hooks/use-console-resize'
 
 const DRAFT_PREFIX = 'orangeoj:draft:'
-
-// 控制台高度默认/边界（px）：默认约 5 行文本；可拖拽调整
-const DEFAULT_CONSOLE_H = 112
-const MIN_CONSOLE_H = 60
-const MAX_CONSOLE_H = 360
 
 // 草稿按 训练×题 隔离（同题在不同训练各自保存）
 function draftKey(problemId: number, lang: CodeLang, trainingId: number) {
@@ -64,36 +60,8 @@ export function TrainingProgrammingCard({ problemId, trainingId, solved, onSolve
     const [showCustomInput, setShowCustomInput] = useState(false)
   const [customInput, setCustomInput] = useState('')
   const [historyOpen, setHistoryOpen] = useState(false)
-  // 控制台高度（px）：默认 ≈5 行文本（text-xs leading-relaxed 行高≈19.5 + p-2 + 边框）
-  const [consoleH, setConsoleH] = useState(DEFAULT_CONSOLE_H)
-  const consoleHRef = useRef(DEFAULT_CONSOLE_H)
-  const setConsoleHeight = (h: number) => {
-    const v = Math.min(MAX_CONSOLE_H, Math.max(MIN_CONSOLE_H, h))
-    consoleHRef.current = v
-    setConsoleH(v)
-  }
-  const dragRef = useRef<{ startY: number; startH: number } | null>(null)
-  function startConsoleDrag(e: ReactPointerEvent) {
-    if (e.button !== 0) return
-    e.preventDefault()
-    dragRef.current = { startY: e.clientY, startH: consoleHRef.current }
-    document.body.style.userSelect = 'none'
-    document.body.style.cursor = 'ns-resize'
-    const onMove = (ev: PointerEvent) => {
-      const d = dragRef.current
-      if (!d) return
-      setConsoleHeight(d.startH + (d.startY - ev.clientY)) // 上拖=放大
-    }
-    const onUp = () => {
-      dragRef.current = null
-      document.body.style.userSelect = ''
-      document.body.style.cursor = ''
-      window.removeEventListener('pointermove', onMove)
-      window.removeEventListener('pointerup', onUp)
-    }
-    window.addEventListener('pointermove', onMove)
-    window.addEventListener('pointerup', onUp)
-  }
+  // 控制台高度（默认≈5 行；上下拖拽调整 / 重置）
+  const { consoleH, startDrag: startConsoleDrag, reset: resetConsoleH } = useConsoleResize(CONSOLE_DEFAULT_H)
   const codeRef = useRef(code)
   codeRef.current = code
   const touchedRef = useRef(false)
@@ -254,7 +222,7 @@ export function TrainingProgrammingCard({ problemId, trainingId, solved, onSolve
         aria-orientation="horizontal"
         title="拖动调整控制台高度（双击重置）"
         onPointerDown={startConsoleDrag}
-        onDoubleClick={() => setConsoleHeight(DEFAULT_CONSOLE_H)}
+        onDoubleClick={resetConsoleH}
         className="group -mx-1 flex h-3 shrink-0 cursor-ns-resize touch-none items-center justify-center"
       >
         <div className="h-1 w-12 rounded-full bg-muted-foreground/25 transition-colors group-hover:bg-primary/50 group-active:bg-primary/70" />
@@ -279,7 +247,7 @@ export function TrainingProgrammingCard({ problemId, trainingId, solved, onSolve
               type="button"
               title="重置为默认占比（约 5 行）"
               className="inline-flex size-5 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              onClick={() => setConsoleHeight(DEFAULT_CONSOLE_H)}
+              onClick={resetConsoleH}
             >
               <RotateCcwIcon className="size-3" />
             </button>
