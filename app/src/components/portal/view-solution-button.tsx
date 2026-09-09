@@ -8,9 +8,7 @@ import { LightbulbIcon, Loader2Icon } from 'lucide-react'
 import { api } from '@/api'
 import { SolutionsView } from '@/pages/admin/problem-view'
 import { usePortalSession } from '@/pages/portal/portal-context'
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
-} from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 
 export function ViewSolutionButton({ problemId, className }: { problemId: number; className?: string }) {
   const { user } = usePortalSession()
@@ -48,7 +46,6 @@ export function ViewSolutionButton({ problemId, className }: { problemId: number
             <DialogTitle className="flex items-center gap-2">
               <LightbulbIcon className="size-4 text-primary" /> 题解
             </DialogTitle>
-            <DialogDescription>本题官方题解与参考代码（来自题目「题解」内容）</DialogDescription>
           </DialogHeader>
           <div className="min-h-0 flex-1 overflow-y-auto">
             {q.isLoading && (
