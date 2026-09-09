@@ -217,14 +217,6 @@ function TrainingFlow({ sid, tid, data, urlNo }: {
                   }
                   right={
                     <div className="flex h-full min-h-0 flex-col bg-background px-4 py-4 lg:px-5">
-                      <div className="mb-2 flex shrink-0 items-center gap-1.5 text-xs font-medium text-muted-foreground">
-                        {itemSolved && (
-                          <span className="inline-flex items-center gap-1 text-emerald-600">
-                            <CircleCheckBigIcon className="size-3.5" /> 已通过
-                          </span>
-                        )}
-                        代码编辑器
-                      </div>
                       <div className="min-h-0 flex-1">
                         <TrainingProgrammingCard
                           key={`i${item.id}`}
