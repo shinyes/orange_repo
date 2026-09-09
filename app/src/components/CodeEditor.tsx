@@ -52,6 +52,8 @@ export function CodeEditor({
 
   const handleMount: OnMount = (editor) => {
     editorRef.current = editor
+    // 二次保险：实例级再次关闭 面包屑 与 粘性行（滚动时函数名吸顶）
+    editor.updateOptions({ breadcrumbs: { enabled: false }, stickyScroll: { enabled: false } })
   }
 
   return (
@@ -66,6 +68,8 @@ export function CodeEditor({
         minimap: { enabled: false },
         // 关闭顶部面包屑（当前所在函数/类路径提示条）
         breadcrumbs: { enabled: false },
+        // 关闭粘性行（sticky scroll）：滚动时“当前所在函数”吸顶在编辑器顶部
+        stickyScroll: { enabled: false },
         fontSize: BASE_FONT,
         lineHeight: 22,
         tabSize: 4,
