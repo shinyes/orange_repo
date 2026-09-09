@@ -1,9 +1,11 @@
 import { useState } from 'react'
+import { ChevronDownIcon } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Markdown, preserveLineBreaks } from '@/lib/markdown'
 import { CodeBlock } from '@/lib/code-highlight'
+import { cn } from '@/lib/utils'
 import type {
   Problem,
   ProgrammingBody,
@@ -186,17 +188,36 @@ export function SolutionsView({ solutions }: { solutions: Solution[] }) {
   return (
     <div className="space-y-4">
       {list.map((s, i) => (
-        <div key={i} className="overflow-hidden rounded-xl border">
-          <div className="flex items-center gap-2 border-b bg-muted/50 px-4 py-2">
-            <Badge variant="outline">{s.language}</Badge>
-            <span className="text-xs text-muted-foreground">题解 {i + 1}</span>
-          </div>
-          <div className="space-y-3 p-4">
-            {s.markdown && <Markdown text={s.markdown} className="markdown-body text-sm" />}
-            {s.code && <CodeBlock code={s.code} language={s.language} />}
-          </div>
-        </div>
+        <SolutionCard key={i} s={s} idx={i} />
       ))}
+    </div>
+  )
+}
+
+// 单条题解：思路 markdown 直接展示；参考代码块可折叠
+// （默认收起；若该条仅有代码无思路说明则默认展开，避免“看起来没有内容”）
+function SolutionCard({ s, idx }: { s: Solution; idx: number }) {
+  const [codeOpen, setCodeOpen] = useState(!s.markdown && !!s.code)
+  return (
+    <div className="overflow-hidden rounded-xl border">
+      <div className="flex items-center gap-2 border-b bg-muted/50 px-4 py-2">
+        <Badge variant="outline">{s.language}</Badge>
+        <span className="text-xs text-muted-foreground">题解 {idx + 1}</span>
+        {s.code && (
+          <button
+            type="button"
+            onClick={() => setCodeOpen((v) => !v)}
+            className="ml-auto inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            <ChevronDownIcon className={cn('size-3.5 transition-transform', codeOpen && 'rotate-180')} />
+            {codeOpen ? '收起代码' : '查看参考代码'}
+          </button>
+        )}
+      </div>
+      <div className="space-y-3 p-4">
+        {s.markdown && <Markdown text={s.markdown} className="markdown-body text-sm" />}
+        {s.code && codeOpen && <CodeBlock code={s.code} language={s.language} />}
+      </div>
     </div>
   )
 }
