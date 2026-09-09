@@ -185,8 +185,10 @@ export const adminApi = {
   domains: () => req<{ domains: Domain[] }>('/api/admin/domains'),
   createDomain: (name: string, adminUsername?: string, adminPassword?: string) =>
     req<{ id: number }>('/api/admin/domains', json({ method: 'POST', body: JSON.stringify({ name, adminUsername, adminPassword }) })),
-  renameDomain: (id: number, name: string) =>
-    req<void>(`/api/admin/domains/${id}`, json({ method: 'PATCH', body: JSON.stringify({ name }) })),
+  /** 部分更新域设置（PATCH /api/admin/domains/:id）：仅请求中出现的字段被修改。 */
+  updateDomainSettings: (id: number, payload: { name?: string; leaderboardPublic?: boolean }) =>
+    req<void>(`/api/admin/domains/${id}`, json({ method: 'PATCH', body: JSON.stringify(payload) })),
+  renameDomain: (id: number, name: string) => adminApi.updateDomainSettings(id, { name }),
   /** 删除域。域内有题目时后端返回 409；届时调用方应提示并带 deleteProblems=true 重试。 */
   deleteDomain: (id: number, deleteProblems = false) =>
     req<void>(`/api/admin/domains/${id}${deleteProblems ? '?deleteProblems=true' : ''}`, { method: 'DELETE' }),

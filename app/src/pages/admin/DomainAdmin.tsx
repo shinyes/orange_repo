@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { ArrowLeftIcon, Building2Icon, LoaderCircleIcon, PencilIcon, PlusIcon, ShieldCheckIcon, Trash2Icon, UsersIcon } from 'lucide-react'
+import { ArrowLeftIcon, Building2Icon, LoaderCircleIcon, PencilIcon, PlusIcon, SettingsIcon, ShieldCheckIcon, Trash2Icon, UsersIcon } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -16,6 +16,7 @@ import { api } from '@/api'
 import { useDomain } from '@/pages/admin/domain-context'
 import type { Domain } from '@/api/types'
 import { DomainBackupMenu } from '@/pages/admin/BackupMenu'
+import { DomainSettingsDialog } from '@/pages/admin/domain-settings-dialog'
 
 export function DomainAdmin() {
   const qc = useQueryClient()
@@ -29,6 +30,7 @@ export function DomainAdmin() {
   const [renaming, setRenaming] = useState<Domain | null>(null)
   const [deleting, setDeleting] = useState<Domain | null>(null)
   const [adminsOf, setAdminsOf] = useState<Domain | null>(null)
+  const [settingsOf, setSettingsOf] = useState<Domain | null>(null)
 
   const invalidate = () => {
     void qc.invalidateQueries({ queryKey: ['admin', 'domains'] })
@@ -98,6 +100,9 @@ export function DomainAdmin() {
                   <td className="px-4 py-2.5">
                     <div className="flex items-center gap-1">
                       <DomainBackupMenu domainId={d.id} domainName={d.name} />
+                      <Button size="xs" variant="ghost" onClick={() => setSettingsOf(d)}>
+                        <SettingsIcon data-icon="inline-start" /> 设置
+                      </Button>
                       <Button size="xs" variant="ghost" onClick={() => setAdminsOf(d)}>
                         <ShieldCheckIcon data-icon="inline-start" /> 域管理员
                       </Button>
@@ -140,6 +145,7 @@ export function DomainAdmin() {
       )}
 
       <DomainAdminsDialog domain={adminsOf} onOpenChange={(v) => !v && setAdminsOf(null)} />
+      <DomainSettingsDialog domain={settingsOf} onOpenChange={(v) => !v && setSettingsOf(null)} onSaved={invalidate} />
     </div>
     </div>
   )

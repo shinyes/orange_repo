@@ -208,6 +208,10 @@ export interface QuizProblemResponse {
   batchNo?: number
   /** 会话中待纠正错题数 */
   wrongCnt?: number
+  /** 本轮内题序（第几题） */
+  pos?: number
+  /** 本轮总题数（0=无限） */
+  total?: number
 }
 
 export interface QuizAnswerResult {
@@ -443,6 +447,8 @@ export interface Domain {
   id: number
   name: string
   createdAt: string
+  /** 排行榜公开：普通成员可查看本域排行；缺省视为公开（后端默认 1） */
+  leaderboardPublic?: boolean
 }
 
 export interface Space {

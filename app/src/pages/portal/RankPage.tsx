@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { CrownIcon, Loader2Icon, MedalIcon, TrophyIcon } from 'lucide-react'
 
-import { api } from '@/api'
+import { api, ApiError } from '@/api'
 import { usePortalCtx } from './SpaceShell'
 import { cn } from '@/lib/utils'
 
@@ -12,6 +12,10 @@ export function RankPage() {
     queryKey: ['portal-rank', space.domainId],
     queryFn: () => api.portalRank(space.domainId),
   })
+
+  // 域设置关闭了排行榜公开：403「排行榜未公开」→ 展示友好提示而非报错。
+  const rankNotPublic =
+    q.error instanceof ApiError && q.error.status === 403 && q.error.message.includes('排行榜未公开')
 
   return (
     <div className="mx-auto w-full max-w-2xl px-4 py-6 lg:px-6">
@@ -25,7 +29,9 @@ export function RankPage() {
       )}
       {q.isError && (
         <div className="rounded-xl border border-dashed p-10 text-center text-sm text-muted-foreground">
-          排行榜加载失败（{q.error instanceof Error ? q.error.message : '未知错误'}）
+          {rankNotPublic
+            ? '排行榜未公开（域管理员未开放）'
+            : `排行榜加载失败（${q.error instanceof Error ? q.error.message : '未知错误'}）`}
         </div>
       )}
 

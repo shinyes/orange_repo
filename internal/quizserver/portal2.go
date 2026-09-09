@@ -389,6 +389,9 @@ type quizPickResult struct {
 	NewBatch   bool                 `json:"newBatch"`   // 开新一轮（错题复习优先）
 	BatchNo    int                  `json:"batchNo"`
 	WrongCnt   int                  `json:"wrongCnt"` // 会话中待纠正错题数
+	// 本轮内的位置展示（前端显示 “第 x/y 题”；total=0 表示无限）
+	Pos   int `json:"pos"`
+	Total int `json:"total"`
 }
 
 // pickQuizProblem 按默认刷题规则抽一题：
@@ -503,7 +506,15 @@ func (s *Server) pickQuizProblem(user *accounts.User, qid int64) (*quizPickResul
 		if err != nil {
 			return nil, err
 		}
-		return &quizPickResult{Problem: problem, BatchNo: ss.BatchNo, NewBatch: newBatch, WrongCnt: len(ss.Wrong)}, nil
+		return &quizPickResult{
+			Problem:  problem,
+			BatchNo:  ss.BatchNo,
+			NewBatch: newBatch,
+			WrongCnt: len(ss.Wrong),
+			// 本轮第几题：本批已抽计数（含本次）；每轮题数 0=无限
+			Pos:   len(ss.Drawn),
+			Total: roundSize,
+		}, nil
 	}
 	return &quizPickResult{Done: true, BatchNo: ss.BatchNo}, nil
 }
@@ -698,6 +709,17 @@ func (s *Server) handlePortalRank(c *fiber.Ctx) error {
 	domainID, err := s.rankDomainOf(c, user)
 	if err != nil {
 		return respondError(c, fiber.StatusBadRequest, err.Error())
+	}
+	// 排行榜公开校验：域关闭公开（leaderboard_public=0）时，普通成员不可查看
+	// （管理员始终可看；rankDomainOf 已把 member 限制到其加入空间所属域）
+	if user.Role == accounts.RoleMember {
+		var pub int
+		if err := s.QS.Repo.DB.QueryRow(`SELECT COALESCE(leaderboard_public,1) FROM domains WHERE id=?`, domainID).Scan(&pub); err != nil {
+			return respondError(c, fiber.StatusInternalServerError, err.Error())
+		}
+		if pub == 0 {
+			return respondError(c, fiber.StatusForbidden, "排行榜未公开")
+		}
 	}
 	// 该域全部学生 = space_members 中 user 集合（排除管理员角色）
 	type row struct {

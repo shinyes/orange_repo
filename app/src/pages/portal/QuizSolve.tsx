@@ -44,8 +44,8 @@ function QuizRound({ qid, quizName }: { qid: number; quizName: string }) {
   const [loading, setLoading] = useState(true)
   const [done, setDone] = useState(false)
   const [emptyRange, setEmptyRange] = useState(false)
-  const [newBatch, setNewBatch] = useState(false) // 本轮开始时提示
-  const [batchNo, setBatchNo] = useState(1)
+  const [pos, setPos] = useState(1)
+  const [total, setTotal] = useState(0) // 本轮总题数（0=无限）
   const [wrongCnt, setWrongCnt] = useState(0)
   const [busy, setBusy] = useState(false)
   const [selected, setSelected] = useState<ObjectiveAnswer | null>(null)
@@ -62,7 +62,6 @@ function QuizRound({ qid, quizName }: { qid: number; quizName: string }) {
     setFetchError(null)
     setDone(false)
     setEmptyRange(false)
-    setNewBatch(false)
     try {
       if (reset) await api.portalQuizReset(qid)
       const r = await api.portalQuizProblem(qid, fresh)
@@ -77,8 +76,8 @@ function QuizRound({ qid, quizName }: { qid: number; quizName: string }) {
       } else {
         setDone(false)
         setProblem(r.problem)
-        setNewBatch(!!r.newBatch)
-        setBatchNo(r.batchNo ?? 1)
+        setPos(r.pos ?? 1)
+        setTotal(r.total ?? 0)
         setWrongCnt(r.wrongCnt ?? 0)
         setSelected(null)
         setFeedback(null)
@@ -108,7 +107,7 @@ function QuizRound({ qid, quizName }: { qid: number; quizName: string }) {
       if (r.correct) {
         toast.success(r.firstTime ? '回答正确 · 首次通过' : '回答正确')
       } else {
-        toast.error('回答错误，已加入错题袋（下一轮优先复习）')
+        toast.error('回答错误，已加入错题袋（错题会优先再出现）')
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : '提交失败')
@@ -126,16 +125,16 @@ function QuizRound({ qid, quizName }: { qid: number; quizName: string }) {
   return (
     <PageContainer className="max-w-2xl lg:px-6">
       <div className="mt-3 rounded-2xl border bg-card p-5">
-        {/* 批次/进度信息条 */}
-        {!done && !fetchError && (
+        {/* 进度信息条：本轮第几题（无每轮上限时显示 ∞） */}
+        {!done && !fetchError && !emptyRange && (
           <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
             <span className="inline-flex items-center gap-1 font-medium text-primary">
-              <LayersIcon className="size-3.5" /> 第 {batchNo} 轮
+              <LayersIcon className="size-3.5" /> {pos}/{total > 0 ? total : '∞'}
             </span>
             {wrongCnt > 0 && (
-              <span className="inline-flex items-center gap-1 text-red-500">错题袋 {wrongCnt} 道（下一轮优先）</span>
+              <span className="inline-flex items-center gap-1 text-red-500">错题袋 {wrongCnt} 道（错题优先再出现）</span>
             )}
-            <span className="ml-auto truncate">范围内单选/判断循环 · 同轮不重复</span>
+            <span className="ml-auto truncate">做过少出现 · 错题多出现 · 同批不重复</span>
           </div>
         )}
 
@@ -164,11 +163,6 @@ function QuizRound({ qid, quizName }: { qid: number; quizName: string }) {
               {/* 管理员：编辑当前题目 */}
               {problem && <AdminEditProblemButton problemId={problem.id} />}
             </div>
-            {newBatch && (
-              <div className="mb-3 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-700">
-                进入第 {batchNo} 轮：错题优先复习，同轮题目不重复
-              </div>
-            )}
             <ObjectiveQuestion
               problem={problem}
               selected={selected}
@@ -223,22 +217,22 @@ function DonePanel({ wrongCnt, quizName, onRestart, onRefresh }: {
         {allClear ? <PartyPopperIcon className="size-7 text-emerald-600" /> : <CheckCircle2Icon className="size-7 text-sky-600" />}
       </div>
       <h2 className="flex items-center justify-center gap-2 text-lg font-semibold">
-        {allClear ? '本轮刷题完成！' : `本轮完成，错题袋 ${wrongCnt} 道`}
+        {allClear ? '全部完成！' : `完成当前一组，错题袋 ${wrongCnt} 道`}
       </h2>
       <p className="mt-2 text-sm text-muted-foreground">
         {allClear
-          ? <>「{quizName}」范围内的题已全部答对一轮（已通过记录保留），可重新开始一轮</>
-          : <>「{quizName}」本轮题目已全部出现，{wrongCnt} 道错题将在下一轮优先复习</>}
+          ? <>「{quizName}」范围内的题已全部答对（已通过记录保留），可重新开始</>
+          : <>「{quizName}」本组题目已全部出现，{wrongCnt} 道错题会优先再次出现</>}
       </p>
       <div className="mt-5 flex justify-center gap-3">
         {!allClear && (
           <Button variant="outline" onClick={onRefresh}>
-            <RefreshCwIcon className="size-4" /> 继续下一轮（复习错题）
+            <RefreshCwIcon className="size-4" /> 继续（优先复习错题）
           </Button>
         )}
         {allClear && (
           <Button onClick={onRestart}>
-            <RotateCcwIcon className="size-4" /> 重新开始一轮
+            <RotateCcwIcon className="size-4" /> 重新开始
           </Button>
         )}
       </div>
