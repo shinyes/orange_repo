@@ -260,6 +260,7 @@ func (s *Store) migrateDomains() error {
 		`CREATE TABLE IF NOT EXISTS domains (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			name TEXT NOT NULL UNIQUE,
+			leaderboard_public INTEGER NOT NULL DEFAULT 1, -- 1=普通成员可看本域排行榜；0=仅管理员
 			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 		);`,
 		`CREATE TABLE IF NOT EXISTS spaces (
@@ -280,6 +281,10 @@ func (s *Store) migrateDomains() error {
 		if _, err := s.DB.Exec(stmt); err != nil {
 			return fmt.Errorf("migrate domains failed: %w; stmt: %s", err, stmt)
 		}
+	}
+	// 排行榜公开开关（存量库补列；默认公开）
+	if err := s.ensureColumn("domains", "leaderboard_public", `leaderboard_public INTEGER NOT NULL DEFAULT 1`); err != nil {
+		return err
 	}
 	return nil
 }

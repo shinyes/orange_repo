@@ -146,19 +146,27 @@ func (s *Server) handleCreateDomain(c *fiber.Ctx) error {
 	return respondData(c, fiber.StatusCreated, fiber.Map{"id": id})
 }
 
-// handleRenameDomain PATCH /api/admin/domains/:id {name}。
+// handleRenameDomain PATCH /api/admin/domains/:id 域元信息部分更新：
+// body {name?, leaderboardPublic?}——仅更新请求中出现的字段（旧调用只传 name 保持兼容）。
 func (s *Server) handleRenameDomain(c *fiber.Ctx) error {
 	id, err := paramID(c, "id")
 	if err != nil {
 		return respondError(c, fiber.StatusBadRequest, "invalid id")
 	}
 	var req struct {
-		Name string `json:"name"`
+		Name              *string `json:"name"`
+		LeaderboardPublic *bool   `json:"leaderboardPublic"`
 	}
 	if err := c.BodyParser(&req); err != nil {
 		return respondError(c, fiber.StatusBadRequest, "invalid request")
 	}
-	if err := s.Store.RenameDomain(id, req.Name); err != nil {
+	if req.Name == nil && req.LeaderboardPublic == nil {
+		return respondError(c, fiber.StatusBadRequest, "缺少更新字段（name 或 leaderboardPublic）")
+	}
+	if req.Name != nil && strings.TrimSpace(*req.Name) == "" {
+		return respondError(c, fiber.StatusBadRequest, "域名称不能为空")
+	}
+	if err := s.Store.UpdateDomainMeta(id, req.Name, req.LeaderboardPublic); err != nil {
 		if err == store.ErrNotFound {
 			return respondError(c, fiber.StatusNotFound, "域不存在")
 		}

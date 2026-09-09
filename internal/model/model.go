@@ -133,6 +133,8 @@ type Domain struct {
 	ID        int64     `json:"id"`
 	Name      string    `json:"name"`
 	CreatedAt time.Time `json:"createdAt"`
+	// LeaderboardPublic 排行榜是否公开（1=普通成员可查看本域排行；0=仅管理员）。
+	LeaderboardPublic bool `json:"leaderboardPublic"`
 }
 
 // Space 空间：域内的做题组织单位（训练/练习/作答按空间隔离）。

@@ -32,7 +32,7 @@ func (s *Store) CreateDomain(name string) (int64, error) {
 
 // ListDomains 全部域。
 func (s *Store) ListDomains() ([]model.Domain, error) {
-	rows, err := s.DB.Query(`SELECT id,name,created_at FROM domains ORDER BY id`)
+	rows, err := s.DB.Query(`SELECT id,name,leaderboard_public,created_at FROM domains ORDER BY id`)
 	if err != nil {
 		return nil, err
 	}
@@ -40,9 +40,11 @@ func (s *Store) ListDomains() ([]model.Domain, error) {
 	out := []model.Domain{}
 	for rows.Next() {
 		var d model.Domain
-		if err := rows.Scan(&d.ID, &d.Name, &d.CreatedAt); err != nil {
+		var pub int
+		if err := rows.Scan(&d.ID, &d.Name, &pub, &d.CreatedAt); err != nil {
 			return nil, err
 		}
+		d.LeaderboardPublic = pub != 0
 		out = append(out, d)
 	}
 	return out, rows.Err()
@@ -51,24 +53,50 @@ func (s *Store) ListDomains() ([]model.Domain, error) {
 // GetDomain 取域。
 func (s *Store) GetDomain(id int64) (*model.Domain, error) {
 	d := &model.Domain{}
-	err := s.DB.QueryRow(`SELECT id,name,created_at FROM domains WHERE id=?`, id).
-		Scan(&d.ID, &d.Name, &d.CreatedAt)
+	var pub int
+	err := s.DB.QueryRow(`SELECT id,name,leaderboard_public,created_at FROM domains WHERE id=?`, id).
+		Scan(&d.ID, &d.Name, &pub, &d.CreatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
 	if err != nil {
 		return nil, err
 	}
+	d.LeaderboardPublic = pub != 0
 	return d, nil
 }
 
 // RenameDomain 改域名。
 func (s *Store) RenameDomain(id int64, name string) error {
-	name = strings.TrimSpace(name)
-	if name == "" {
-		return errors.New("域名称不能为空")
+	return s.UpdateDomainMeta(id, &name, nil)
+}
+
+// UpdateDomainMeta 部分更新域元信息：仅更新非 nil 的字段
+// （name/leaderboardPublic 均可省略；两者皆 nil 时报错）。
+func (s *Store) UpdateDomainMeta(id int64, name *string, leaderboardPublic *bool) error {
+	var sets []string
+	var args []any
+	if name != nil {
+		n := strings.TrimSpace(*name)
+		if n == "" {
+			return errors.New("域名称不能为空")
+		}
+		sets = append(sets, "name=?")
+		args = append(args, n)
 	}
-	res, err := s.DB.Exec(`UPDATE domains SET name=? WHERE id=?`, name, id)
+	if leaderboardPublic != nil {
+		v := 0
+		if *leaderboardPublic {
+			v = 1
+		}
+		sets = append(sets, "leaderboard_public=?")
+		args = append(args, v)
+	}
+	if len(sets) == 0 {
+		return errors.New("无更新字段")
+	}
+	args = append(args, id)
+	res, err := s.DB.Exec(`UPDATE domains SET `+strings.Join(sets, ",")+` WHERE id=?`, args...)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE") {
 			return errors.New("域名称已存在")

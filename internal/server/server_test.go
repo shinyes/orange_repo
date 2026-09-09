@@ -1507,3 +1507,79 @@ func TestSpaceContentAPI(t *testing.T) {
 		t.Fatalf("delete training = %d", resp.StatusCode)
 	}
 }
+
+// TestDomainSettingsAPI 域设置部分更新（PATCH /api/admin/domains/:id）：
+// leaderboardPublic / name 均为可选字段互不影响；新建域默认公开排行榜。
+func TestDomainSettingsAPI(t *testing.T) {
+	app, st := newTestApp(t)
+	cookie := sessionCookie(t, app) // global_admin
+
+	_, dOut := doJSON(t, app, "POST", "/api/admin/domains", cookie, map[string]any{"name": "设置域"})
+	domainID := int64(dOut["id"].(float64))
+	if domainID == 0 {
+		t.Fatal("domain id = 0")
+	}
+	path := fmt.Sprintf("/api/admin/domains/%d", domainID)
+
+	find := func(name string) map[string]any {
+		_, list := doJSON(t, app, "GET", "/api/admin/domains", cookie, nil)
+		for _, it := range list["domains"].([]any) {
+			if m := it.(map[string]any); m["name"] == name {
+				return m
+			}
+		}
+		return nil
+	}
+
+	// 新建域默认排行榜公开
+	if m := find("设置域"); m == nil || m["leaderboardPublic"] != true {
+		t.Fatalf("新建域应默认公开排行榜: %v", m)
+	}
+	if d, err := st.GetDomain(domainID); err != nil || !d.LeaderboardPublic {
+		t.Fatalf("store.GetDomain 默认 leaderboardPublic: d=%+v err=%v", d, err)
+	}
+
+	// 仅 leaderboardPublic=false（纯设置，不带 name）
+	if resp, _ := doJSON(t, app, "PATCH", path, cookie, map[string]any{"leaderboardPublic": false}); resp.StatusCode != fiber.StatusNoContent {
+		t.Fatalf("PATCH leaderboardPublic=false = %d", resp.StatusCode)
+	}
+	if m := find("设置域"); m == nil || m["leaderboardPublic"] != false {
+		t.Fatalf("关闭后列表应 leaderboardPublic=false: %v", m)
+	}
+	if d, _ := st.GetDomain(domainID); d.LeaderboardPublic {
+		t.Fatalf("store.GetDomain 应读到 false: %+v", d)
+	}
+
+	// 仅 name（旧调用兼容）：改名不触碰公开开关
+	if resp, _ := doJSON(t, app, "PATCH", path, cookie, map[string]any{"name": "设置域二"}); resp.StatusCode != fiber.StatusNoContent {
+		t.Fatalf("PATCH rename = %d", resp.StatusCode)
+	}
+	if m := find("设置域二"); m == nil || m["name"] != "设置域二" || m["leaderboardPublic"] != false {
+		t.Fatalf("改名后应保留 leaderboardPublic=false: %v", m)
+	}
+
+	// 重新公开
+	if resp, _ := doJSON(t, app, "PATCH", path, cookie, map[string]any{"leaderboardPublic": true}); resp.StatusCode != fiber.StatusNoContent {
+		t.Fatalf("PATCH leaderboardPublic=true = %d", resp.StatusCode)
+	}
+	if m := find("设置域二"); m == nil || m["leaderboardPublic"] != true {
+		t.Fatalf("重开后列表应 true: %v", m)
+	}
+
+	// 缺更新字段 / 空名 → 400
+	if resp, _ := doJSON(t, app, "PATCH", path, cookie, map[string]any{}); resp.StatusCode != fiber.StatusBadRequest {
+		t.Fatalf("空 body = %d, want 400", resp.StatusCode)
+	}
+	if resp, _ := doJSON(t, app, "PATCH", path, cookie, map[string]any{"name": "  "}); resp.StatusCode != fiber.StatusBadRequest {
+		t.Fatalf("空名 = %d, want 400", resp.StatusCode)
+	}
+	// 不存在域 → 404
+	if resp, _ := doJSON(t, app, "PATCH", "/api/admin/domains/99999", cookie, map[string]any{"leaderboardPublic": false}); resp.StatusCode != fiber.StatusNotFound {
+		t.Fatalf("不存在域 = %d, want 404", resp.StatusCode)
+	}
+	// 重名 → 409
+	doJSON(t, app, "POST", "/api/admin/domains", cookie, map[string]any{"name": "重复名"})
+	if resp, _ := doJSON(t, app, "PATCH", path, cookie, map[string]any{"name": "重复名"}); resp.StatusCode != fiber.StatusConflict {
+		t.Fatalf("重名 = %d, want 409", resp.StatusCode)
+	}
+}
