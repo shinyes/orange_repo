@@ -21,6 +21,7 @@ import { Markdown, preserveLineBreaks } from '@/lib/markdown'
 import { CodeBlock } from '@/lib/code-highlight'
 import { CodeEditor } from '@/components/CodeEditor'
 import { SplitPane } from '@/components/portal/SplitPane'
+import { AdminEditProblemButton } from '@/components/portal/admin-edit-problem'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Textarea } from '@/components/ui/textarea'
@@ -394,6 +395,8 @@ function ProgrammingSolve({ problem, backTo, review, practiceId }: { problem: Oj
                 回顾模式（只读，不可作答）
               </span>
             )}
+            {/* 管理员：编辑本题 */}
+            <AdminEditProblemButton problemId={problem.id} />
             <Select value={lang} onValueChange={(v) => switchLang(v as CodeLang)} disabled={review}>
               <SelectTrigger className="h-8 w-[130px] text-xs">
                 <SelectValue />

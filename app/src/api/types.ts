@@ -305,6 +305,8 @@ export interface ProblemSummary {
 // 仓库题目详情（/api/problems/:id）。
 export interface Problem {
   id: number
+  /** 归属域（管理接口回带；编辑题/跨域场景使用） */
+  domainId?: number
   type: ProblemType
   title: string
   tags: string[]

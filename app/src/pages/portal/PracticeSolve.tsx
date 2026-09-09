@@ -7,6 +7,7 @@ import {
 import { toast } from 'sonner'
 
 import { api } from '@/api'
+import { AdminEditProblemButton } from '@/components/portal/admin-edit-problem'
 import type {
   ObjectiveAnswer, PracticeDetail, PracticeResultItem,
 } from '@/api/types'
@@ -562,7 +563,11 @@ function ObjectiveBlock({ item, no, verdict, resultItem, selected, onToggle }: {
   const readOnly = answered
 
   return (
-    <div id={`pq-${item.problemId}`} className="scroll-mt-36 p-4">
+    <div id={`pq-${item.problemId}`} className="relative scroll-mt-36 p-4">
+      {/* 管理员：编辑本题 */}
+      <div className="absolute top-2 right-2 z-10">
+        <AdminEditProblemButton problemId={item.problemId} />
+      </div>
       <div className="flex items-start gap-2">
         <span className="min-w-[1.6rem] text-right text-[16px] font-bold leading-[26px] tabular-nums text-foreground">{no}.</span>
         <div className="min-w-0 flex-1">
@@ -737,6 +742,8 @@ function ProgrammingBlock({ item, no, sid, pid }: {
         <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
           <span className="text-sm font-bold tabular-nums text-foreground">{no}.</span>
           <span className="text-sm font-semibold">{item.problemTitle || `题目 #${item.problemId}`}</span>
+          {/* 管理员：编辑本题 */}
+          <AdminEditProblemButton problemId={item.problemId} />
         </div>
         <Link
           to={`/problem/${item.problemId}?practiceId=${pid}&back=${encodeURIComponent(`/s/${sid}/practice/${pid}`)}`}

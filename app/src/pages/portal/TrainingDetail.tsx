@@ -22,6 +22,7 @@ import { api } from '@/api'
 import type { CorrectAnswer, ObjectiveAnswer, TrainingItemView } from '@/api/types'
 import { usePortalSession } from '@/pages/portal/portal-context'
 import { TrainingProgrammingCard } from '@/components/portal/TrainingProgrammingCard'
+import { AdminEditProblemButton } from '@/components/portal/admin-edit-problem'
 import { SplitPane } from '@/components/portal/SplitPane'
 import { ObjectiveQuestion } from '@/components/portal/objective'
 import { Button } from '@/components/ui/button'
@@ -185,7 +186,8 @@ function TrainingFlow({ sid, tid, data, urlNo }: {
                       {!item.solved && item.locked && (
                         <span className="inline-flex items-center gap-1 text-red-600">已达上限，可回顾</span>
                       )}
-                      <span className="ml-auto">
+                      <span className="ml-auto flex items-center gap-1">
+                        <AdminEditProblemButton problemId={item.problemId} />
                         <ZoomControls scale={statementScale} onChange={setStatementScale} />
                       </span>
                     </div>
@@ -206,9 +208,10 @@ function TrainingFlow({ sid, tid, data, urlNo }: {
                       <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                         <span className="rounded bg-muted px-1.5 py-0.5 font-medium">{item.chapterTitle}</span>
                         <span>第 {activeIdx + 1} / {all.length} 题</span>
-                        <span className="ml-auto">
-                          <ZoomControls scale={statementScale} onChange={setStatementScale} />
-                        </span>
+                        <span className="ml-auto flex items-center gap-1">
+                        <AdminEditProblemButton problemId={item.problemId} />
+                        <ZoomControls scale={statementScale} onChange={setStatementScale} />
+                      </span>
                       </div>
                       <div style={{ zoom: statementScale }}>
                         <ProgrammingStatement problemId={item.problemId} itemSolved={itemSolved} />
