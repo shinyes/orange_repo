@@ -446,7 +446,6 @@ function ProgrammingSolve({ problem, backTo, review, practiceId }: { problem: Oj
           <div className="shrink-0 border-t p-2">
             <div className="mb-1 flex items-center gap-2 text-[11px] font-medium text-muted-foreground">
               <span>控制台输出</span>
-              <span className="text-[10px] font-normal opacity-60">{consoleH}px</span>
               <span className="ml-auto flex items-center gap-1">
                 {consoleText !== '控制台已就绪' && (
                   <button
