@@ -180,7 +180,7 @@ export function Empty({ children }: { children: React.ReactNode }) {
 
 // ---------- 题解视图 ----------
 
-function SolutionsView({ solutions }: { solutions: Solution[] }) {
+export function SolutionsView({ solutions }: { solutions: Solution[] }) {
   const list = solutions ?? []
   if (list.length === 0) return <Empty>暂无题解，可在「编辑」页添加</Empty>
   return (

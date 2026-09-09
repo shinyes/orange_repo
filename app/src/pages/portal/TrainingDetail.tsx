@@ -21,6 +21,7 @@ import { usePortalSession } from '@/pages/portal/portal-context'
 import { TrainingProgrammingCard } from '@/components/portal/TrainingProgrammingCard'
 import { ZoomControls } from '@/components/portal/zoom-controls'
 import { AdminEditProblemButton } from '@/components/portal/admin-edit-problem'
+import { ViewSolutionButton } from '@/components/portal/view-solution-button'
 import { SplitPane } from '@/components/portal/SplitPane'
 import { ObjectiveQuestion } from '@/components/portal/objective'
 import { Button } from '@/components/ui/button'
@@ -334,8 +335,9 @@ function ProgrammingStatement({ problemId, itemSolved, scale, onScale }: {
             </span>
           )}
         </h1>
-        {/* 管理员编辑 + 文字缩放（题目内部标题行右侧；缩放作用于整卡题面） */}
+        {/* 管理员：查看题解 + 编辑题目 + 文字缩放（题解在编辑左侧） */}
         <span className="flex shrink-0 items-center gap-1">
+          <ViewSolutionButton problemId={problemId} />
           <AdminEditProblemButton problemId={problemId} />
           <ZoomControls scale={scale} onChange={onScale} />
         </span>

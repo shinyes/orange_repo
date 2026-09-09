@@ -22,6 +22,7 @@ import { CodeBlock } from '@/lib/code-highlight'
 import { CodeEditor } from '@/components/CodeEditor'
 import { SplitPane } from '@/components/portal/SplitPane'
 import { AdminEditProblemButton } from '@/components/portal/admin-edit-problem'
+import { ViewSolutionButton } from '@/components/portal/view-solution-button'
 import { ZoomControls } from '@/components/portal/zoom-controls'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -515,8 +516,9 @@ function TopBar({ backTo, problem, scale, onScale }: {
       <div className="min-w-0 flex-1">
         <h1 className="truncate text-base font-semibold">{problem.title}</h1>
       </div>
-      {/* 管理员编辑 + 题面文字缩放（布局固定，滚动条不参与——scrollbar-gutter:stable） */}
+      {/* 管理员：查看题解（仅编程题）+ 编辑题目 + 文字缩放 */}
       <div className="flex shrink-0 items-center gap-1.5">
+        {problem.type === 'programming' && <ViewSolutionButton problemId={problem.id} />}
         <AdminEditProblemButton problemId={problem.id} />
         <ZoomControls scale={scale} onChange={onScale} />
       </div>
