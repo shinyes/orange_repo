@@ -27,8 +27,8 @@ export function SplitPane({
   const rootRef = useRef<HTMLDivElement>(null)
   const [rightPct, setRightPct] = useState(initialRightPct)
   const [topPct, setTopPct] = useState(initialTopPct)
-  const dragging = useRef(false)
-  const topDrag = useRef<{ startY: number; startPct: number } | null>(null)
+  const dragging = useRef<{ startPct: number; latestX: number } | null>(null)
+  const topDrag = useRef<{ startY: number; startPct: number; latestY: number } | null>(null)
   const [active, setActive] = useState(false)
   // 单实例：按断点只挂载一份 right（桌面分栏 / 移动端上下分栏），
   // 避免重型编辑器（Monaco）被同时实例化两份
@@ -49,18 +49,36 @@ export function SplitPane({
   )
   const clampTop = (pct: number) => Math.min(MOBILE_TOP_MAX, Math.max(MOBILE_TOP_MIN, pct))
 
-  // 桌面左右拖拽（鼠标）
+  // rAF 节流：拖动期间每个动画帧最多更新一次（避免 pointermove 高频 setState
+  // 引发整树高频重渲染 → 在途请求被反复取消/重建，控制台出现 Canceled）
+  const frame = useRef<number | null>(null)
+  const scheduleUpdate = useCallback((fn: () => void) => {
+    if (frame.current != null) return
+    frame.current = requestAnimationFrame(() => {
+      frame.current = null
+      fn()
+    })
+  }, [])
+
+  // 桌面左右拖拽（鼠标，rAF 节流）
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
       if (!dragging.current || !rootRef.current) return
-      const rect = rootRef.current.getBoundingClientRect()
-      if (rect.width <= 0) return
-      const rw = rect.right - e.clientX
-      setRightPct(clamp((rw / rect.width) * 100))
+      dragging.current.latestX = e.clientX
+      scheduleUpdate(() => {
+        const d = dragging.current
+        if (!d || !rootRef.current) return
+        const rect = rootRef.current.getBoundingClientRect()
+        if (rect.width <= 0) return
+        const rw = rect.right - d.latestX
+        setRightPct(clamp((rw / rect.width) * 100))
+      })
       e.preventDefault()
     }
     const onUp = () => {
-      dragging.current = false
+      dragging.current = null
+      if (frame.current != null) cancelAnimationFrame(frame.current)
+      frame.current = null
       setActive(false)
       document.body.style.cursor = ''
       document.body.style.userSelect = ''
@@ -68,29 +86,38 @@ export function SplitPane({
     document.addEventListener('mousemove', onMove)
     document.addEventListener('mouseup', onUp)
     return () => {
+      if (frame.current != null) cancelAnimationFrame(frame.current)
+      frame.current = null
       document.removeEventListener('mousemove', onMove)
       document.removeEventListener('mouseup', onUp)
     }
-  }, [clamp])
+  }, [clamp, scheduleUpdate])
 
-  // 移动端上下拖拽（pointer，同时覆盖触摸）
+  // 移动端上下拖拽（pointer，同时覆盖触摸；rAF 节流）
   function startMobileDrag(e: React.PointerEvent) {
     if (e.button !== 0) return
     e.preventDefault()
-    topDrag.current = { startY: e.clientY, startPct: topPct }
+    topDrag.current = { startY: e.clientY, startPct: topPct, latestY: e.clientY }
     document.body.style.userSelect = 'none'
     document.body.style.cursor = 'ns-resize'
     const onMove = (ev: PointerEvent) => {
       const d = topDrag.current
       if (!d || !rootRef.current) return
-      const rect = rootRef.current.getBoundingClientRect()
-      if (rect.height <= 0) return
-      // 向下拖=题目区变大
-      setTopPct(clampTop(d.startPct + ((ev.clientY - d.startY) / rect.height) * 100))
+      // 记录最新指针位置，rAF 回调按最新值计算（节流但不丢增量）
+      d.latestY = ev.clientY
+      scheduleUpdate(() => {
+        const dd = topDrag.current
+        if (!dd || !rootRef.current) return
+        const r = rootRef.current.getBoundingClientRect()
+        if (r.height <= 0) return
+        setTopPct(clampTop(dd.startPct + ((dd.latestY - dd.startY) / r.height) * 100))
+      })
       ev.preventDefault()
     }
     const onUp = () => {
       topDrag.current = null
+      if (frame.current != null) cancelAnimationFrame(frame.current)
+      frame.current = null
       document.body.style.userSelect = ''
       document.body.style.cursor = ''
       window.removeEventListener('pointermove', onMove)
@@ -116,7 +143,7 @@ export function SplitPane({
         aria-orientation="vertical"
         title="拖动调整左右宽度（双击复位）"
         onMouseDown={(e) => {
-          dragging.current = true
+          dragging.current = { startPct: rightPct, latestX: e.clientX }
           setActive(true)
           document.body.style.cursor = 'col-resize'
           document.body.style.userSelect = 'none'
