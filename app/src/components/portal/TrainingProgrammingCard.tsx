@@ -4,7 +4,7 @@
 // + 控制台输出与判定结果；提交带 trainingId（服务端落 submissions.training_id），
 // 提交 AC 后轮询带 trainingId 使训练条目标记通过（格子变绿）。
 // 测评记录：工具栏 History 按钮 → Dialog 拉该训练×题提交历史（ojSubmissions(id, trainingId)）。
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { toast } from 'sonner'
 import {
   ChevronLeftIcon,
@@ -13,6 +13,7 @@ import {
   HistoryIcon,
   Loader2Icon,
   PlayIcon,
+  RotateCcwIcon,
   SendIcon,
 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
@@ -29,6 +30,11 @@ import { cn } from '@/lib/utils'
 import { genericStarter, resolveStarter, saveDraftDebounced, useCloudDraft } from '@/lib/use-programming-workspace'
 
 const DRAFT_PREFIX = 'orangeoj:draft:'
+
+// 控制台高度默认/边界（px）：默认约 5 行文本；可拖拽调整
+const DEFAULT_CONSOLE_H = 112
+const MIN_CONSOLE_H = 60
+const MAX_CONSOLE_H = 360
 
 // 草稿按 训练×题 隔离（同题在不同训练各自保存）
 function draftKey(problemId: number, lang: CodeLang, trainingId: number) {
@@ -58,6 +64,36 @@ export function TrainingProgrammingCard({ problemId, trainingId, solved, onSolve
     const [showCustomInput, setShowCustomInput] = useState(false)
   const [customInput, setCustomInput] = useState('')
   const [historyOpen, setHistoryOpen] = useState(false)
+  // 控制台高度（px）：默认 ≈5 行文本（text-xs leading-relaxed 行高≈19.5 + p-2 + 边框）
+  const [consoleH, setConsoleH] = useState(DEFAULT_CONSOLE_H)
+  const consoleHRef = useRef(DEFAULT_CONSOLE_H)
+  const setConsoleHeight = (h: number) => {
+    const v = Math.min(MAX_CONSOLE_H, Math.max(MIN_CONSOLE_H, h))
+    consoleHRef.current = v
+    setConsoleH(v)
+  }
+  const dragRef = useRef<{ startY: number; startH: number } | null>(null)
+  function startConsoleDrag(e: ReactPointerEvent) {
+    if (e.button !== 0) return
+    e.preventDefault()
+    dragRef.current = { startY: e.clientY, startH: consoleHRef.current }
+    document.body.style.userSelect = 'none'
+    document.body.style.cursor = 'ns-resize'
+    const onMove = (ev: PointerEvent) => {
+      const d = dragRef.current
+      if (!d) return
+      setConsoleHeight(d.startH + (d.startY - ev.clientY)) // 上拖=放大
+    }
+    const onUp = () => {
+      dragRef.current = null
+      document.body.style.userSelect = ''
+      document.body.style.cursor = ''
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+    }
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+  }
   const codeRef = useRef(code)
   codeRef.current = code
   const touchedRef = useRef(false)
@@ -208,27 +244,51 @@ export function TrainingProgrammingCard({ problemId, trainingId, solved, onSolve
       {/* 判定结果不单独横幅展示（避免编辑器上方遮挡）：控制台文本 + 左侧导航绿/红格已反馈 */}
 
       {/* 编辑器（弹性占满剩余高度；控制台固定矮块贴底——与做题页布局一致） */}
-      <div className="min-h-[160px] flex-1 overflow-hidden rounded-lg border bg-background">
+      <div className="min-h-[120px] flex-1 overflow-hidden rounded-lg border bg-background">
         <CodeEditor language={lang} value={code} onChange={handleCodeChange} />
       </div>
 
-      {/* 控制台（紧凑限高：默认两行高，内容多内部滚动） */}
-      <div className="mt-2">
+      {/* 拖拽句柄：上下拖动调整 编辑器/控制台 占比 */}
+      <div
+        role="separator"
+        aria-orientation="horizontal"
+        title="拖动调整控制台高度（双击重置）"
+        onPointerDown={startConsoleDrag}
+        onDoubleClick={() => setConsoleHeight(DEFAULT_CONSOLE_H)}
+        className="group -mx-1 flex h-3 shrink-0 cursor-ns-resize touch-none items-center justify-center"
+      >
+        <div className="h-1 w-12 rounded-full bg-muted-foreground/25 transition-colors group-hover:bg-primary/50 group-active:bg-primary/70" />
+      </div>
+
+      {/* 控制台（默认约 5 行；高度可拖拽；标题行右侧可重置） */}
+      <div className="shrink-0">
         <div className="mb-1 flex items-center gap-2 text-[11px] font-medium text-muted-foreground">
           <span>控制台输出</span>
-          {consoleText !== '控制台已就绪' && (
+          <span className="text-[10px] font-normal opacity-60">{consoleH}px</span>
+          <span className="ml-auto flex items-center gap-1">
+            {consoleText !== '控制台已就绪' && (
+              <button
+                type="button"
+                className="underline-offset-2 hover:underline"
+                onClick={() => { setConsoleText('控制台已就绪'); setConsoleVariant('default') }}
+              >
+                清空
+              </button>
+            )}
             <button
               type="button"
-              className="ml-auto underline-offset-2 hover:underline"
-              onClick={() => { setConsoleText('控制台已就绪'); setConsoleVariant('default') }}
+              title="重置为默认占比（约 5 行）"
+              className="inline-flex size-5 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              onClick={() => setConsoleHeight(DEFAULT_CONSOLE_H)}
             >
-              清空
+              <RotateCcwIcon className="size-3" />
             </button>
-          )}
+          </span>
         </div>
         <pre
+          style={{ height: consoleH }}
           className={cn(
-            'max-h-24 min-h-[44px] overflow-auto whitespace-pre-wrap rounded-lg border bg-muted/40 p-2 font-mono text-xs leading-relaxed',
+            'overflow-auto whitespace-pre-wrap rounded-lg border bg-muted/40 p-2 font-mono text-xs leading-relaxed',
             consoleVariant === 'error' && 'border-red-200 bg-red-50 text-red-700',
             consoleVariant === 'success' && 'border-emerald-200 bg-emerald-50 text-emerald-700',
           )}
