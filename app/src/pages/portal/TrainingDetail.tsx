@@ -204,20 +204,15 @@ function TrainingFlow({ sid, tid, data, urlNo }: {
               ) : (
                 <SplitPane
                   left={
-                    <div className="flex h-full min-h-0 w-full flex-col">
-                      {/* 题头固定（与正文滚动分离，按钮位置不受滚动条影响） */}
-                      <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 px-4 pt-4 text-xs text-muted-foreground lg:px-5">
-                        <span className="rounded bg-muted px-1.5 py-0.5 font-medium">{item.chapterTitle}</span>
-                        <span>第 {activeIdx + 1} / {all.length} 题</span>
-                        <span className="ml-auto flex items-center gap-1">
-                          <AdminEditProblemButton problemId={item.problemId} />
-                          <ZoomControls scale={statementScale} onChange={setStatementScale} />
-                        </span>
-                      </div>
-                      <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4 [scrollbar-gutter:stable] lg:px-5">
-                        <div style={{ zoom: statementScale }}>
-                          <ProgrammingStatement problemId={item.problemId} itemSolved={itemSolved} />
-                        </div>
+                    <div className="h-full min-h-0 w-full overflow-y-auto px-4 py-4 [scrollbar-gutter:stable] lg:px-5">
+                      {/* 无独立头栏：编辑/缩放/已通过 均集成在题目卡内部标题行 */}
+                      <div style={{ zoom: statementScale }}>
+                        <ProgrammingStatement
+                          problemId={item.problemId}
+                          itemSolved={itemSolved}
+                          scale={statementScale}
+                          onScale={setStatementScale}
+                        />
                       </div>
                     </div>
                   }
@@ -308,7 +303,12 @@ function TrainingFlow({ sid, tid, data, urlNo }: {
 
 // ---------- 编程题题面（题干/格式/样例 完整展示） ----------
 
-function ProgrammingStatement({ problemId, itemSolved }: { problemId: number; itemSolved: boolean }) {
+function ProgrammingStatement({ problemId, itemSolved, scale, onScale }: {
+  problemId: number
+  itemSolved: boolean
+  scale: number
+  onScale: (s: number) => void
+}) {
   const q = useQuery({
     queryKey: ['oj-problem', problemId],
     queryFn: () => api.ojProblem(problemId),
@@ -328,12 +328,17 @@ function ProgrammingStatement({ problemId, itemSolved }: { problemId: number; it
         <h1 className="flex min-w-0 flex-1 items-center gap-2 text-lg font-semibold">
           <Code2Icon className="size-5 shrink-0 text-primary" />
           <span className="min-w-0 truncate">{p.title}</span>
+          {itemSolved && (
+            <span className="inline-flex shrink-0 items-center gap-1 text-xs text-emerald-600">
+              <CircleCheckBigIcon className="size-4" /> 已通过
+            </span>
+          )}
         </h1>
-        {itemSolved && (
-          <span className="inline-flex items-center gap-1 text-xs text-emerald-600">
-            <CircleCheckBigIcon className="size-4" /> 已通过
-          </span>
-        )}
+        {/* 管理员编辑 + 文字缩放（题目内部标题行右侧；缩放作用于整卡题面） */}
+        <span className="flex shrink-0 items-center gap-1">
+          <AdminEditProblemButton problemId={problemId} />
+          <ZoomControls scale={scale} onChange={onScale} />
+        </span>
       </div>
       <div className="rounded-xl bg-muted/50 p-3">
         <Markdown text={preserveLineBreaks(p.statementMd || '（暂无题面）')} className="markdown-body text-[15px] leading-relaxed" />

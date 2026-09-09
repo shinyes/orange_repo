@@ -85,10 +85,13 @@ export function AdminEditProblemButton({ problemId, className }: { problemId: nu
               <ProblemEditor
                 problem={q.data.problem}
                 onSaved={() => {
-                  // 刷新做题侧所有题目内容缓存（同题多 key 前缀统一失效）
+                  // 保存后全链路失效（做题题面/训练详情/练习/首页卡片与题库列表）——
+                  // 保证“编辑保存后本地立即看到变化”
                   void qc.invalidateQueries({ queryKey: ['oj-problem'] })
-                  void qc.invalidateQueries({ queryKey: ['portal-practice'] })
                   void qc.invalidateQueries({ queryKey: ['portal-training'] })
+                  void qc.invalidateQueries({ queryKey: ['portal-practice'] })
+                  void qc.invalidateQueries({ queryKey: ['portal-space-home'] })
+                  void qc.invalidateQueries({ queryKey: ['admin-edit-problem'] })
                   close()
                 }}
               />
