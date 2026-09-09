@@ -5,6 +5,7 @@ import { BookOpenIcon, CheckCircle2Icon, LayersIcon, Loader2Icon, PartyPopperIco
 import { toast } from 'sonner'
 
 import { api } from '@/api'
+import { AdminEditProblemButton } from '@/components/portal/admin-edit-problem'
 import type { CorrectAnswer, ObjectiveAnswer, QuizProblemResponse } from '@/api/types'
 import { useSpaceById } from './portal-context'
 import { PageContainer, SpacePageShell } from './SpacePageShell'
@@ -160,6 +161,8 @@ function QuizRound({ qid, quizName }: { qid: number; quizName: string }) {
             <div className="mb-3 flex items-center gap-2">
               <BookOpenIcon className="size-4 shrink-0 text-primary" />
               <span className="min-w-0 flex-1 truncate text-sm font-semibold">{quizName}</span>
+              {/* 管理员：编辑当前题目 */}
+              {problem && <AdminEditProblemButton problemId={problem.id} />}
             </div>
             {newBatch && (
               <div className="mb-3 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-700">

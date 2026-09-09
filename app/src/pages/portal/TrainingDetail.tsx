@@ -174,45 +174,50 @@ function TrainingFlow({ sid, tid, data, urlNo }: {
           <div className="min-h-0 min-w-0 flex-1">
             {item &&
               (itemObjective ? (
-                <div className="h-full overflow-y-auto [scrollbar-gutter:stable]">
-                  <PageContainer className="py-4">
-                    {/* 题目头（题面文字缩放控件置右） */}
-                    <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                      <span className="rounded bg-muted px-1.5 py-0.5 font-medium">{item.chapterTitle}</span>
-                      <span>第 {activeIdx + 1} / {all.length} 题</span>
-                      <span>{training.maxAttempts > 0 ? `限答 ${training.maxAttempts} 次` : '不限次'}</span>
-                      {!item.solved && item.locked && (
-                        <span className="inline-flex items-center gap-1 text-red-600">已达上限，可回顾</span>
-                      )}
-                      <span className="ml-auto flex items-center gap-1">
-                        <AdminEditProblemButton problemId={item.problemId} />
-                        <ZoomControls scale={statementScale} onChange={setStatementScale} />
-                      </span>
-                    </div>
-                    <div style={{ zoom: statementScale }}>
-                      <ObjectiveCard
-                        key={`i${item.id}`}
-                        sid={sid} tid={tid} item={item} maxAttempts={training.maxAttempts}
-                        onAnswered={invalidate}
-                      />
-                    </div>
-                  </PageContainer>
+                <div className="flex h-full min-h-0 flex-col">
+                  {/* 题目头固定（编辑/缩放按钮不随正文滚动条移动） */}
+                  <div className="mb-2 flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 px-4 pt-4 text-xs text-muted-foreground lg:px-8">
+                    <span className="rounded bg-muted px-1.5 py-0.5 font-medium">{item.chapterTitle}</span>
+                    <span>第 {activeIdx + 1} / {all.length} 题</span>
+                    <span>{training.maxAttempts > 0 ? `限答 ${training.maxAttempts} 次` : '不限次'}</span>
+                    {!item.solved && item.locked && (
+                      <span className="inline-flex items-center gap-1 text-red-600">已达上限，可回顾</span>
+                    )}
+                    <span className="ml-auto flex items-center gap-1">
+                      <AdminEditProblemButton problemId={item.problemId} />
+                      <ZoomControls scale={statementScale} onChange={setStatementScale} />
+                    </span>
+                  </div>
+                  {/* 正文独立滚动（滚动条只在正文区出现，头行不受宽度变化影响） */}
+                  <div className="min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]">
+                    <PageContainer className="py-2">
+                      <div style={{ zoom: statementScale }}>
+                        <ObjectiveCard
+                          key={`i${item.id}`}
+                          sid={sid} tid={tid} item={item} maxAttempts={training.maxAttempts}
+                          onAnswered={invalidate}
+                        />
+                      </div>
+                    </PageContainer>
+                  </div>
                 </div>
               ) : (
                 <SplitPane
                   left={
-                    <div className="min-h-0 w-full overflow-y-auto px-4 py-4 [scrollbar-gutter:stable] lg:px-5">
-                      {/* 题目头（题面文字缩放控件置右） */}
-                      <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                    <div className="flex h-full min-h-0 w-full flex-col">
+                      {/* 题头固定（与正文滚动分离，按钮位置不受滚动条影响） */}
+                      <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 px-4 pt-4 text-xs text-muted-foreground lg:px-5">
                         <span className="rounded bg-muted px-1.5 py-0.5 font-medium">{item.chapterTitle}</span>
                         <span>第 {activeIdx + 1} / {all.length} 题</span>
                         <span className="ml-auto flex items-center gap-1">
-                        <AdminEditProblemButton problemId={item.problemId} />
-                        <ZoomControls scale={statementScale} onChange={setStatementScale} />
-                      </span>
+                          <AdminEditProblemButton problemId={item.problemId} />
+                          <ZoomControls scale={statementScale} onChange={setStatementScale} />
+                        </span>
                       </div>
-                      <div style={{ zoom: statementScale }}>
-                        <ProgrammingStatement problemId={item.problemId} itemSolved={itemSolved} />
+                      <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4 [scrollbar-gutter:stable] lg:px-5">
+                        <div style={{ zoom: statementScale }}>
+                          <ProgrammingStatement problemId={item.problemId} itemSolved={itemSolved} />
+                        </div>
                       </div>
                     </div>
                   }
