@@ -22,6 +22,7 @@ import { CodeBlock } from '@/lib/code-highlight'
 import { CodeEditor } from '@/components/CodeEditor'
 import { SplitPane } from '@/components/portal/SplitPane'
 import { AdminEditProblemButton } from '@/components/portal/admin-edit-problem'
+import { ZoomControls } from '@/components/portal/zoom-controls'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Textarea } from '@/components/ui/textarea'
@@ -31,7 +32,7 @@ import {
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
-import { langLabel, typeLabel, verdictCls, verdictText } from './oj-utils'
+import { langLabel, verdictCls, verdictText } from './oj-utils'
 import { resolveStarter, saveDraftDebounced, useCloudDraft } from '@/lib/use-programming-workspace'
 import { CONSOLE_DEFAULT_H, useConsoleResize } from '@/hooks/use-console-resize'
 
@@ -96,6 +97,7 @@ function ObjectiveSolve({ problem, backTo }: { problem: OjProblem; backTo: strin
   const [pickedTF, setPickedTF] = useState<boolean | null>(null)
   const [result, setResult] = useState<ObjSubmitResult | null>(null)
   const [busy, setBusy] = useState(false)
+  const [statementScale, setStatementScale] = useState(1)
   const options = (problem.bodyJson.options as string[] | undefined) ?? []
 
   async function submit(payload: { optionIndex?: number; answer?: boolean }) {
@@ -116,13 +118,11 @@ function ObjectiveSolve({ problem, backTo }: { problem: OjProblem; backTo: strin
   const rightTF = answered && !result.correct ? (result.correctAnswer?.answer ?? null) : null
   return (
     <div className="mx-auto w-full max-w-2xl px-4 py-5 lg:max-w-3xl lg:px-8 lg:py-8">
-      <TopBar backTo={backTo} problem={problem} />
+      <TopBar backTo={backTo} problem={problem} scale={statementScale} onScale={setStatementScale} />
       <div className="mt-3 rounded-2xl border bg-card p-5">
-        <div className="mb-3 flex items-center gap-2">
-          <Badge>{typeLabel(problem.type)}</Badge>
-          <h2 className="min-w-0 flex-1 truncate text-base font-semibold">{problem.title}</h2>
+        <div style={{ zoom: statementScale }}>
+          <Markdown text={preserveLineBreaks(problem.statementMd || '（暂无题面）')} className="markdown-body text-[17px] leading-relaxed" />
         </div>
-        <Markdown text={preserveLineBreaks(problem.statementMd || '（暂无题面）')} className="markdown-body text-[17px] leading-relaxed" />
 
         {problem.type === 'single_choice' ? (
           <div className="mt-5 space-y-2.5">
@@ -212,6 +212,7 @@ function ObjectiveSolve({ problem, backTo }: { problem: OjProblem; backTo: strin
 // ---------------- 编程题 ----------------
 
 function ProgrammingSolve({ problem, backTo, review, practiceId }: { problem: OjProblem; backTo: string; review?: boolean; practiceId?: number }) {
+  const [statementScale, setStatementScale] = useState(1)
   const samples = (problem.bodyJson.samples as { input?: string; output?: string }[] | undefined) ?? []
   // 草稿上下文：练习进入=按练习隔离（云端 ctx practice+id）；做题页直达=全局
   const ctxKind = practiceId ? 'practice' : ''
@@ -356,9 +357,9 @@ function ProgrammingSolve({ problem, backTo, review, practiceId }: { problem: Oj
     <>
     <SplitPane
       left={
-        <div className="min-w-0 h-full overflow-y-auto rounded-2xl border bg-card p-4">
-          <TopBar backTo={backTo} problem={problem} />
-          <div className="mt-3 space-y-3">
+        <div className="min-w-0 h-full overflow-y-auto rounded-2xl border bg-card p-4 [scrollbar-gutter:stable]">
+          <TopBar backTo={backTo} problem={problem} scale={statementScale} onScale={setStatementScale} />
+          <div style={{ zoom: statementScale }} className="mt-3 space-y-3">
             <div className="rounded-xl bg-muted/50 p-3 text-sm leading-relaxed">
               <Markdown text={preserveLineBreaks(problem.statementMd || '（暂无题面）')} className="markdown-body" />
             </div>
@@ -395,8 +396,6 @@ function ProgrammingSolve({ problem, backTo, review, practiceId }: { problem: Oj
                 回顾模式（只读，不可作答）
               </span>
             )}
-            {/* 管理员：编辑本题 */}
-            <AdminEditProblemButton problemId={problem.id} />
             <Select value={lang} onValueChange={(v) => switchLang(v as CodeLang)} disabled={review}>
               <SelectTrigger className="h-8 w-[130px] text-xs">
                 <SelectValue />
@@ -501,7 +500,12 @@ function ProgrammingSolve({ problem, backTo, review, practiceId }: { problem: Oj
 }
 function isAcceptedVerdict(v: string) { return v === 'AC' || v === 'OK' }
 
-function TopBar({ backTo, problem }: { backTo: string; problem: OjProblem }) {
+function TopBar({ backTo, problem, scale, onScale }: {
+  backTo: string
+  problem: OjProblem
+  scale: number
+  onScale: (s: number) => void
+}) {
   const navigate = useNavigate()
   return (
     <div className="flex items-center gap-2">
@@ -511,7 +515,11 @@ function TopBar({ backTo, problem }: { backTo: string; problem: OjProblem }) {
       <div className="min-w-0 flex-1">
         <h1 className="truncate text-base font-semibold">{problem.title}</h1>
       </div>
-      <Badge>{typeLabel(problem.type)}</Badge>
+      {/* 管理员编辑 + 题面文字缩放（布局固定，滚动条不参与——scrollbar-gutter:stable） */}
+      <div className="flex shrink-0 items-center gap-1.5">
+        <AdminEditProblemButton problemId={problem.id} />
+        <ZoomControls scale={scale} onChange={onScale} />
+      </div>
     </div>
   )
 }

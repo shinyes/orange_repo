@@ -398,7 +398,7 @@ function PracticePaper({ sid, pid, data }: {
         </aside>
 
         {/* 右栏：卷面（唯一内容滚动区） */}
-        <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]">
           <div className="w-full px-3 pt-3 pb-4">
             {/* 交卷结果（横向通栏） */}
             {result && (
