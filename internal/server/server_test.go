@@ -1583,3 +1583,86 @@ func TestDomainSettingsAPI(t *testing.T) {
 		t.Fatalf("重名 = %d, want 409", resp.StatusCode)
 	}
 }
+
+// TestRepoListProblemCountAPI 管理端题册栏按域取模板时（GET /api/trainings?domainId=、
+// /api/practices?domainId=）必须带 problemCount——前端每行显示「N 题」直接读该字段，
+// 按域分支此前漏算（恒为 0），未选域的 /api/trainings 分支则一直正确。
+func TestRepoListProblemCountAPI(t *testing.T) {
+	app, _ := newTestApp(t)
+	gc := sessionCookie(t, app) // global_admin
+
+	_, dOut := doJSON(t, app, "POST", "/api/admin/domains", gc, map[string]any{"name": "题册计数域"})
+	domainID := int64(dOut["id"].(float64))
+	domainQ := "?domainId=" + strconv.FormatInt(domainID, 10)
+
+	mkProblem := func(title string) int64 {
+		t.Helper()
+		_, out := doJSON(t, app, "POST", "/api/problems"+domainQ, gc, map[string]any{
+			"type": "single_choice", "title": title,
+			"bodyJson": map[string]any{"options": []string{"a", "b"}}, "answerJson": map[string]any{"answerIndex": 0},
+		})
+		return int64(out["problem"].(map[string]any)["id"].(float64))
+	}
+	p1, p2, p3 := mkProblem("C1"), mkProblem("C2"), mkProblem("C3")
+
+	// 训练：1 章 2 题（problemCount 应=题册内条数 2，而非本域条目数以外的任何值）
+	_, trOut := doJSON(t, app, "POST", "/api/trainings", gc, map[string]any{"title": "计数训练"})
+	trID := int64(trOut["id"].(float64))
+	_, chOut := doJSON(t, app, "POST", fmt.Sprintf("/api/trainings/%d/chapters", trID), gc, map[string]string{"title": "章"})
+	chID := int64(chOut["id"].(float64))
+	doJSON(t, app, "POST", fmt.Sprintf("/api/chapters/%d/items", chID), gc, map[string]any{"problemIds": []int64{p1, p2}})
+
+	// 练习：3 题
+	_, prOut := doJSON(t, app, "POST", "/api/practices", gc, map[string]any{"title": "计数练习"})
+	prID := int64(prOut["id"].(float64))
+	doJSON(t, app, "POST", fmt.Sprintf("/api/practices/%d/items", prID), gc, map[string]any{"problemIds": []int64{p1, p2, p3}})
+
+	// 空题册（无条目）：按域语义不出现，全量语义下计数为 0
+	doJSON(t, app, "POST", "/api/trainings", gc, map[string]any{"title": "空训练"})
+
+	findTraining := func(list map[string]any, title string) map[string]any {
+		t.Helper()
+		for _, it := range list["trainings"].([]any) {
+			if m := it.(map[string]any); m["title"] == title {
+				return m
+			}
+		}
+		return nil
+	}
+	findPractice := func(list map[string]any, title string) map[string]any {
+		t.Helper()
+		for _, it := range list["practices"].([]any) {
+			if m := it.(map[string]any); m["title"] == title {
+				return m
+			}
+		}
+		return nil
+	}
+
+	// 按域（题册栏实际调用的分支）：problemCount 必须等于题册内条数
+	_, tl := doJSON(t, app, "GET", "/api/trainings"+domainQ, gc, nil)
+	if m := findTraining(tl, "计数训练"); m == nil {
+		t.Fatalf("按域训练列表缺少「计数训练」: %v", tl)
+	} else if m["problemCount"].(float64) != 2 {
+		t.Fatalf("按域训练 problemCount = %v, want 2", m["problemCount"])
+	}
+	if m := findTraining(tl, "空训练"); m != nil {
+		t.Fatalf("空训练无本域题目，不应出现在按域列表中: %v", m)
+	}
+
+	_, pl := doJSON(t, app, "GET", "/api/practices"+domainQ, gc, nil)
+	if m := findPractice(pl, "计数练习"); m == nil {
+		t.Fatalf("按域练习列表缺少「计数练习」: %v", pl)
+	} else if m["problemCount"].(float64) != 3 {
+		t.Fatalf("按域练习 problemCount = %v, want 3", m["problemCount"])
+	}
+
+	// 未选域（全量分支）：两分支口径须一致，空题册显示 0
+	_, tlAll := doJSON(t, app, "GET", "/api/trainings", gc, nil)
+	if m := findTraining(tlAll, "计数训练"); m == nil || m["problemCount"].(float64) != 2 {
+		t.Fatalf("全量训练 problemCount = %v, want 2", m)
+	}
+	if m := findTraining(tlAll, "空训练"); m == nil || m["problemCount"].(float64) != 0 {
+		t.Fatalf("空训练全量 problemCount = %v, want 0", m)
+	}
+}

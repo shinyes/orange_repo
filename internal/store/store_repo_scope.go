@@ -10,9 +10,11 @@ import (
 )
 
 // ListTrainingsInDomain 返回含至少一道该域题目的训练模板（仓库页按域选模板用）。
+// problemCount 与 ListTrainings 同口径（题册内全部条目），供管理端题册栏显示「N 题」。
 func (s *Store) ListTrainingsInDomain(domainID int64) ([]model.Training, error) {
 	rows, err := s.DB.Query(`SELECT DISTINCT t.id,t.uuid,t.title,t.description,t.tags_json,t.created_at,
-		t.folder_id
+		t.folder_id,
+		(SELECT COUNT(*) FROM training_items ti JOIN training_chapters tc ON ti.chapter_id=tc.id WHERE tc.training_id=t.id)
 		FROM trainings t
 		WHERE EXISTS (
 			SELECT 1 FROM training_items i JOIN training_chapters c ON i.chapter_id=c.id
@@ -28,9 +30,11 @@ func (s *Store) ListTrainingsInDomain(domainID int64) ([]model.Training, error) 
 		var t model.Training
 		var tags string
 		var folder sql.NullInt64
-		if err := rows.Scan(&t.ID, &t.UUID, &t.Title, &t.Description, &tags, &t.CreatedAt, &folder); err != nil {
+		var count int
+		if err := rows.Scan(&t.ID, &t.UUID, &t.Title, &t.Description, &tags, &t.CreatedAt, &folder, &count); err != nil {
 			return nil, err
 		}
+		t.ProblemCount = count
 		t.Tags = decodeTags(tags)
 		if folder.Valid {
 			id := folder.Int64
@@ -42,9 +46,11 @@ func (s *Store) ListTrainingsInDomain(domainID int64) ([]model.Training, error) 
 }
 
 // ListPracticesInDomain 含至少一道该域题目的练习模板。
+// problemCount 与 ListPractices 同口径（题册内全部条目），供管理端题册栏显示「N 题」。
 func (s *Store) ListPracticesInDomain(domainID int64) ([]model.Practice, error) {
 	rows, err := s.DB.Query(`SELECT DISTINCT p.id,p.uuid,p.title,p.description,p.tags_json,p.created_at,
-		p.folder_id
+		p.folder_id,
+		(SELECT COUNT(*) FROM practice_items pi WHERE pi.practice_id=p.id)
 		FROM practices p
 		WHERE EXISTS (
 			SELECT 1 FROM practice_items i JOIN problems pr ON pr.id=i.problem_id
@@ -59,9 +65,11 @@ func (s *Store) ListPracticesInDomain(domainID int64) ([]model.Practice, error) 
 		var p model.Practice
 		var tags string
 		var folder sql.NullInt64
-		if err := rows.Scan(&p.ID, &p.UUID, &p.Title, &p.Description, &tags, &p.CreatedAt, &folder); err != nil {
+		var count int
+		if err := rows.Scan(&p.ID, &p.UUID, &p.Title, &p.Description, &tags, &p.CreatedAt, &folder, &count); err != nil {
 			return nil, err
 		}
+		p.ProblemCount = count
 		p.Tags = decodeTags(tags)
 		if folder.Valid {
 			id := folder.Int64
