@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { PencilIcon, Loader2Icon } from 'lucide-react'
 
 import { api } from '@/api'
+import type { Problem } from '@/api/types'
 import { getDomain, setDomain } from '@/api/admin'
 import { ProblemEditor } from '@/pages/admin/ProblemPane'
 import { usePortalSession } from '@/pages/portal/portal-context'
@@ -12,7 +13,12 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from '@/components/ui/dialog'
 
-export function AdminEditProblemButton({ problemId, className }: { problemId: number; className?: string }) {
+export function AdminEditProblemButton({ problemId, className, onSaved }: {
+  problemId: number
+  className?: string
+  /** 保存成功后回调最新题目数据（供以 state 持有题面的宿主即时更新，如刷题页） */
+  onSaved?: (problem: Problem) => void
+}) {
   const { user } = usePortalSession()
   const qc = useQueryClient()
   const [open, setOpen] = useState(false)
@@ -92,6 +98,12 @@ export function AdminEditProblemButton({ problemId, className }: { problemId: nu
                   void qc.invalidateQueries({ queryKey: ['portal-practice'] })
                   void qc.invalidateQueries({ queryKey: ['portal-space-home'] })
                   void qc.invalidateQueries({ queryKey: ['admin-edit-problem'] })
+                  // 以 state 持有题面的宿主（刷题页）需要显式回传最新数据
+                  if (onSaved) {
+                    void api.getProblem(problemId).then((r) => {
+                      if (r?.problem) onSaved(r.problem)
+                    }).catch(() => { /* 忽略：宿主下次进入自然拉新 */ })
+                  }
                   close()
                 }}
               />

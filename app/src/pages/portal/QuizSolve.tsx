@@ -160,8 +160,22 @@ function QuizRound({ qid, quizName }: { qid: number; quizName: string }) {
             <div className="mb-3 flex items-center gap-2">
               <BookOpenIcon className="size-4 shrink-0 text-primary" />
               <span className="min-w-0 flex-1 truncate text-sm font-semibold">{quizName}</span>
-              {/* 管理员：编辑当前题目 */}
-              {problem && <AdminEditProblemButton problemId={problem.id} />}
+              {/* 管理员：编辑当前题目（保存后立即更新当前题面，无需重新抽题） */}
+              {problem && (
+                <AdminEditProblemButton
+                  problemId={problem.id}
+                  onSaved={(p) => {
+                    setProblem((prev) => (prev ? {
+                      ...prev,
+                      title: p.title,
+                      type: p.type as typeof prev.type,
+                      statementMd: p.statementMd,
+                      bodyJson: p.bodyJson as typeof prev.bodyJson,
+                      tags: p.tags,
+                    } : prev))
+                  }}
+                />
+              )}
             </div>
             <ObjectiveQuestion
               problem={problem}

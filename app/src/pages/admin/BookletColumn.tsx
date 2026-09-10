@@ -73,6 +73,7 @@ export function BookletColumn() {
   const { view, openTraining, openPractice } = useAppState()
   const qc = useQueryClient()
   const [search, setSearch] = useState('')
+  // 目录展开状态：按目录 id 保存在题册栏组件内（数据 refetch 不重置，仅切换域/收起题册栏时随组件卸载）。
   const [expanded, setExpanded] = useState<Record<number, boolean>>({})
   const [activeFolderId, setActiveFolderId] = useState<number | null>(null)
   const [creating, setCreating] = useState<'training' | 'practice' | 'directory' | null>(null)
@@ -135,6 +136,11 @@ export function BookletColumn() {
   function endDrag() {
     setDrag(null)
     setDropZone(null)
+  }
+
+  /** 单击目录行/箭头=切换展开。切换必须用与渲染相同的缺省（折叠），否则首击会被写成 false 而看似无效。 */
+  function toggleFolderExpanded(id: number) {
+    setExpanded((prev) => ({ ...prev, [id]: !isFolderOpen(prev, id) }))
   }
 
   // ---------- 题册移动 ----------
@@ -362,7 +368,7 @@ export function BookletColumn() {
               renamingId={renamingId}
               view={view}
               openItem={openItem}
-              onToggleExpand={(id) => setExpanded((prev) => ({ ...prev, [id]: !(prev[id] ?? true) }))}
+              onToggleExpand={toggleFolderExpanded}
               onSelect={(id) => setActiveFolderId(id)}
               onRename={(id) => setRenamingId(id)}
               onRenameDone={async () => {
@@ -515,6 +521,11 @@ function DeleteDirectoryDialog(props: {
 
 // ---------- 目录树装配 ----------
 
+/** 目录展开状态（缺省=折叠）：渲染与点击切换共用同一判定，避免两处默认值不一致导致首击被吞。 */
+function isFolderOpen(expanded: Record<number, boolean>, id: number): boolean {
+  return expanded[id] ?? false
+}
+
 function buildFolderTree(dirs: BookletDirectory[]): FolderNode[] {
   const nodes = new Map<number, FolderNode>()
   for (const d of dirs) nodes.set(d.id, { dir: d, children: [] })
@@ -576,7 +587,7 @@ function FolderRow(props: {
   onItemDragOver: (e: DragEvent) => void
 }) {
   const { node, level } = props
-  const open = props.expanded[node.dir.id] ?? false // 默认折叠
+  const open = isFolderOpen(props.expanded, node.dir.id) // 默认折叠
   // 菜单锚点保持：打开期间及关闭动画期间强制可见，防止弹层闪现左上角
   const [menuOpen, setMenuOpen, anchorVisible] = useMenuAnchorHold()
   const [renameValue, setRenameValue] = useState(node.dir.name)

@@ -206,15 +206,14 @@ function TrainingFlow({ sid, tid, data, urlNo }: {
                 <SplitPane
                   left={
                     <div className="h-full min-h-0 w-full overflow-y-auto px-4 py-4 [scrollbar-gutter:stable] lg:px-5">
-                      {/* 无独立头栏：编辑/缩放/已通过 均集成在题目卡内部标题行 */}
-                      <div style={{ zoom: statementScale }}>
-                        <ProgrammingStatement
-                          problemId={item.problemId}
-                          itemSolved={itemSolved}
-                          scale={statementScale}
-                          onScale={setStatementScale}
-                        />
-                      </div>
+                      {/* 无独立头栏：编辑/缩放/已通过 均集成在题目卡内部标题行；
+                          缩放仅作用于卡内正文（标题行与按钮大小/位置固定——与练习做题页一致） */}
+                      <ProgrammingStatement
+                        problemId={item.problemId}
+                        itemSolved={itemSolved}
+                        scale={statementScale}
+                        onScale={setStatementScale}
+                      />
                     </div>
                   }
                   right={
@@ -342,29 +341,31 @@ function ProgrammingStatement({ problemId, itemSolved, scale, onScale }: {
           <ZoomControls scale={scale} onChange={onScale} />
         </span>
       </div>
-      <div className="rounded-xl bg-muted/50 p-3">
-        <Markdown text={preserveLineBreaks(p.statementMd || '（暂无题面）')} className="markdown-body text-[15px] leading-relaxed" />
-      </div>
-      {body.inputFormat && (
-        <Section title="输入格式"><Markdown text={preserveLineBreaks(body.inputFormat)} className="markdown-body text-sm" /></Section>
-      )}
-      {body.outputFormat && (
-        <Section title="输出格式"><Markdown text={preserveLineBreaks(body.outputFormat)} className="markdown-body text-sm" /></Section>
-      )}
-      {(body.samples ?? []).length > 0 && (
-        <div>
-          <div className="mb-1.5 text-sm font-semibold">样例</div>
-          <div className="space-y-2">
-            {(body.samples ?? []).map((s, i) => (
-              <div key={i} className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                <SampleBox label={`输入样例 ${i + 1}`} text={s.input ?? ''} />
-                <SampleBox label={`输出样例 ${i + 1}`} text={s.output ?? ''} />
-              </div>
-            ))}
-          </div>
+      <div style={{ zoom: scale }} className="space-y-3">
+        <div className="rounded-xl bg-muted/50 p-3">
+          <Markdown text={preserveLineBreaks(p.statementMd || '（暂无题面）')} className="markdown-body text-[15px] leading-relaxed" />
         </div>
-      )}
-      <div className="text-xs text-muted-foreground">时间限制：{p.timeLimitMs} ms · 内存限制：{p.memoryLimitMiB} MiB</div>
+        {body.inputFormat && (
+          <Section title="输入格式"><Markdown text={preserveLineBreaks(body.inputFormat)} className="markdown-body text-sm" /></Section>
+        )}
+        {body.outputFormat && (
+          <Section title="输出格式"><Markdown text={preserveLineBreaks(body.outputFormat)} className="markdown-body text-sm" /></Section>
+        )}
+        {(body.samples ?? []).length > 0 && (
+          <div>
+            <div className="mb-1.5 text-sm font-semibold">样例</div>
+            <div className="space-y-2">
+              {(body.samples ?? []).map((s, i) => (
+                <div key={i} className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <SampleBox label={`输入样例 ${i + 1}`} text={s.input ?? ''} />
+                  <SampleBox label={`输出样例 ${i + 1}`} text={s.output ?? ''} />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        <div className="text-xs text-muted-foreground">时间限制：{p.timeLimitMs} ms · 内存限制：{p.memoryLimitMiB} MiB</div>
+      </div>
     </div>
   )
 }
