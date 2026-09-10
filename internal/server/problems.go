@@ -243,12 +243,18 @@ func (s *Server) handleUpdateSolutions(c *fiber.Ctx) error {
 // ---------- 标签（动态 facet 计数） ----------
 
 // handleListTags 返回当前过滤上下文下的候选标签命中数与总命中题数。
-// 无过滤参数时等价于全局计数。
+// 域隔离：按当前域统计（domain_admin 本域 / global query 或默认域）——
+// 否则空域会看到其它域的标签与命中题数。
 func (s *Server) handleListTags(c *fiber.Ctx) error {
 	filter, err := parseProblemFilter(c)
 	if err != nil {
 		return respondError(c, fiber.StatusBadRequest, err.Error())
 	}
+	scope, err := s.domainOrDefault(c, currentUser(c))
+	if err != nil {
+		return respondError(c, fiber.StatusBadRequest, err.Error())
+	}
+	filter.DomainID = scope
 	tags, total, err := s.Store.ListTagFacets(filter)
 	if err != nil {
 		return err

@@ -800,18 +800,22 @@ function BookletRow(props: {
   }
 
   return (
-    <div className="group flex items-center" style={{ paddingLeft: `${props.level * 14}px` }}>
+    // 整行可点击（含左侧缩进空白区）；右侧操作区自行 stopPropagation
+    <div
+      className="group flex cursor-pointer items-center"
+      style={{ paddingLeft: `${props.level * 14}px` }}
+      onClick={props.onClick}
+      title="点击打开；可拖入目录或根区域"
+    >
       <button
         type="button"
         draggable
         onDragStart={props.onDragStart}
         onDragEnd={props.onDragEnd}
         onDragOver={props.onDragOver}
-        onClick={props.onClick}
         className={`flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 py-1.5 text-left transition-colors ${
           props.active ? 'bg-accent text-accent-foreground' : 'hover:bg-muted'
         } ${isDragged ? 'opacity-40' : ''}`}
-        title="点击打开；可拖入目录或根区域"
       >
         {item.type === 'training' ? (
           <FileCodeIcon className="size-3.5 shrink-0 text-primary/70" />

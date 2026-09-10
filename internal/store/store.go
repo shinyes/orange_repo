@@ -949,7 +949,10 @@ func (s *Store) ListTagFacets(f ProblemFilter) ([]TagCount, int, error) {
 	for _, t := range selected {
 		candidates[t] = true
 	}
-	candidates[NoneTag] = true // 始终显示「无标签」伪节点
+	// 「无标签」伪节点：仅当该筛选范围内确有题目时展示（空域/零命中不出现）
+	if len(tagLists) > 0 {
+		candidates[NoneTag] = true
+	}
 
 	counts := make(map[string]int, len(candidates))
 	total := 0
