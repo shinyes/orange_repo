@@ -37,6 +37,22 @@ class AppErrorBoundary extends Component<{ children: ReactNode }, { error: Error
   }
 }
 
+// 低配设备自动降级：关闭浮层背景模糊与过渡动画（可被用户设置覆盖——
+// localStorage 'OrangeOJ:effects' = 'low' | 'high'）
+function applyPerformanceMode() {
+  try {
+    const forced = localStorage.getItem('OrangeOJ:effects')
+    const nav = navigator as Navigator & { deviceMemory?: number }
+    const lowCpu = (nav.hardwareConcurrency ?? 8) <= 4
+    const lowMem = (nav.deviceMemory ?? 8) <= 4
+    const low = forced === 'low' || (forced !== 'high' && (lowCpu || lowMem))
+    document.documentElement.classList.toggle('low-effects', low)
+  } catch {
+    // 环境不支持时保持默认（有模糊/动画）
+  }
+}
+applyPerformanceMode()
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <AppErrorBoundary>

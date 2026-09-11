@@ -198,3 +198,23 @@ body {
 .md-clean p + p { margin-top: 0.5em; }
 .md-line p { margin: 0; line-height: 26px; }
 .md-line p + p { margin-top: 0.5em; }
+
+/* ---------- 性能：浮层背景模糊与低配降级 ----------
+   backdrop-filter 需 GPU 每帧重合成（全屏遮罩尤其昂贵）。
+   1) 系统偏好「减少透明度」→ 关模糊
+   2) html.low-effects（低配设备自动检测，见 main.tsx）→ 关模糊 + 动画时长压到最短 */
+@media (prefers-reduced-transparency: reduce) {
+  * {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+}
+
+html.low-effects * {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.05ms !important;
+  scroll-behavior: auto !important;
+}
