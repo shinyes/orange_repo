@@ -1,44 +1,124 @@
-@import "tailwindcss";
-@import "tw-animate-css";
-@import "shadcn/tailwind.css";
 @import "@fontsource-variable/geist";
 
-@custom-variant dark (&:is(.dark *));
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-@theme inline {
-    --font-heading: var(--font-sans);
+/* ============================================================================
+ * 主题色令牌
+ *
+ * 从 Tailwind v4 的 CSS-first 主题迁移而来。v4 用 oklch() 书写颜色，但目标运行
+ * 环境是 Windows 7 上最后可用的 Chrome 109，它既不支持 oklch()/lab()/lch()，
+ * 也不支持 color-mix()。因此这里把每个令牌落地为 **sRGB 三元组**：
+ *
+ *     --primary-rgb: 219 76 12;              <- 供 tailwind.config.js 使用
+ *     --primary:     rgb(var(--primary-rgb)); <- 供组件里直接 var(--primary)
+ *
+ * tailwind.config.js 里映射为 `rgb(var(--primary-rgb) / <alpha-value>)`，
+ * 于是 `bg-primary/50` 生成 `rgb(var(--primary-rgb) / 0.5)`（Chrome 109 可解析）。
+ *
+ * 保留 `--x: rgb(var(--x-rgb))` 这一层别名是必要的：组件与下面的自定义样式里
+ * 存在 `accent-[var(--primary)]`、`shadow-[0_2px_0_0_var(--primary)]`、
+ * `var(--border)`、`var(--muted)` 等直接引用，sonner 也通过 `--normal-bg:
+ * var(--popover)` 取值。若把 `--x` 本身变成裸三元组，这些引用会全部失效。
+ *
+ * 每行注释保留原始 oklch 写法，便于逐项校对。
+ * 转换脚本：scripts/oklch-to-srgb.mjs（OKLab -> linear sRGB -> sRGB）。
+ * ========================================================================== */
+
+:root {
+    --background-rgb: 255 255 255; /* oklch(1 0 0) */
+    --background: rgb(var(--background-rgb));
+
+    --foreground-rgb: 10 10 10; /* oklch(0.145 0 0) */
+    --foreground: rgb(var(--foreground-rgb));
+
+    --card-rgb: 255 255 255; /* oklch(1 0 0) */
+    --card: rgb(var(--card-rgb));
+    --card-foreground-rgb: 10 10 10; /* oklch(0.145 0 0) */
+    --card-foreground: rgb(var(--card-foreground-rgb));
+
+    --popover-rgb: 255 255 255; /* oklch(1 0 0) */
+    --popover: rgb(var(--popover-rgb));
+    --popover-foreground-rgb: 10 10 10; /* oklch(0.145 0 0) */
+    --popover-foreground: rgb(var(--popover-foreground-rgb));
+
+    --primary-rgb: 219 76 12; /* oklch(0.608 0.19 39) -> #db4c0c */
+    --primary: rgb(var(--primary-rgb));
+    --primary-foreground-rgb: 250 250 250; /* oklch(0.985 0 0) */
+    --primary-foreground: rgb(var(--primary-foreground-rgb));
+
+    --secondary-rgb: 245 245 245; /* oklch(0.97 0 0) */
+    --secondary: rgb(var(--secondary-rgb));
+    --secondary-foreground-rgb: 23 23 23; /* oklch(0.205 0 0) */
+    --secondary-foreground: rgb(var(--secondary-foreground-rgb));
+    /* button.tsx 里 hover:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_5%)]
+       在 oklch 空间预计算的结果（95% secondary + 5% foreground）。
+       Chrome 109 不支持 color-mix()，由 postcss.config.js 的兼容步骤替换为此值。 */
+    --secondary-hover-rgb: 231 231 231; /* oklch(0.92875 0 0) -> #e7e7e7 */
+
+    --muted-rgb: 245 245 245; /* oklch(0.97 0 0) */
+    --muted: rgb(var(--muted-rgb));
+    --muted-foreground-rgb: 115 115 115; /* oklch(0.556 0 0) */
+    --muted-foreground: rgb(var(--muted-foreground-rgb));
+
+    --accent-rgb: 245 245 245; /* oklch(0.97 0 0) */
+    --accent: rgb(var(--accent-rgb));
+    --accent-foreground-rgb: 23 23 23; /* oklch(0.205 0 0) */
+    --accent-foreground: rgb(var(--accent-foreground-rgb));
+
+    /* oklch(0.577 0.245 27.325) -> #e7000b
+       注意：该 oklch 略超出 sRGB 色域（约 0.12），在本就被截断到 sRGB 的
+       显示器/浏览器上表现一致，转换值与 v4 的截断渲染结果相同。 */
+    --destructive-rgb: 231 0 11;
+    --destructive: rgb(var(--destructive-rgb));
+
+    /* dark 下这两个令牌自带透明度（v4: oklch(1 0 0 / 10%)），
+       --border-a / --input-a 承载该透明度，见 tailwind.config.js。 */
+    --border-rgb: 229 229 229; /* oklch(0.922 0 0) */
+    --border-a: 1;
+    --border: rgb(var(--border-rgb) / var(--border-a));
+
+    --input-rgb: 229 229 229; /* oklch(0.922 0 0) */
+    --input-a: 1;
+    --input: rgb(var(--input-rgb) / var(--input-a));
+
+    --ring-rgb: 239 119 75; /* oklch(0.7 0.16 40) */
+    --ring: rgb(var(--ring-rgb));
+
+    --chart-1-rgb: 212 212 212; /* oklch(0.87 0 0) */
+    --chart-1: rgb(var(--chart-1-rgb));
+    --chart-2-rgb: 115 115 115; /* oklch(0.556 0 0) */
+    --chart-2: rgb(var(--chart-2-rgb));
+    --chart-3-rgb: 82 82 82; /* oklch(0.439 0 0) */
+    --chart-3: rgb(var(--chart-3-rgb));
+    --chart-4-rgb: 64 64 64; /* oklch(0.371 0 0) */
+    --chart-4: rgb(var(--chart-4-rgb));
+    --chart-5-rgb: 38 38 38; /* oklch(0.269 0 0) */
+    --chart-5: rgb(var(--chart-5-rgb));
+
+    --sidebar-rgb: 250 250 250; /* oklch(0.985 0 0) */
+    --sidebar: rgb(var(--sidebar-rgb));
+    --sidebar-foreground-rgb: 10 10 10; /* oklch(0.145 0 0) */
+    --sidebar-foreground: rgb(var(--sidebar-foreground-rgb));
+    --sidebar-primary-rgb: 23 23 23; /* oklch(0.205 0 0) */
+    --sidebar-primary: rgb(var(--sidebar-primary-rgb));
+    --sidebar-primary-foreground-rgb: 250 250 250; /* oklch(0.985 0 0) */
+    --sidebar-primary-foreground: rgb(var(--sidebar-primary-foreground-rgb));
+    --sidebar-accent-rgb: 245 245 245; /* oklch(0.97 0 0) */
+    --sidebar-accent: rgb(var(--sidebar-accent-rgb));
+    --sidebar-accent-foreground-rgb: 23 23 23; /* oklch(0.205 0 0) */
+    --sidebar-accent-foreground: rgb(var(--sidebar-accent-foreground-rgb));
+    --sidebar-border-rgb: 229 229 229; /* oklch(0.922 0 0) */
+    --sidebar-border-a: 1;
+    --sidebar-border: rgb(var(--sidebar-border-rgb) / var(--sidebar-border-a));
+    --sidebar-ring-rgb: 161 161 161; /* oklch(0.708 0 0) */
+    --sidebar-ring: rgb(var(--sidebar-ring-rgb));
+
     --font-sans: 'Geist Variable', sans-serif;
-    --color-sidebar-ring: var(--sidebar-ring);
-    --color-sidebar-border: var(--sidebar-border);
-    --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-    --color-sidebar-accent: var(--sidebar-accent);
-    --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-    --color-sidebar-primary: var(--sidebar-primary);
-    --color-sidebar-foreground: var(--sidebar-foreground);
-    --color-sidebar: var(--sidebar);
-    --color-chart-5: var(--chart-5);
-    --color-chart-4: var(--chart-4);
-    --color-chart-3: var(--chart-3);
-    --color-chart-2: var(--chart-2);
-    --color-chart-1: var(--chart-1);
-    --color-ring: var(--ring);
-    --color-input: var(--input);
-    --color-border: var(--border);
-    --color-destructive: var(--destructive);
-    --color-accent-foreground: var(--accent-foreground);
-    --color-accent: var(--accent);
-    --color-muted-foreground: var(--muted-foreground);
-    --color-muted: var(--muted);
-    --color-secondary-foreground: var(--secondary-foreground);
-    --color-secondary: var(--secondary);
-    --color-primary-foreground: var(--primary-foreground);
-    --color-primary: var(--primary);
-    --color-popover-foreground: var(--popover-foreground);
-    --color-popover: var(--popover);
-    --color-card-foreground: var(--card-foreground);
-    --color-card: var(--card);
-    --color-foreground: var(--foreground);
-    --color-background: var(--background);
+    --radius: 0.625rem;
+    /* 组件里存在 rounded-[min(var(--radius-md),10px)] 这类直接引用，
+       必须保证 --radius-* 在运行时可见（v4 亦会输出 --radius-md）。 */
     --radius-sm: calc(var(--radius) * 0.6);
     --radius-md: calc(var(--radius) * 0.8);
     --radius-lg: var(--radius);
@@ -48,73 +128,86 @@
     --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-:root {
-    --background: oklch(1 0 0);
-    --foreground: oklch(0.145 0 0);
-    --card: oklch(1 0 0);
-    --card-foreground: oklch(0.145 0 0);
-    --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.145 0 0);
-    --primary: oklch(0.608 0.19 39);
-    --primary-foreground: oklch(0.985 0 0);
-    --secondary: oklch(0.97 0 0);
-    --secondary-foreground: oklch(0.205 0 0);
-    --muted: oklch(0.97 0 0);
-    --muted-foreground: oklch(0.556 0 0);
-    --accent: oklch(0.97 0 0);
-    --accent-foreground: oklch(0.205 0 0);
-    --destructive: oklch(0.577 0.245 27.325);
-    --border: oklch(0.922 0 0);
-    --input: oklch(0.922 0 0);
-    --ring: oklch(0.7 0.16 40);
-    --chart-1: oklch(0.87 0 0);
-    --chart-2: oklch(0.556 0 0);
-    --chart-3: oklch(0.439 0 0);
-    --chart-4: oklch(0.371 0 0);
-    --chart-5: oklch(0.269 0 0);
-    --radius: 0.625rem;
-    --sidebar: oklch(0.985 0 0);
-    --sidebar-foreground: oklch(0.145 0 0);
-    --sidebar-primary: oklch(0.205 0 0);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.97 0 0);
-    --sidebar-accent-foreground: oklch(0.205 0 0);
-    --sidebar-border: oklch(0.922 0 0);
-    --sidebar-ring: oklch(0.708 0 0);
-}
-
 .dark {
-    --background: oklch(0.145 0 0);
-    --foreground: oklch(0.985 0 0);
-    --card: oklch(0.205 0 0);
-    --card-foreground: oklch(0.985 0 0);
-    --popover: oklch(0.205 0 0);
-    --popover-foreground: oklch(0.985 0 0);
-    --primary: oklch(0.72 0.16 42);
-    --primary-foreground: oklch(0.205 0 0);
-    --secondary: oklch(0.269 0 0);
-    --secondary-foreground: oklch(0.985 0 0);
-    --muted: oklch(0.269 0 0);
-    --muted-foreground: oklch(0.708 0 0);
-    --accent: oklch(0.269 0 0);
-    --accent-foreground: oklch(0.985 0 0);
-    --destructive: oklch(0.704 0.191 22.216);
-    --border: oklch(1 0 0 / 10%);
-    --input: oklch(1 0 0 / 15%);
-    --ring: oklch(0.65 0.15 40);
-    --chart-1: oklch(0.87 0 0);
-    --chart-2: oklch(0.556 0 0);
-    --chart-3: oklch(0.439 0 0);
-    --chart-4: oklch(0.371 0 0);
-    --chart-5: oklch(0.269 0 0);
-    --sidebar: oklch(0.205 0 0);
-    --sidebar-foreground: oklch(0.985 0 0);
-    --sidebar-primary: oklch(0.488 0.243 264.376);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.269 0 0);
-    --sidebar-accent-foreground: oklch(0.985 0 0);
-    --sidebar-border: oklch(1 0 0 / 10%);
-    --sidebar-ring: oklch(0.556 0 0);
+    --background-rgb: 10 10 10; /* oklch(0.145 0 0) */
+    --background: rgb(var(--background-rgb));
+
+    --foreground-rgb: 250 250 250; /* oklch(0.985 0 0) */
+    --foreground: rgb(var(--foreground-rgb));
+
+    --card-rgb: 23 23 23; /* oklch(0.205 0 0) */
+    --card: rgb(var(--card-rgb));
+    --card-foreground-rgb: 250 250 250; /* oklch(0.985 0 0) */
+    --card-foreground: rgb(var(--card-foreground-rgb));
+
+    --popover-rgb: 23 23 23; /* oklch(0.205 0 0) */
+    --popover: rgb(var(--popover-rgb));
+    --popover-foreground-rgb: 250 250 250; /* oklch(0.985 0 0) */
+    --popover-foreground: rgb(var(--popover-foreground-rgb));
+
+    --primary-rgb: 245 126 77; /* oklch(0.72 0.16 42) -> #f57e4d */
+    --primary: rgb(var(--primary-rgb));
+    --primary-foreground-rgb: 23 23 23; /* oklch(0.205 0 0) */
+    --primary-foreground: rgb(var(--primary-foreground-rgb));
+
+    --secondary-rgb: 38 38 38; /* oklch(0.269 0 0) */
+    --secondary: rgb(var(--secondary-rgb));
+    --secondary-foreground-rgb: 250 250 250; /* oklch(0.985 0 0) */
+    --secondary-foreground: rgb(var(--secondary-foreground-rgb));
+    --secondary-hover-rgb: 47 47 47; /* color-mix(in oklch, secondary, foreground 5%) -> #2f2f2f */
+
+    --muted-rgb: 38 38 38; /* oklch(0.269 0 0) */
+    --muted: rgb(var(--muted-rgb));
+    --muted-foreground-rgb: 161 161 161; /* oklch(0.708 0 0) */
+    --muted-foreground: rgb(var(--muted-foreground-rgb));
+
+    --accent-rgb: 38 38 38; /* oklch(0.269 0 0) */
+    --accent: rgb(var(--accent-rgb));
+    --accent-foreground-rgb: 250 250 250; /* oklch(0.985 0 0) */
+    --accent-foreground: rgb(var(--accent-foreground-rgb));
+
+    --destructive-rgb: 255 100 103; /* oklch(0.704 0.191 22.216) -> #ff6467 */
+    --destructive: rgb(var(--destructive-rgb));
+
+    --border-rgb: 255 255 255; /* oklch(1 0 0 / 10%) */
+    --border-a: 0.1;
+    --border: rgb(var(--border-rgb) / var(--border-a));
+
+    --input-rgb: 255 255 255; /* oklch(1 0 0 / 15%) */
+    --input-a: 0.15;
+    --input: rgb(var(--input-rgb) / var(--input-a));
+
+    --ring-rgb: 217 106 66; /* oklch(0.65 0.15 40) */
+    --ring: rgb(var(--ring-rgb));
+
+    --chart-1-rgb: 212 212 212; /* oklch(0.87 0 0) */
+    --chart-1: rgb(var(--chart-1-rgb));
+    --chart-2-rgb: 115 115 115; /* oklch(0.556 0 0) */
+    --chart-2: rgb(var(--chart-2-rgb));
+    --chart-3-rgb: 82 82 82; /* oklch(0.439 0 0) */
+    --chart-3: rgb(var(--chart-3-rgb));
+    --chart-4-rgb: 64 64 64; /* oklch(0.371 0 0) */
+    --chart-4: rgb(var(--chart-4-rgb));
+    --chart-5-rgb: 38 38 38; /* oklch(0.269 0 0) */
+    --chart-5: rgb(var(--chart-5-rgb));
+
+    --sidebar-rgb: 23 23 23; /* oklch(0.205 0 0) */
+    --sidebar: rgb(var(--sidebar-rgb));
+    --sidebar-foreground-rgb: 250 250 250; /* oklch(0.985 0 0) */
+    --sidebar-foreground: rgb(var(--sidebar-foreground-rgb));
+    --sidebar-primary-rgb: 20 71 230; /* oklch(0.488 0.243 264.376) -> #1447e6 */
+    --sidebar-primary: rgb(var(--sidebar-primary-rgb));
+    --sidebar-primary-foreground-rgb: 250 250 250; /* oklch(0.985 0 0) */
+    --sidebar-primary-foreground: rgb(var(--sidebar-primary-foreground-rgb));
+    --sidebar-accent-rgb: 38 38 38; /* oklch(0.269 0 0) */
+    --sidebar-accent: rgb(var(--sidebar-accent-rgb));
+    --sidebar-accent-foreground-rgb: 250 250 250; /* oklch(0.985 0 0) */
+    --sidebar-accent-foreground: rgb(var(--sidebar-accent-foreground-rgb));
+    --sidebar-border-rgb: 255 255 255; /* oklch(1 0 0 / 10%) */
+    --sidebar-border-a: 0.1;
+    --sidebar-border: rgb(var(--sidebar-border-rgb) / var(--sidebar-border-a));
+    --sidebar-ring-rgb: 115 115 115; /* oklch(0.556 0 0) */
+    --sidebar-ring: rgb(var(--sidebar-ring-rgb));
 }
 
 @layer base {
@@ -217,4 +310,83 @@ html.low-effects * {
   animation-iteration-count: 1 !important;
   transition-duration: 0.05ms !important;
   scroll-behavior: auto !important;
+}
+
+/* ---------- Tailwind v4 `(--var)` 简写兼容 ----------
+   v4 用 `max-h-(--available-height)` 表示 var(--available-height)；v3 没有该语法，
+   且 addUtilities() 对含 `(` 的类名会输出缺前导点的非法选择器，因此在此手写。
+   三者均以「裸用」（不带变体）出现，故裸 CSS 足够；新增用法由
+   scripts/class-coverage.mjs 兜底检测。
+   与 v4 产物一致：max-height:var(--available-height)、transform-origin、
+   width:var(--anchor-width)。 */
+.max-h-\(--available-height\) {
+  max-height: var(--available-height);
+}
+.origin-\(--transform-origin\) {
+  transform-origin: var(--transform-origin);
+}
+.w-\(--anchor-width\) {
+  width: var(--anchor-width);
+}
+
+/* ---------- Tailwind v4 trailing-`!`（important）兼容 ----------
+   v4 把 important 写成类名后缀（`size-3!`），v3 只认前缀写法（`!size-3`），且
+   v3 的 addUtilities() 直接拒绝含 `!` 的类名（postcss-selector-parser:
+   "Unexpected '!'"）。因此这几个类名在这里手写输出。
+   全仓库仅 5 处使用（badge.tsx 1 处、tooltip.tsx 4 处），由
+   scripts/class-coverage.mjs 保证不会遗漏新增用法。
+   选择器与 v4 产物一致，声明带 !important 以匹配 v4 语义。 */
+.\[\&\>svg\]\:size-3\! > svg {
+  width: 0.75rem !important;
+  height: 0.75rem !important;
+}
+.data-\[side\=inline-end\]\:top-1\/2\![data-side="inline-end"],
+.data-\[side\=inline-start\]\:top-1\/2\![data-side="inline-start"],
+.data-\[side\=left\]\:top-1\/2\![data-side="left"],
+.data-\[side\=right\]\:top-1\/2\![data-side="right"] {
+  top: 50% !important;
+}
+
+/* ---------- Tailwind v4 `*:`（子元素）+ 任意变体 兼容 ----------
+   v3.4 对 `*:` 与「任意变体」的组合处理有误（已实测）：
+     *:[a]:underline                  完全不生成
+     *:[span]:last:flex               完全不生成
+     *:[svg:not([class*='size-'])]:size-6  生成了但声明体被破坏
+   （`**:data-[...]` 与 `*:data-[slot=select-value]` 两种写法 v3 正常，未列出。）
+   全仓库共 8 个受影响类名，在此按 v4 语义手写。
+   选择器改用 [class~="..."] 属性匹配，避免对含 `* : [ ] ( ) '` 的类名做
+   CSS 标识符转义时出错；特异性与类选择器一致。
+   由 scripts/audit-child-star.mjs 与 class-coverage.mjs 兜底检测新增用法。 */
+
+/* alert-dialog.tsx / dialog.tsx: DialogDescription 里的链接样式 */
+[class~="*:[a]:underline"] > a {
+  text-decoration-line: underline;
+}
+[class~="*:[a]:underline-offset-3"] > a {
+  text-underline-offset: 3px;
+}
+[class~="*:[a]:hover:text-foreground"] > a:hover {
+  color: var(--foreground);
+}
+
+/* select.tsx: SelectItem 末尾的 span 容器 */
+[class~="*:[span]:last:flex"] > span:last-child {
+  display: flex;
+}
+[class~="*:[span]:last:items-center"] > span:last-child {
+  align-items: center;
+}
+[class~="*:[span]:last:gap-2"] > span:last-child {
+  gap: 0.5rem;
+}
+
+/* alert-dialog.tsx: 媒体区图标兜底尺寸 */
+[class~="*:[svg:not([class*='size-'])]:size-6"] > svg:not([class*="size-"]) {
+  width: 1.5rem;
+  height: 1.5rem;
+}
+
+/* dropdown-menu.tsx: destructive 菜单项内的图标着色 */
+[class~="data-[variant=destructive]:*:[svg]:text-destructive"][data-variant="destructive"] > svg {
+  color: var(--destructive);
 }
