@@ -27,9 +27,12 @@ func (s *Server) resolveSpace(c *fiber.Ctx) (int64, error) {
 }
 
 // handlePortalSpaces GET /api/portal/spaces → 我的空间（member 多空间；管理员列出其域空间）。
+// 每个空间附带 canViewLeaderboard（管理员恒 true；成员取决于所属域排行榜是否公开），
+// 供前端在「排行榜不公开」时直接隐藏该 tab。
 func (s *Server) handlePortalSpaces(c *fiber.Ctx) error {
 	user := currentUser(c)
-	if isAdminRole(user.Role) {
+	admin := isAdminRole(user.Role)
+	if admin {
 		// 管理员空间列表：domain_admin → 其域；global_admin → 全部（可再切域，此处列全部）
 		spaces, err := s.QS.Repo.UserDomainSpaceIDs(user.ID) // member 关系可能为空
 		if err != nil {
@@ -46,13 +49,45 @@ func (s *Server) handlePortalSpaces(c *fiber.Ctx) error {
 				return err
 			}
 		}
+		if err := s.annotateLeaderboardVisibility(spaces, true); err != nil {
+			return err
+		}
 		return respondData(c, fiber.StatusOK, fiber.Map{"spaces": spaces})
 	}
 	spaces, err := s.QS.Repo.UserDomainSpaceIDs(user.ID)
 	if err != nil {
 		return err
 	}
+	if err := s.annotateLeaderboardVisibility(spaces, false); err != nil {
+		return err
+	}
 	return respondData(c, fiber.StatusOK, fiber.Map{"spaces": spaces})
+}
+
+// annotateLeaderboardVisibility 为空间列表补 canViewLeaderboard：
+// 管理员恒可见；成员按所属域 domains.leaderboard_public（缺省视为公开）判定。
+func (s *Server) annotateLeaderboardVisibility(spaces []quizstore.SpaceBrief, admin bool) error {
+	if admin {
+		for i := range spaces {
+			spaces[i].CanViewLeaderboard = true
+		}
+		return nil
+	}
+	flags := map[int64]bool{}
+	for i := range spaces {
+		did := spaces[i].DomainID
+		pub, ok := flags[did]
+		if !ok {
+			if err := s.QS.Repo.DB.QueryRow(
+				`SELECT COALESCE(leaderboard_public,1) FROM domains WHERE id=?`, did).Scan(&pub); err != nil {
+				// 域缺失/查询失败时保守放开（与既有 403 兜底一致，避免误隐藏）
+				pub = true
+			}
+			flags[did] = pub
+		}
+		spaces[i].CanViewLeaderboard = pub
+	}
+	return nil
 }
 
 // spacesOfDomain 域内全部空间（含域名信息由前端另取；此处带 domainId）。
@@ -256,9 +291,12 @@ func (s *Server) handlePortalTrainingAnswer(c *fiber.Ctx) error {
 	if err != nil {
 		return respondError(c, fiber.StatusInternalServerError, err.Error())
 	}
-	locked := solved || (tr.MaxAttempts > 0 && attempts >= tr.MaxAttempts)
+	// 次数用尽（限次且已达上限）才算「可回顾」，此时才揭示正确答案；
+	// 未用尽时只反馈对错，避免学生答错一次就看到答案。
+	expired := tr.MaxAttempts > 0 && attempts >= tr.MaxAttempts
+	locked := solved || expired
 	correctAnswer := fiber.Map{}
-	if !correct {
+	if !correct && expired {
 		if problemType == "single_choice" {
 			if env, err := s.QS.Repo.GetObjectiveAnswer(req.ProblemID); err == nil && env.AnswerIndex != nil {
 				correctAnswer["answerIndex"] = *env.AnswerIndex
@@ -269,11 +307,20 @@ func (s *Server) handlePortalTrainingAnswer(c *fiber.Ctx) error {
 			}
 		}
 	}
+	// 剩余次数（-1=不限次），供前端提示「还可再答 N 次」
+	remaining := -1
+	if tr.MaxAttempts > 0 {
+		remaining = tr.MaxAttempts - attempts
+		if remaining < 0 {
+			remaining = 0
+		}
+	}
 	return respondData(c, fiber.StatusOK, fiber.Map{
 		"correct":       correct,
 		"attempts":      attempts,
 		"solved":        solved,
 		"locked":        locked,
+		"remaining":     remaining,
 		"correctAnswer": correctAnswer,
 	})
 }

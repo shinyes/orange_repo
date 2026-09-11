@@ -157,7 +157,8 @@ function TrainingFlow({ sid, tid, data, urlNo }: {
                               isCurrent && 'ring-2 ring-primary ring-offset-1',
                             )}
                           >
-                            {idx + 1}
+                            {/* 编号按章节重新从 1 开始 */}
+                            {j + 1}
                           </button>
                         )
                       })}
@@ -286,7 +287,8 @@ function TrainingFlow({ sid, tid, data, urlNo }: {
                                   : 'bg-muted text-muted-foreground hover:bg-muted/70',
                           )}
                         >
-                          {idx + 1}
+                          {/* 编号按章节重新从 1 开始 */}
+                          {j + 1}
                         </button>
                       )
                     })}
@@ -392,7 +394,9 @@ function SampleBox({ label, text }: { label: string; text: string }) {
 
 // 本会话内判分结果记忆（切题/重进回顾仍显示红绿；key 含 空间×训练×题，
 // 避免同题跨训练/跨空间串用旧判定——且仅回顾态（已通过/达限）读取，防止阻塞继续作答）
-const lastResultCache = new Map<string, { selected: ObjectiveAnswer; feedback: { correct: boolean; correctAnswer?: CorrectAnswer } }>()
+const lastResultCache = new Map<string, { selected: ObjectiveAnswer; feedback: ObjFeedback }>()
+
+type ObjFeedback = { correct: boolean; correctAnswer?: CorrectAnswer; wrongHint?: string }
 
 function ObjectiveCard({ sid, tid, item, maxAttempts, onAnswered }: {
   sid: number
@@ -410,7 +414,7 @@ function ObjectiveCard({ sid, tid, item, maxAttempts, onAnswered }: {
   const cachedRaw = lastResultCache.get(cacheKey)
   const cached = readOnly || (cachedRaw && !cachedRaw.feedback.correct) ? cachedRaw : undefined
   const [selected, setSelected] = useState<ObjectiveAnswer | null>(cached?.selected ?? null)
-  const [feedback, setFeedback] = useState<{ correct: boolean; correctAnswer?: CorrectAnswer } | null>(cached?.feedback ?? null)
+  const [feedback, setFeedback] = useState<ObjFeedback | null>(cached?.feedback ?? null)
   const [busy, setBusy] = useState(false)
 
   const contentQ = useQuery({
@@ -421,7 +425,7 @@ function ObjectiveCard({ sid, tid, item, maxAttempts, onAnswered }: {
 
   // 回顾态：无本地判分但服务端带正确答案（此前答过）→ 静默标出正确项
   const reviewFeedback = readOnly && !feedback && item.correctAnswer
-    ? ({ correct: false, correctAnswer: item.correctAnswer } as { correct: boolean; correctAnswer?: CorrectAnswer })
+    ? ({ correct: false, correctAnswer: item.correctAnswer } as ObjFeedback)
     : null
   const showFeedback = feedback ?? reviewFeedback
   const showSilent = reviewFeedback != null
@@ -431,11 +435,16 @@ function ObjectiveCard({ sid, tid, item, maxAttempts, onAnswered }: {
     setBusy(true)
     try {
       const r = await api.portalTrainingAnswer(sid, tid, item.problemId, selected)
-      const fb = { correct: r.correct, correctAnswer: r.correctAnswer }
+      // 未达尝试上限时服务端不下发正确答案 → 只提示对错与剩余次数
+      const wrongHint = !r.correct && !r.locked && maxAttempts > 0
+        ? `还可再答 ${(r as { remaining?: number }).remaining ?? Math.max(0, maxAttempts - r.attempts)} 次`
+        : undefined
+      const fb: ObjFeedback = { correct: r.correct, correctAnswer: r.correctAnswer, wrongHint }
       setFeedback(fb)
       lastResultCache.set(cacheKey, { selected, feedback: fb })
       if (r.correct) toast.success('回答正确')
-      else toast.error(r.locked ? '回答错误，本题次数已用尽' : '回答错误')
+      else if (r.locked) toast.error('回答错误，次数已用尽，正确答案已显示')
+      else toast.error('回答错误，请重试')
       onAnswered()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : '提交失败')
@@ -468,6 +477,7 @@ function ObjectiveCard({ sid, tid, item, maxAttempts, onAnswered }: {
           selected={selected}
           feedback={showFeedback}
           silent={showSilent}
+          wrongHint={feedback?.wrongHint}
           onSelect={(a) => setSelected(a)}
         />
       )}

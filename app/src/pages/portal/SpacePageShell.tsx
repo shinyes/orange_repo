@@ -29,7 +29,7 @@ export function SpacePageShell({
   return (
     <div className="flex h-dvh flex-col overflow-hidden">
       <header className="shrink-0 border-b bg-background">
-        <div className="mx-auto flex h-14 w-full max-w-5xl items-center gap-2 px-2 lg:px-3">
+        <div className="mx-auto flex h-11 w-full max-w-5xl items-center gap-2 px-2 lg:px-3">
           <Link
             to={backTo}
             className="-ml-1.5 inline-flex min-w-0 items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"

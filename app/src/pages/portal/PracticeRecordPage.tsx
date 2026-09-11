@@ -103,7 +103,7 @@ function RecordSheet({ sid, pid, data }: {
     <div className="flex h-full min-h-0 flex-col">
       {/* 顶部固定行（页内标题条；不再随滚动） */}
       <div className="shrink-0 border-b bg-background shadow-sm">
-        <div className="mx-auto flex h-14 w-full max-w-6xl items-center gap-3 px-3">
+        <div className="mx-auto flex h-11 w-full max-w-6xl items-center gap-3 px-3">
           <h1 className="flex min-w-0 items-center gap-2 text-base font-bold">
             <span className="truncate">本次答题卡</span>
             <span className="tabular-nums text-xs font-normal text-muted-foreground">#{data.submissionId}</span>

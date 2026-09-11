@@ -31,6 +31,8 @@ export interface ObjectiveQuestionProps {
   feedback?: { correct: boolean; correctAnswer?: CorrectAnswer } | null
   /** silent：有 feedback 但不显示结果横幅（训练回顾态复用判分结果展示选项红绿） */
   silent?: boolean
+  /** 答错且未揭示答案时的提示（如“还可再答 2 次”） */
+  wrongHint?: string
   /** 用户点选（自动提交流由调用方在回调内发起请求） */
   onSelect?: (a: ObjectiveAnswer) => void
   showTitle?: string
@@ -43,6 +45,7 @@ export function ObjectiveQuestion({
   selected,
   feedback,
   silent,
+  wrongHint,
   onSelect,
   showTitle,
 }: ObjectiveQuestionProps) {
@@ -55,6 +58,12 @@ export function ObjectiveQuestion({
     : undefined
 
   const clickable = !answered && !locked && !busy && !!onSelect
+  // 是否正确答案已被揭示（次数用尽/回顾态才有 correctAnswer；未用尽时不下发）
+  const revealedAnswer = !!feedback && !feedback.correct && (
+    problem.type === 'single_choice'
+      ? feedback.correctAnswer?.answerIndex != null
+      : feedback.correctAnswer?.answer != null
+  )
 
   // 选项框底色/边框统一逻辑（单选/判断共用）。
   function optionCls(value: ObjectiveAnswer): string {
@@ -128,7 +137,7 @@ export function ObjectiveQuestion({
           {feedback!.correct ? <CheckCircle2Icon className="size-4 shrink-0" /> : <XCircleIcon className="size-4 shrink-0" />}
           <span className="min-w-0">
             {feedback!.correct ? '回答正确' : '回答错误'}
-            {!feedback!.correct && (
+            {!feedback!.correct && revealedAnswer && (
               <span className="ml-1 text-xs opacity-80">
                 （正确项：{problem.type === 'single_choice'
                   ? (() => {
@@ -137,6 +146,9 @@ export function ObjectiveQuestion({
                   })()
                   : feedback!.correctAnswer?.answer == null ? '—' : (feedback!.correctAnswer.answer ? '对' : '错')}）
               </span>
+            )}
+            {!feedback!.correct && !revealedAnswer && wrongHint && (
+              <span className="ml-1 text-xs opacity-80">（{wrongHint}）</span>
             )}
           </span>
         </div>

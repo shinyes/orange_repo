@@ -177,7 +177,7 @@ function WrongPractice({ group, onExit }: { group: WrongGroup | null; onExit: ()
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="shrink-0 border-b bg-background shadow-sm">
-        <div className="mx-auto flex h-14 w-full max-w-2xl items-center gap-2 px-4">
+        <div className="mx-auto flex h-11 w-full max-w-2xl items-center gap-2 px-4">
           <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={onExit}>
             <ArrowLeftIcon className="size-4" /> 错题集
           </Button>

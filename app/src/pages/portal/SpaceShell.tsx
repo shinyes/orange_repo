@@ -42,14 +42,17 @@ export function SpaceShell({ user, onLogout }: { user: User; onLogout: () => voi
     { to: `/s/${space.id}/training`, label: '训练', icon: FolderKanbanIcon },
     { to: `/s/${space.id}/practice`, label: '练习', icon: ClipboardListIcon },
     { to: `/s/${space.id}/quiz`, label: '刷题', icon: BookOpenIcon },
-    { to: `/s/${space.id}/rank`, label: '排行榜', icon: TrophyIcon },
+    // 排行榜不公开（域设置关闭）时直接不显示该 tab；管理员始终可见
+    ...(space.canViewLeaderboard === false
+      ? []
+      : [{ to: `/s/${space.id}/rank`, label: '排行榜', icon: TrophyIcon }]),
   ]
 
   return (
     <div className="flex h-dvh flex-col overflow-hidden">
       {/* 顶栏（单行）：返回 + 空间名 + 训练/练习/刷题/排行榜 + 我的 */}
       <header className="shrink-0 border-b bg-background">
-        <div className="mx-auto flex h-14 w-full max-w-5xl items-center gap-1 px-2 lg:px-3">
+        <div className="mx-auto flex h-11 w-full max-w-5xl items-center gap-1 px-2 lg:px-3">
           <NavLink
             to="/"
             className="-ml-1.5 flex min-w-0 shrink items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"

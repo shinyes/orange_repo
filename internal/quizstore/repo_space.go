@@ -24,6 +24,9 @@ type SpaceBrief struct {
 	DomainID   int64  `json:"domainId"`
 	DomainName string `json:"domainName,omitempty"`
 	Name       string `json:"name"`
+	// CanViewLeaderboard 当前用户能否查看该空间所属域的排行榜
+	// （管理员恒 true；成员取决于域的排行榜公开设置）——前端据此隐藏入口
+	CanViewLeaderboard bool `json:"canViewLeaderboard"`
 }
 
 // SpaceTrainingBrief 空间训练列表项。

@@ -73,7 +73,7 @@ function AdminTop({ user, onLogout }: { user: User; onLogout: () => void }) {
   return (
     <>
       <header className="shrink-0 border-b bg-background">
-        <div className="flex h-14 items-center gap-2 px-3 lg:px-4">
+        <div className="flex h-11 items-center gap-2 px-3 lg:px-4">
           <NavLink
             to="/"
             className="-ml-2 flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"

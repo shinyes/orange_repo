@@ -22,6 +22,8 @@ export interface PortalSpace {
   domainId: number
   domainName?: string
   name: string
+  /** 当前用户能否查看该域排行榜（false=域设置为不公开且非管理员）→ 隐藏排行榜入口 */
+  canViewLeaderboard?: boolean
 }
 
 export interface SpaceHome {
@@ -107,6 +109,9 @@ export interface TrainingAnswerResult {
   attempts: number
   solved: boolean
   locked: boolean
+  /** 剩余次数（-1=不限次）；未达上限时用于提示 */
+  remaining?: number
+  /** 仅当次数用尽（可回顾）时下发正确答案；未用尽时为空对象 */
   correctAnswer: CorrectAnswer
 }
 

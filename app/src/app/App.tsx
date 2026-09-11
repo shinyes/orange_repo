@@ -149,7 +149,7 @@ function TopShell({ user, onLogout }: { user: User; onLogout: () => void }) {
   return (
     <div className="flex h-dvh flex-col overflow-hidden">
       <header className="shrink-0 border-b bg-background">
-        <div className="mx-auto flex h-14 w-full max-w-6xl items-center gap-4 px-4 lg:px-6">
+        <div className="mx-auto flex h-11 w-full max-w-6xl items-center gap-4 px-4 lg:px-6">
           <NavLink to="/" className="flex shrink-0 items-center gap-2 text-base font-semibold">
             <img src="/favicon.png" alt="OrangeOJ" className="size-7 rounded-lg" />
             OrangeOJ
