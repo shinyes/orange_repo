@@ -15,6 +15,7 @@ export function SplitPane({
   minRightPct = 28,
   maxRightPct = 72,
   initialTopPct = 45,
+  collapsed = false,
 }: {
   left: React.ReactNode
   right: React.ReactNode
@@ -23,6 +24,8 @@ export function SplitPane({
   maxRightPct?: number
   /** 移动端题面初始占比 % */
   initialTopPct?: number
+  /** 折叠右侧（编辑器+控制台）：题面占满；右侧仅隐藏不卸载（保留 Monaco 状态/草稿） */
+  collapsed?: boolean
 }) {
   const rootRef = useRef<HTMLDivElement>(null)
   const [rightPct, setRightPct] = useState(initialRightPct)
@@ -132,12 +135,12 @@ export function SplitPane({
       {/* 上/左：题面（桌面占剩余宽度；移动端占 topPct%）——各自内部滚动 */}
       <div
         className="min-h-0 w-full overflow-y-auto lg:flex-1 lg:border-r"
-        style={!isDesktop ? { height: `${topPct}%` } : undefined}
+        style={!isDesktop ? { height: collapsed ? '100%' : `${topPct}%` } : undefined}
       >
         {left}
       </div>
 
-      {/* 竖直拖拽条（仅桌面） */}
+      {/* 竖直拖拽条（仅桌面；折叠时隐藏） */}
       <div
         role="separator"
         aria-orientation="vertical"
@@ -153,13 +156,14 @@ export function SplitPane({
         className={cn(
           'hidden w-1.5 shrink-0 cursor-col-resize touch-none select-none items-center justify-center bg-transparent transition-colors hover:bg-primary/25 lg:flex',
           active && 'bg-primary/40',
+          collapsed && 'lg:hidden',
         )}
       >
         <span className="pointer-events-none h-14 w-0.5 rounded-full bg-muted-foreground/40" />
       </div>
 
-      {/* 水平拖拽条（仅移动端：调整题面/编辑器上下占比） */}
-      {!isDesktop && (
+      {/* 水平拖拽条（仅移动端：调整题面/编辑器上下占比；折叠时隐藏） */}
+      {!isDesktop && !collapsed && (
         <div
           role="separator"
           aria-orientation="horizontal"
@@ -172,13 +176,17 @@ export function SplitPane({
         </div>
       )}
 
-      {/* 下/右：编辑器（桌面=宽度百分比；移动端=剩余高度）——仅按断点渲染一份 */}
+      {/* 下/右：编辑器（桌面=宽度百分比；移动端=剩余高度）——仅按断点渲染一份；
+          折叠时用 hidden 隐藏但保留挂载（Monaco 不重建、草稿与滚动位置不丢） */}
       {isDesktop ? (
-        <div className="flex min-h-0 flex-col lg:h-full lg:shrink-0" style={{ width: `${rightPct}%` }}>
+        <div
+          className={cn('flex min-h-0 flex-col lg:h-full lg:shrink-0', collapsed && 'hidden')}
+          style={{ width: `${rightPct}%` }}
+        >
           {right}
         </div>
       ) : (
-        <div className="min-h-0 w-full flex-1 overflow-y-auto">{right}</div>
+        <div className={cn('min-h-0 w-full flex-1 overflow-y-auto', collapsed && 'hidden')}>{right}</div>
       )}
     </div>
   )

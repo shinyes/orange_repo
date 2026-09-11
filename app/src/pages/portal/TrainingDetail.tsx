@@ -20,6 +20,7 @@ import type { CorrectAnswer, ObjectiveAnswer, TrainingItemView } from '@/api/typ
 import { usePortalSession } from '@/pages/portal/portal-context'
 import { TrainingProgrammingCard } from '@/components/portal/TrainingProgrammingCard'
 import { ZoomControls } from '@/components/portal/zoom-controls'
+import { EditorCollapseButton } from '@/components/portal/editor-collapse-button'
 import { AdminEditProblemButton } from '@/components/portal/admin-edit-problem'
 import { ViewSolutionButton } from '@/components/portal/view-solution-button'
 import { SplitPane } from '@/components/portal/SplitPane'
@@ -75,6 +76,8 @@ function TrainingFlow({ sid, tid, data, urlNo }: {
   const [navOpen, setNavOpen] = useState(false) // 移动端导航浮窗
   // 题面字号缩放（zoom 视觉缩放整块题面）
   const [statementScale, setStatementScale] = useState(1)
+  // 折叠「代码编辑器 + 控制台」：题面占满（编程题专用；仅隐藏不卸载）
+  const [editorCollapsed, setEditorCollapsed] = useState(false)
 
   // 当前题号由 URL 派生（1 基；越界 clamp）——刷新/前进后退保持在对应题
   const activeIdx = urlNo == null ? 0 : Math.min(Math.max(1, urlNo), all.length) - 1
@@ -205,15 +208,18 @@ function TrainingFlow({ sid, tid, data, urlNo }: {
                 </div>
               ) : (
                 <SplitPane
+                  collapsed={editorCollapsed}
                   left={
                     <div className="h-full min-h-0 w-full overflow-y-auto px-4 py-4 [scrollbar-gutter:stable] lg:px-5">
-                      {/* 无独立头栏：编辑/缩放/已通过 均集成在题目卡内部标题行；
+                      {/* 无独立头栏：编辑/缩放/折叠/已通过 均集成在题目卡内部标题行；
                           缩放仅作用于卡内正文（标题行与按钮大小/位置固定——与练习做题页一致） */}
                       <ProgrammingStatement
                         problemId={item.problemId}
                         itemSolved={itemSolved}
                         scale={statementScale}
                         onScale={setStatementScale}
+                        editorCollapsed={editorCollapsed}
+                        onToggleEditor={() => setEditorCollapsed((v) => !v)}
                       />
                     </div>
                   }
@@ -305,11 +311,13 @@ function TrainingFlow({ sid, tid, data, urlNo }: {
 
 // ---------- 编程题题面（题干/格式/样例 完整展示） ----------
 
-function ProgrammingStatement({ problemId, itemSolved, scale, onScale }: {
+function ProgrammingStatement({ problemId, itemSolved, scale, onScale, editorCollapsed, onToggleEditor }: {
   problemId: number
   itemSolved: boolean
   scale: number
   onScale: (s: number) => void
+  editorCollapsed: boolean
+  onToggleEditor: () => void
 }) {
   const q = useQuery({
     queryKey: ['oj-problem', problemId],
@@ -336,11 +344,12 @@ function ProgrammingStatement({ problemId, itemSolved, scale, onScale }: {
             </span>
           )}
         </h1>
-        {/* 管理员：查看题解 + 编辑题目 + 文字缩放（题解在编辑左侧） */}
+        {/* 管理员：查看题解 + 编辑题目 + 文字缩放 + 折叠编辑器（题解在编辑左侧，折叠在最右） */}
         <span className="flex shrink-0 items-center gap-1">
           <ViewSolutionButton problemId={problemId} />
           <AdminEditProblemButton problemId={problemId} />
           <ZoomControls scale={scale} onChange={onScale} />
+          <EditorCollapseButton collapsed={editorCollapsed} onToggle={onToggleEditor} />
         </span>
       </div>
       <div style={{ zoom: scale }} className="space-y-3">

@@ -24,6 +24,7 @@ import { SplitPane } from '@/components/portal/SplitPane'
 import { AdminEditProblemButton } from '@/components/portal/admin-edit-problem'
 import { ViewSolutionButton } from '@/components/portal/view-solution-button'
 import { ZoomControls } from '@/components/portal/zoom-controls'
+import { EditorCollapseButton } from '@/components/portal/editor-collapse-button'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Textarea } from '@/components/ui/textarea'
@@ -214,6 +215,8 @@ function ObjectiveSolve({ problem, backTo }: { problem: OjProblem; backTo: strin
 
 function ProgrammingSolve({ problem, backTo, review, practiceId }: { problem: OjProblem; backTo: string; review?: boolean; practiceId?: number }) {
   const [statementScale, setStatementScale] = useState(1)
+  // 折叠「代码编辑器 + 控制台」：题面占满（仅隐藏不卸载，草稿与 Monaco 状态保留）
+  const [editorCollapsed, setEditorCollapsed] = useState(false)
   const samples = (problem.bodyJson.samples as { input?: string; output?: string }[] | undefined) ?? []
   // 草稿上下文：练习进入=按练习隔离（云端 ctx practice+id）；做题页直达=全局
   const ctxKind = practiceId ? 'practice' : ''
@@ -357,9 +360,17 @@ function ProgrammingSolve({ problem, backTo, review, practiceId }: { problem: Oj
     <div className="min-h-0 flex-1">
     <>
     <SplitPane
+      collapsed={editorCollapsed}
       left={
         <div className="min-w-0 h-full overflow-y-auto rounded-2xl border bg-card p-4 [scrollbar-gutter:stable]">
-          <TopBar backTo={backTo} problem={problem} scale={statementScale} onScale={setStatementScale} />
+          <TopBar
+            backTo={backTo}
+            problem={problem}
+            scale={statementScale}
+            onScale={setStatementScale}
+            editorCollapsed={editorCollapsed}
+            onToggleEditor={() => setEditorCollapsed((v) => !v)}
+          />
           <div style={{ zoom: statementScale }} className="mt-3 space-y-3">
             <div className="rounded-xl bg-muted/50 p-3 text-sm leading-relaxed">
               <Markdown text={preserveLineBreaks(problem.statementMd || '（暂无题面）')} className="markdown-body" />
@@ -501,11 +512,14 @@ function ProgrammingSolve({ problem, backTo, review, practiceId }: { problem: Oj
 }
 function isAcceptedVerdict(v: string) { return v === 'AC' || v === 'OK' }
 
-function TopBar({ backTo, problem, scale, onScale }: {
+function TopBar({ backTo, problem, scale, onScale, editorCollapsed, onToggleEditor }: {
   backTo: string
   problem: OjProblem
   scale: number
   onScale: (s: number) => void
+  /** 仅编程题用：折叠代码编辑器与控制台 */
+  editorCollapsed?: boolean
+  onToggleEditor?: () => void
 }) {
   const navigate = useNavigate()
   return (
@@ -516,11 +530,14 @@ function TopBar({ backTo, problem, scale, onScale }: {
       <div className="min-w-0 flex-1">
         <h1 className="truncate text-base font-semibold">{problem.title}</h1>
       </div>
-      {/* 管理员：查看题解（仅编程题）+ 编辑题目 + 文字缩放 */}
+      {/* 管理员：查看题解（仅编程题）+ 编辑题目 + 文字缩放；编程题再加「折叠编辑器与控制台」 */}
       <div className="flex shrink-0 items-center gap-1.5">
         {problem.type === 'programming' && <ViewSolutionButton problemId={problem.id} />}
         <AdminEditProblemButton problemId={problem.id} />
         <ZoomControls scale={scale} onChange={onScale} />
+        {problem.type === 'programming' && onToggleEditor && (
+          <EditorCollapseButton collapsed={!!editorCollapsed} onToggle={onToggleEditor} />
+        )}
       </div>
     </div>
   )
