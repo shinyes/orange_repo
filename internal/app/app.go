@@ -83,6 +83,15 @@ func Open(cfg Config) (*App, error) {
 	server.RegisterRoutes(st, acc, uploadsDir, app)
 	a.QuizSrv.RegisterRoutes(app)
 
+	// 5) /api/* 未匹配兜底：返回 JSON 404（而非被 SPA 兜底吞成 200/405）。
+	// 路径或方法写错时给出可诊断的错误，避免出现费解的 "Method Not Allowed"
+	// （此前 SPA 的 app.Get("*") 会让任意 GET 路径"存在"，DELETE 打到同一路径即 405）。
+	app.All("/api/*", func(c *fiber.Ctx) error {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "接口不存在：" + c.Method() + " " + c.Path(),
+		})
+	})
+
 	// 4) 判题队列并入主进程（runner 非空才启动）。
 	a.QuizSrv.StartQueue(cfg.JudgeRunner, cfg.JudgeWorkers)
 
