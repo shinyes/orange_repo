@@ -459,7 +459,9 @@ func (s *Server) handleOJGetDraft(c *fiber.Ctx) error {
 	}
 	updatedAt := ""
 	if !d.UpdatedAt.IsZero() {
-		updatedAt = d.UpdatedAt.Format(time.RFC3339)
+		// 显式转 UTC：输出时区不依赖下游实现是否已归一，保证始终带 Z
+		// （前端按本地时区解析带偏移的时间会差数小时，导致新旧判断反向）
+		updatedAt = d.UpdatedAt.UTC().Format(time.RFC3339)
 	}
 	return respondData(c, fiber.StatusOK, fiber.Map{
 		"code": d.Code, "language": lang, "updatedAt": updatedAt,
