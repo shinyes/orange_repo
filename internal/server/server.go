@@ -161,6 +161,8 @@ func (s *Server) registerManagement(app *fiber.App) {
 	ga("GET", "/admin/users", s.handleListUsers)
 	ga("DELETE", "/admin/users/:id", s.handleDeleteUser)
 	ga("PUT", "/admin/users/:id/password", s.handleResetUserPassword)
+	// 修改用户名（系统管理员任意账号；域管理员限本域成员）
+	ga("PUT", "/admin/users/:id/username", s.handleRenameUser)
 	// 集中用户管理（仅系统管理员）：全账号列表（含角色/归属域）
 	gag("GET", "/admin/all-users", s.handleListAllUsers)
 

@@ -446,6 +446,8 @@ export interface AllUser {
   role: Role
   domainId?: number | null
   domainName?: string
+  /** 该账号所属的域集合（按空间归属计算；member 无 users.domain_id 时据此判断） */
+  domainIds?: number[]
 }
 
 export interface Domain {

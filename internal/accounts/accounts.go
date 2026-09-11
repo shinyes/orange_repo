@@ -437,6 +437,35 @@ func (s *Store) DeleteStudent(id int64) error {
 	return nil
 }
 
+// RenameUser 修改任意用户的用户名（管理员操作）。
+// 用户名大小写不敏感唯一（表级 UNIQUE COLLATE NOCASE）；改后旧名无法登录、新名可登录；
+// 既有会话仍有效（会话按 user_id 关联，不存用户名），故不清理会话。
+func (s *Store) RenameUser(id int64, username string) error {
+	username = strings.TrimSpace(username)
+	if err := ValidateUsername(username); err != nil {
+		return err
+	}
+	res, err := s.DB.Exec(`UPDATE users SET username=? WHERE id=?`, username, id)
+	if err != nil {
+		if strings.Contains(err.Error(), "UNIQUE") {
+			return ErrConflict
+		}
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		// 目标不存在；或新名与旧名完全相同（无变化）——后者视为成功
+		var exists int
+		if err := s.DB.QueryRow(`SELECT COUNT(1) FROM users WHERE id=?`, id).Scan(&exists); err != nil {
+			return err
+		}
+		if exists == 0 {
+			return ErrNotFound
+		}
+	}
+	return nil
+}
+
 // SetStudentPassword 重置空间成员密码。
 func (s *Store) SetStudentPassword(id int64, password string) error {
 	if password == "" {

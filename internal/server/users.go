@@ -25,12 +25,31 @@ func (s *Server) handleListAllUsers(c *fiber.Ctx) error {
 			domainName[d.ID] = d.Name
 		}
 	}
+	// 各域成员集合（按空间归属；供前端判断某账号是否属于该域）——
+	// member 不持久化 users.domain_id，故以空间归属为准
+	domainMembers := map[int64]map[int64]bool{}
+	if rows, err := s.Store.DB.Query(`SELECT DISTINCT sp.domain_id, m.user_id
+		FROM space_members m JOIN spaces sp ON sp.id = m.space_id`); err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var did, uid int64
+			if err := rows.Scan(&did, &uid); err != nil {
+				break
+			}
+			if domainMembers[did] == nil {
+				domainMembers[did] = map[int64]bool{}
+			}
+			domainMembers[did][uid] = true
+		}
+	}
 	type view struct {
 		ID         int64   `json:"id"`
 		Username   string  `json:"username"`
 		Role       string  `json:"role"`
 		DomainID   *int64  `json:"domainId,omitempty"`
 		DomainName *string `json:"domainName,omitempty"`
+		// 该账号是否属于某个域（域管理员判定可改名范围用）
+		DomainIDs []int64 `json:"domainIds,omitempty"`
 	}
 	out := make([]view, 0, len(users))
 	for _, u := range users {
@@ -38,6 +57,12 @@ func (s *Server) handleListAllUsers(c *fiber.Ctx) error {
 		if u.DomainID != nil {
 			if n, ok := domainName[*u.DomainID]; ok {
 				v.DomainName = &n
+			}
+			v.DomainIDs = append(v.DomainIDs, *u.DomainID)
+		}
+		for did, members := range domainMembers {
+			if members[u.ID] && (u.DomainID == nil || *u.DomainID != did) {
+				v.DomainIDs = append(v.DomainIDs, did)
 			}
 		}
 		out = append(out, v)
@@ -114,6 +139,80 @@ func (s *Server) handleDeleteUser(c *fiber.Ctx) error {
 		return err
 	}
 	return c.SendStatus(fiber.StatusNoContent)
+}
+
+// handleRenameUser PUT /api/admin/users/:id/username {username} → 修改用户名。
+// 权限：系统管理员可改任意账号；域管理员仅可改其域内的普通成员。
+func (s *Server) handleRenameUser(c *fiber.Ctx) error {
+	operator := currentUser(c)
+	if operator == nil || !isAdminRole(operator.Role) {
+		return respondError(c, fiber.StatusForbidden, "需要管理员权限")
+	}
+	id, err := paramID(c, "id")
+	if err != nil {
+		return respondError(c, fiber.StatusBadRequest, "invalid id")
+	}
+	var req struct {
+		Username string `json:"username"`
+	}
+	if err := c.BodyParser(&req); err != nil {
+		return respondError(c, fiber.StatusBadRequest, "invalid request")
+	}
+	req.Username = strings.TrimSpace(req.Username)
+	if err := accounts.ValidateUsername(req.Username); err != nil {
+		return respondError(c, fiber.StatusBadRequest, err.Error())
+	}
+	target, err := s.Accounts.GetUserByID(id)
+	if err != nil {
+		if err == accounts.ErrNotFound {
+			return respondError(c, fiber.StatusNotFound, "用户不存在")
+		}
+		return err
+	}
+	// 域管理员仅限本域成员。注意：member 账号不持久化 users.domain_id
+	// （该列语义是「域管理员归属域」），因此「本域成员」按空间归属判定——
+	// 与 requireSpaceAccess 的域口径一致：该用户属于本域任一空间即视为本域成员。
+	if operator.Role == accounts.RoleDomainAdmin {
+		if operator.DomainID == nil {
+			return respondError(c, fiber.StatusForbidden, "当前账号未关联域，无法修改用户名")
+		}
+		if target.Role != accounts.RoleMember {
+			return respondError(c, fiber.StatusForbidden, "域管理员仅可修改本域成员的用户名")
+		}
+		ok, err := s.userInDomain(id, *operator.DomainID)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return respondError(c, fiber.StatusForbidden, "域管理员仅可修改本域成员的用户名")
+		}
+	}
+	if err := s.Accounts.RenameUser(id, req.Username); err != nil {
+		if err == accounts.ErrConflict {
+			return respondError(c, fiber.StatusConflict, "用户名已存在")
+		}
+		if err == accounts.ErrNotFound {
+			return respondError(c, fiber.StatusNotFound, "用户不存在")
+		}
+		if err.Error() == "用户名不合法" || strings.Contains(err.Error(), "32") {
+			return respondError(c, fiber.StatusBadRequest, err.Error())
+		}
+		return err
+	}
+	return c.SendStatus(fiber.StatusNoContent)
+}
+
+// userInDomain 判断用户是否属于某域（本域任一空间的成员即视为该域成员）。
+// member 不持久化归属域，故按空间归属判定；域管理员/系统管理员按其 domain_id 判定。
+func (s *Server) userInDomain(userID, domainID int64) (bool, error) {
+	var n int
+	err := s.Store.DB.QueryRow(`SELECT COUNT(1) FROM space_members m
+		JOIN spaces sp ON sp.id = m.space_id
+		WHERE m.user_id = ? AND sp.domain_id = ?`, userID, domainID).Scan(&n)
+	if err != nil {
+		return false, err
+	}
+	return n > 0, nil
 }
 
 // handleResetUserPassword PUT /api/admin/users/:id/password {password}。

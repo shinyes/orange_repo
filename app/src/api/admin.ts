@@ -218,6 +218,9 @@ export const adminApi = {
   deleteUser: (id: number) => req<void>(`/api/admin/users/${id}`, { method: 'DELETE' }),
   resetUserPassword: (id: number, password: string) =>
     req<void>(`/api/admin/users/${id}/password`, json({ method: 'PUT', body: JSON.stringify({ password }) })),
+  /** 修改用户名（系统管理员任意账号；域管理员限本域成员） */
+  renameUser: (id: number, username: string) =>
+    req<void>(`/api/admin/users/${id}/username`, json({ method: 'PUT', body: JSON.stringify({ username }) })),
 
   // ---- 空间内容管理（管理员管理用；URL 以空间归属鉴权，不追加 domainId） ----
   spaceTrainings: (spaceId: number) => req<{ trainings: SpaceTraining[] }>(`/api/space/${spaceId}/trainings`),

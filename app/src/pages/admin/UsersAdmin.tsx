@@ -1,12 +1,13 @@
-// 集中用户管理（/admin/users，仅系统管理员）：全部账号（成员/域管理员/系统管理员）
-// 的列表与维护——新建账号、设/取消域管理员、重置密码、删除普通成员。
-import { useState } from 'react'
+// 集中用户管理（/admin/users，系统管理员见全部账号；域管理员见本域）：全部账号
+// 的列表与维护——新建账号、设/取消域管理员、修改用户名、重置密码、删除普通成员。
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
   ArrowLeftIcon,
   KeyRoundIcon,
+  PenLineIcon,
   PlusIcon,
   ShieldCheckIcon,
   Trash2Icon,
@@ -22,6 +23,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { api } from '@/api'
 import type { AllUser } from '@/api/types'
+import { useDomain } from './domain-context'
 import { ConfirmDialog } from './dialogs'
 
 function roleBadge(u: AllUser): { label: string; cls: string } {
@@ -38,8 +40,10 @@ function roleBadge(u: AllUser): { label: string; cls: string } {
 export function UsersAdmin() {
   const navigate = useNavigate()
   const qc = useQueryClient()
+  const { role: myRole, domainId: myDomainId, user: me } = useDomain()
   const [createOpen, setCreateOpen] = useState(false)
   const [resetTarget, setResetTarget] = useState<AllUser | null>(null)
+  const [renameTarget, setRenameTarget] = useState<AllUser | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<AllUser | null>(null)
   const [promote, setPromote] = useState<AllUser | null>(null)
 
@@ -47,6 +51,18 @@ export function UsersAdmin() {
   const domainsQ = useQuery({ queryKey: ['admin', 'domains'], queryFn: () => api.domains() })
   const users = usersQ.data?.users ?? []
   const domains = domainsQ.data?.domains ?? []
+
+  /** 能否改该账号用户名：系统管理员全权；域管理员限本域普通成员（按空间归属判定） */
+  function canRename(u: AllUser): boolean {
+    if (myRole === 'global_admin') return true
+    if (myRole === 'domain_admin') {
+      if (u.role !== 'member' || myDomainId == null) return false
+      if (u.domainIds && u.domainIds.length > 0) return u.domainIds.includes(myDomainId)
+      // 兜底（列表未带 domainIds 时）：沿用 domainId 判定
+      return u.domainId === myDomainId
+    }
+    return false
+  }
 
   async function invalidate() {
     await qc.invalidateQueries({ queryKey: ['admin', 'all-users'] })
@@ -99,6 +115,11 @@ export function UsersAdmin() {
                     <td className="px-3 py-2 text-xs text-muted-foreground">{domainName || '—'}</td>
                     <td className="px-3 py-2">
                       <div className="flex justify-end gap-1">
+                        {canRename(u) && (
+                          <Button size="xs" variant="outline" onClick={() => setRenameTarget(u)} title="修改用户名">
+                            <PenLineIcon data-icon="inline-start" /> 改名
+                          </Button>
+                        )}
                         {u.role === 'member' && (
                           <Button size="xs" variant="outline" onClick={() => setPromote(u)} title="设为某域的域管理员">
                             <ShieldCheckIcon data-icon="inline-start" /> 设为域管理员
@@ -182,6 +203,14 @@ export function UsersAdmin() {
 
       {/* 重置密码 */}
       <ResetPasswordDialog user={resetTarget} onClose={() => setResetTarget(null)} onDone={() => invalidate()} />
+
+      {/* 修改用户名 */}
+      <RenameUserDialog
+        user={renameTarget}
+        isSelf={renameTarget != null && renameTarget.id === me?.id}
+        onClose={() => setRenameTarget(null)}
+        onDone={() => invalidate()}
+      />
 
       {/* 删除成员确认 */}
       <ConfirmDialog
@@ -428,6 +457,84 @@ function ResetPasswordDialog(props: { user: AllUser | null; onClose: () => void;
           </Button>
           <Button onClick={() => void submit()} disabled={busy}>
             {busy ? '提交中…' : '确认重置'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ---------- 修改用户名 ----------
+
+function RenameUserDialog(props: {
+  user: AllUser | null
+  /** 改的是当前登录账号本人（提示需刷新以更新顶部显示） */
+  isSelf?: boolean
+  onClose: () => void
+  onDone: () => Promise<void>
+}) {
+  const [username, setUsername] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  // 打开/切换目标时用其当前用户名预填（不影响用户后续编辑）
+  useEffect(() => {
+    if (props.user) setUsername(props.user.username)
+  }, [props.user?.id, props.user?.username])
+
+  async function submit() {
+    if (!props.user) return
+    const next = username.trim()
+    if (!next) {
+      toast.error('请输入新用户名')
+      return
+    }
+    if (next === props.user.username) {
+      props.onClose()
+      return
+    }
+    setBusy(true)
+    try {
+      await api.renameUser(props.user.id, next)
+      toast.success(
+        props.isSelf
+          ? `用户名已改为 ${next}（请刷新页面以更新顶部显示；当前登录仍有效）`
+          : `已将 ${props.user.username} 改名为 ${next}`,
+      )
+      props.onClose()
+      await props.onDone()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : '修改失败')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Dialog open={props.user != null} onOpenChange={() => props.onClose()}>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>修改用户名</DialogTitle>
+          <DialogDescription>
+            当前用户名：{props.user?.username ?? ''}（#{props.user?.id ?? ''}）。
+            改名后旧用户名无法登录、新用户名可登录；该账号已登录的会话仍然有效。
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-1.5">
+          <Label>新用户名</Label>
+          <Input
+            value={username}
+            maxLength={32}
+            onChange={(e) => setUsername(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') void submit() }}
+          />
+          <p className="text-[11px] text-muted-foreground">1–32 个字符，不区分大小写且不可与其他账号重复。</p>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={props.onClose}>
+            取消
+          </Button>
+          <Button onClick={() => void submit()} disabled={busy}>
+            {busy ? '提交中…' : '确认修改'}
           </Button>
         </DialogFooter>
       </DialogContent>
