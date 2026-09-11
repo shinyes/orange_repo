@@ -560,6 +560,8 @@ export interface OjProblem {
 export interface OjDraft {
   code: string
   language: string
+  /** 最后保存时间（RFC3339；无草稿时为空串）——多设备时用于比较新旧 */
+  updatedAt?: string
 }
 
 export type Verdict = 'PENDING' | 'OK' | 'AC' | 'WA' | 'CE' | 'RE' | 'TLE' | 'MLE'

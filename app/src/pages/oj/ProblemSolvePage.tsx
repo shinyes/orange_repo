@@ -35,7 +35,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 import { langLabel, verdictCls, verdictText } from './oj-utils'
-import { resolveStarter, saveDraftDebounced, useCloudDraft } from '@/lib/use-programming-workspace'
+import { cloudDraftIsNewer, localDraftTime, markLocalDraftTime, resolveStarter, saveDraftDebounced, syncLocalDraftTime, useCloudDraft } from '@/lib/use-programming-workspace'
 import { CONSOLE_DEFAULT_H, useConsoleResize } from '@/hooks/use-console-resize'
 
 const DRAFT_KEY = 'oj-draft'
@@ -246,15 +246,24 @@ function ProgrammingSolve({ problem, backTo, review, practiceId }: { problem: Oj
     draftWarnedRef.current = false
   }
 
-  // 云端草稿到达后回填：仅当用户未输入且本地无草稿时，用云端内容覆盖题目/通用模板并写入本地草稿。
+  // 云端草稿到达后回填：
+  //  - 本地无草稿 → 用云端；
+  //  - 本地有草稿 → 仅当云端保存时间**更新**时采用（多设备：别的设备后来改过）；
+  //    否则保留本地（本地更新或时间戳缺失，沿用本地优先）。
   useEffect(() => {
     if (!cloudDraft.cloudLoaded || touchedRef.current) return
-    const local = localStorage.getItem(draftLocal(problem.id, lang))
-    if (local != null && local.trim() !== '') return
+    const key = draftLocal(problem.id, lang)
+    const local = localStorage.getItem(key)
     if (!cloudDraft.initialCode || cloudDraft.initialCode.trim() === '') return // 云端无草稿：停留当前模板
+    const localTs = localDraftTime(key)
+    const hadLocal = local != null && local.trim() !== ''
+    if (hadLocal && !cloudDraftIsNewer(cloudDraft.updatedAt, localTs)) return
     setCode(cloudDraft.initialCode)
-    localStorage.setItem(draftLocal(problem.id, lang), cloudDraft.initialCode)
-  }, [cloudDraft.cloudLoaded, cloudDraft.initialCode, lang, problem.id, ctxTag])
+    localStorage.setItem(key, cloudDraft.initialCode)
+    syncLocalDraftTime(key, cloudDraft.updatedAt)
+    // 覆盖了本机已有内容 → 说明是别的设备/页面后来改过，明确告知（避免“代码怎么变了”）
+    if (hadLocal && !review) toast.info('已载入云端较新的草稿（其他设备保存过）')
+  }, [cloudDraft.cloudLoaded, cloudDraft.initialCode, cloudDraft.updatedAt, lang, problem.id, ctxTag])
 
   // 云端草稿到达但用户已先输入（慢网竞态）：保留当前编辑并提示，避免云草稿被静默丢弃
   const draftWarnedRef = useRef(false)
@@ -271,7 +280,9 @@ function ProgrammingSolve({ problem, backTo, review, practiceId }: { problem: Oj
     if (review) return // 回顾只读，不写草稿
     touchedRef.current = true
     setCode(next)
-    localStorage.setItem(draftLocal(problem.id, lang), next)
+    const key = draftLocal(problem.id, lang)
+    localStorage.setItem(key, next)
+    markLocalDraftTime(key)
     saveDraftDebounced(problem.id, lang, next, ctxKind, ctxId)
   }
 

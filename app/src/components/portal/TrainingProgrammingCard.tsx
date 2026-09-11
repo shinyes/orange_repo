@@ -27,7 +27,7 @@ import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
-import { genericStarter, resolveStarter, saveDraftDebounced, useCloudDraft } from '@/lib/use-programming-workspace'
+import { cloudDraftIsNewer, genericStarter, localDraftTime, markLocalDraftTime, resolveStarter, saveDraftDebounced, syncLocalDraftTime, useCloudDraft } from '@/lib/use-programming-workspace'
 import { CONSOLE_DEFAULT_H, useConsoleResize } from '@/hooks/use-console-resize'
 
 const DRAFT_PREFIX = 'orangeoj:draft:'
@@ -71,21 +71,32 @@ export function TrainingProgrammingCard({ problemId, trainingId, solved, onSolve
   const cloudDraft = useCloudDraft(problemId, lang, 'training', trainingId)
   useEffect(() => {
     if (touchedRef.current) return
-    const local = localStorage.getItem(draftKey(problemId, lang, trainingId))
-    if (local != null && local.trim() !== '') return
+    const key = draftKey(problemId, lang, trainingId)
+    const local = localStorage.getItem(key)
+    const hadLocal = local != null && local.trim() !== ''
     let next: string | null = null
+    let fromCloud = false
     if (cloudDraft.cloudLoaded && cloudDraft.initialCode && cloudDraft.initialCode.trim() !== '') {
-      next = cloudDraft.initialCode
-    } else if (problemQ.data) {
+      // 本地有草稿时：仅当云端保存时间更新（别的设备后来改过）才采用，避免覆盖本机较新内容
+      const localTs = localDraftTime(key)
+      if (!hadLocal || cloudDraftIsNewer(cloudDraft.updatedAt, localTs)) {
+        next = cloudDraft.initialCode
+        fromCloud = true
+      }
+    }
+    if (next == null && !hadLocal && problemQ.data) {
       next = resolveStarter(lang, problemQ.data)
     }
     if (next == null || next === code) return
     setCode(next)
-    // 云草稿（用户的真实内容）持久化；模板无需持久化（随时可按题目数据重算）。
-    if (cloudDraft.cloudLoaded && cloudDraft.initialCode.trim() !== '') {
-      localStorage.setItem(draftKey(problemId, lang, trainingId), cloudDraft.initialCode)
+    // 云草稿（用户的真实内容）持久化并同步时间戳；模板无需持久化（随时可按题目数据重算）。
+    if (fromCloud) {
+      localStorage.setItem(key, next)
+      syncLocalDraftTime(key, cloudDraft.updatedAt)
+      // 覆盖了本机已有内容 → 别的设备/页面后来改过，明确告知
+      if (hadLocal) toast.info('已载入云端较新的草稿（其他设备保存过）')
     }
-  }, [code, lang, cloudDraft.cloudLoaded, cloudDraft.initialCode, problemQ.data, problemId, trainingId])
+  }, [code, lang, cloudDraft.cloudLoaded, cloudDraft.initialCode, cloudDraft.updatedAt, problemQ.data, problemId, trainingId])
 
   // 云端草稿到达但用户已先输入（慢网竞态）：保留当前编辑并提示，避免云草稿被静默丢弃/覆盖
   const draftWarnedRef = useRef(false)
@@ -101,7 +112,9 @@ export function TrainingProgrammingCard({ problemId, trainingId, solved, onSolve
   function handleCodeChange(next: string) {
     touchedRef.current = true
     setCode(next)
-    localStorage.setItem(draftKey(problemId, lang, trainingId), next)
+    const key = draftKey(problemId, lang, trainingId)
+    localStorage.setItem(key, next)
+    markLocalDraftTime(key)
     saveDraftDebounced(problemId, lang, next, 'training', trainingId)
   }
 

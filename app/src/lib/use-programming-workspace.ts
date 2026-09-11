@@ -33,31 +33,78 @@ export function resolveStarter(
 /**
  * 云端草稿加载：挂载 / 语言切换后 GET 一次该 题×语言×上下文 的草稿。
  * ctxKind/ctxId：''=全局做题页 / training=训练 / practice=练习（草稿按上下文隔离）。
- * 返回 { cloudLoaded, initialCode }——由调用方组合初始代码。
+ * 返回 { cloudLoaded, initialCode, updatedAt }——updatedAt 为云端最后保存时间（毫秒时间戳，
+ * 无草稿/解析失败为 0），由调用方与本地时间戳比较，避免用旧草稿覆盖新草稿。
  */
-export function useCloudDraft(problemId: number, lang: CodeLang, ctxKind?: string, ctxId?: number): { cloudLoaded: boolean; initialCode: string } {
-  const [state, setState] = useState<{ cloudLoaded: boolean; initialCode: string }>({ cloudLoaded: false, initialCode: '' })
+export function useCloudDraft(problemId: number, lang: CodeLang, ctxKind?: string, ctxId?: number): { cloudLoaded: boolean; initialCode: string; updatedAt: number } {
+  const [state, setState] = useState<{ cloudLoaded: boolean; initialCode: string; updatedAt: number }>({ cloudLoaded: false, initialCode: '', updatedAt: 0 })
   useEffect(() => {
     let alive = true
-    setState({ cloudLoaded: false, initialCode: '' })
+    setState({ cloudLoaded: false, initialCode: '', updatedAt: 0 })
     if (!problemId) {
-      setState({ cloudLoaded: true, initialCode: '' })
+      setState({ cloudLoaded: true, initialCode: '', updatedAt: 0 })
       return
     }
     api
       .ojDraft(problemId, lang, ctxKind, ctxId)
       .then((d) => {
-        if (alive) setState({ cloudLoaded: true, initialCode: d?.code ?? '' })
+        const ts = d?.updatedAt ? Date.parse(d.updatedAt) : 0
+        if (alive) {
+          setState({ cloudLoaded: true, initialCode: d?.code ?? '', updatedAt: Number.isFinite(ts) ? ts : 0 })
+        }
       })
       .catch(() => {
         // 取草稿失败按“无草稿”处理（本地草稿/模板仍兜底，不打断做题）
-        if (alive) setState({ cloudLoaded: true, initialCode: '' })
+        if (alive) setState({ cloudLoaded: true, initialCode: '', updatedAt: 0 })
       })
     return () => {
       alive = false
     }
   }, [problemId, lang, ctxKind, ctxId])
   return state
+}
+
+// ---------- 本地草稿时间戳 ----------
+// 本地草稿写入时记下时间（毫秒），与服务端 updatedAt 比较新旧。
+// 键：草稿键 + ':ts'（与草稿内容同生命周期，清理草稿时一并删除）。
+
+/** 记录本地草稿写入时间。 */
+export function markLocalDraftTime(localKey: string): void {
+  try {
+    localStorage.setItem(localKey + ':ts', String(Date.now()))
+  } catch {
+    // localStorage 不可用（隐私模式）：跳过时间戳，退化为“本地优先”的旧行为
+  }
+}
+
+/** 取本地草稿写入时间（无记录/不可用返回 0）。 */
+export function localDraftTime(localKey: string): number {
+  try {
+    const raw = localStorage.getItem(localKey + ':ts')
+    const n = raw ? Number(raw) : 0
+    return Number.isFinite(n) ? n : 0
+  } catch {
+    return 0
+  }
+}
+
+/** 云端草稿被采纳时，把本地时间戳同步为云端时间（保持两者一致）。 */
+export function syncLocalDraftTime(localKey: string, cloudTs: number): void {
+  if (!cloudTs) return
+  try {
+    localStorage.setItem(localKey + ':ts', String(cloudTs))
+  } catch {
+    // 忽略
+  }
+}
+
+/**
+ * 云端草稿是否应当覆盖本地：仅当云端的保存时间**严格新于**本地记录时间。
+ * 本地时间戳缺失（0，如本次改动前的存量草稿）时返回 false——沿用“本地优先”，
+ * 避免升级后把用户本机的草稿静默替换掉。
+ */
+export function cloudDraftIsNewer(cloudTs: number, localTs: number): boolean {
+  return localTs > 0 && cloudTs > localTs
 }
 
 /**

@@ -9,6 +9,7 @@ import (
 	"errors"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 
@@ -428,7 +429,9 @@ func draftCtx(kindRaw, idRaw string) (string, int64, bool) {
 	return kind, id, true
 }
 
-// handleOJGetDraft GET /api/oj/problem/:id/draft?lang=python|cpp[&ctxKind=&ctxId=] → 云端草稿（无=空串）。
+// handleOJGetDraft GET /api/oj/problem/:id/draft?lang=python|cpp[&ctxKind=&ctxId=] → 云端草稿。
+// 返回 {code, language, updatedAt}：updatedAt 为最后保存时间（RFC3339，无草稿时为空），
+// 供前端在多设备场景比较新旧、避免用旧草稿覆盖新草稿。
 func (s *Server) handleOJGetDraft(c *fiber.Ctx) error {
 	user := currentUser(c)
 	problemID, err := paramID(c, "id")
@@ -450,11 +453,17 @@ func (s *Server) handleOJGetDraft(c *fiber.Ctx) error {
 	if !visible {
 		return respondError(c, fiber.StatusNotFound, "题目不存在或不可见")
 	}
-	code, err := s.QS.GetDraft(user.ID, problemID, lang, ctxKind, ctxID)
+	d, err := s.QS.GetDraft(user.ID, problemID, lang, ctxKind, ctxID)
 	if err != nil {
 		return respondError(c, fiber.StatusInternalServerError, err.Error())
 	}
-	return respondData(c, fiber.StatusOK, fiber.Map{"code": code, "language": lang})
+	updatedAt := ""
+	if !d.UpdatedAt.IsZero() {
+		updatedAt = d.UpdatedAt.Format(time.RFC3339)
+	}
+	return respondData(c, fiber.StatusOK, fiber.Map{
+		"code": d.Code, "language": lang, "updatedAt": updatedAt,
+	})
 }
 
 // handleOJSaveDraft PUT /api/oj/problem/:id/draft {language, code[, ctxKind, ctxId]} → 保存云端草稿。
