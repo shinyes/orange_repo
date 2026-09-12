@@ -106,6 +106,15 @@ export function QuizList() {
           kind="quiz"
           itemId={visibleFor.id}
           title={visibleFor.title}
+          isPublic={!!visibleFor.isPublic}
+          onTogglePublic={(v) =>
+            api.updateSpaceQuiz(space.id, visibleFor.id, {
+              title: visibleFor.title,
+              tags: visibleFor.tags,
+              roundSize: visibleFor.roundSize ?? 0,
+              isPublic: v,
+            })
+          }
           open
           onClose={() => setVisibleFor(null)}
           onSaved={() => void home.refetch()}

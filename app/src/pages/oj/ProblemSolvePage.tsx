@@ -16,6 +16,7 @@ import { toast } from 'sonner'
 import { useQuery } from '@tanstack/react-query'
 
 import { api } from '@/api'
+import { savedSpaceId } from '@/api/space'
 import type { CaseDetail, CodeLang, OjProblem, Submission, SubmissionPoll } from '@/api/types'
 import { Markdown, preserveLineBreaks } from '@/lib/markdown'
 import { CodeBlock } from '@/lib/code-highlight'
@@ -35,7 +36,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 import { langLabel, verdictCls, verdictText } from './oj-utils'
-import { cloudDraftIsNewer, localDraftTime, markLocalDraftTime, resolveStarter, saveDraftDebounced, syncLocalDraftTime, useCloudDraft } from '@/lib/use-programming-workspace'
+import { cloudDraftIsNewer, localDraftTime, markLocalDraftTime, resolveStarter, saveDraftDebounced, syncLocalDraftTime, useCloudDraft, useSpaceDefaultLang } from '@/lib/use-programming-workspace'
 import { CONSOLE_DEFAULT_H, useConsoleResize } from '@/hooks/use-console-resize'
 
 const DRAFT_KEY = 'oj-draft'
@@ -224,7 +225,12 @@ function ProgrammingSolve({ problem, backTo, review, practiceId }: { problem: Oj
   const ctxTag = practiceId ? `p${practiceId}` : 'g'
   // 本地草稿 key（含上下文，防跨练习/全局互串）
   const draftLocal = (pid: number, l: CodeLang) => `${DRAFT_KEY}-${ctxTag}-${pid}-${l}`
-  const [lang, setLang] = useState<CodeLang>(() => (localStorage.getItem(`${DRAFT_KEY}-${ctxTag}-lang-${problem.id}`) as CodeLang) || 'python')
+  // 该题语言记忆 key：用户手动切换语言时写入 → 优先于空间默认值
+  const langKey = `${DRAFT_KEY}-${ctxTag}-lang-${problem.id}`
+  // 初始语言：本地记忆（用户为该题选过）→ 空间默认语言（spaces.defaultLang）→ python。
+  // 做题页无空间路由参数：当前空间取门户记录的当前空间（未设置/无空间 → 沿用 python）。
+  const spaceLang = useSpaceDefaultLang(savedSpaceId())
+  const [lang, setLang] = useState<CodeLang>(() => (localStorage.getItem(langKey) as CodeLang) || spaceLang || 'python')
   // 初始 code：本地草稿 →（异步）云草稿 → 题目模板（starterPy/starterCpp）→ 通用模板。
   const [code, setCode] = useState(() => localStorage.getItem(draftLocal(problem.id, lang)) ?? resolveStarter(lang, problem))
   const [consoleText, setConsoleText] = useState('控制台已就绪')
@@ -286,14 +292,24 @@ function ProgrammingSolve({ problem, backTo, review, practiceId }: { problem: Oj
     saveDraftDebounced(problem.id, lang, next, ctxKind, ctxId)
   }
 
-  function switchLang(l: CodeLang) {
+  function switchLang(l: CodeLang, remember = true) {
     if (l === lang) return
     setLang(l)
     setCode(localStorage.getItem(draftLocal(problem.id, l)) ?? resolveStarter(l, problem))
     enterLang()
-    localStorage.setItem(`${DRAFT_KEY}-${ctxTag}-lang-${problem.id}`, l)
+    if (remember) localStorage.setItem(langKey, l)
     setConsoleText('语言已切换，代码草稿分别保存')
   }
+
+  // 空间默认语言（首帧未取到空间信息时随查询到达）：用户未为该题选过语言（无本地记忆）
+  // 且尚未开始编辑 → 按空间默认语言打开。不写本地记忆——空间设置变更后下次仍生效；
+  // 用户手动切换语言由 switchLang 写入本地记忆，届时不再被空间默认值覆盖。
+  // 回顾模式（只读）不触发切换：初始值已按同一优先级选定，无需再改语言与草稿来源。
+  useEffect(() => {
+    if (review || !spaceLang || localStorage.getItem(langKey) || touchedRef.current) return
+    switchLang(spaceLang, false)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [spaceLang])
 
   const codeRef = useRef(code)
   codeRef.current = code

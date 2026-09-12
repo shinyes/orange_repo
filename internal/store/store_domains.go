@@ -155,7 +155,7 @@ func (s *Store) CreateSpace(domainID int64, name string) (int64, error) {
 
 // ListSpaces 域内空间列表。
 func (s *Store) ListSpaces(domainID int64) ([]model.Space, error) {
-	rows, err := s.DB.Query(`SELECT id,domain_id,name,created_at FROM spaces WHERE domain_id=? ORDER BY id`, domainID)
+	rows, err := s.DB.Query(`SELECT id,domain_id,name,default_lang,created_at FROM spaces WHERE domain_id=? ORDER BY id`, domainID)
 	if err != nil {
 		return nil, err
 	}
@@ -163,7 +163,7 @@ func (s *Store) ListSpaces(domainID int64) ([]model.Space, error) {
 	var out []model.Space
 	for rows.Next() {
 		var sp model.Space
-		if err := rows.Scan(&sp.ID, &sp.DomainID, &sp.Name, &sp.CreatedAt); err != nil {
+		if err := rows.Scan(&sp.ID, &sp.DomainID, &sp.Name, &sp.DefaultLang, &sp.CreatedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, sp)
@@ -174,8 +174,8 @@ func (s *Store) ListSpaces(domainID int64) ([]model.Space, error) {
 // GetSpace 取空间（含所属域校验由上层做）。
 func (s *Store) GetSpace(id int64) (*model.Space, error) {
 	sp := &model.Space{}
-	err := s.DB.QueryRow(`SELECT id,domain_id,name,created_at FROM spaces WHERE id=?`, id).
-		Scan(&sp.ID, &sp.DomainID, &sp.Name, &sp.CreatedAt)
+	err := s.DB.QueryRow(`SELECT id,domain_id,name,default_lang,created_at FROM spaces WHERE id=?`, id).
+		Scan(&sp.ID, &sp.DomainID, &sp.Name, &sp.DefaultLang, &sp.CreatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -185,13 +185,54 @@ func (s *Store) GetSpace(id int64) (*model.Space, error) {
 	return sp, nil
 }
 
+// 空间默认编程语言取值：''=未设置（做题页沿用 python），其余仅 python/cpp。
+const (
+	SpaceDefaultLangUnset  = ""
+	SpaceDefaultLangPython = "python"
+	SpaceDefaultLangCpp    = "cpp"
+)
+
+// ValidSpaceDefaultLang 空间默认编程语言是否合法（''=未设置；仅 python/cpp）。
+func ValidSpaceDefaultLang(v string) bool {
+	switch v {
+	case SpaceDefaultLangUnset, SpaceDefaultLangPython, SpaceDefaultLangCpp:
+		return true
+	}
+	return false
+}
+
 // RenameSpace 空间改名。
 func (s *Store) RenameSpace(id int64, name string) error {
-	name = strings.TrimSpace(name)
-	if name == "" {
-		return errors.New("空间名称不能为空")
+	return s.UpdateSpaceMeta(id, &name, nil)
+}
+
+// UpdateSpaceMeta 部分更新空间元信息：仅更新非 nil 的字段
+// （name/defaultLang 均可省略；两者皆 nil 时报错）。
+// defaultLang 仅允许 ''（未设置）/ python / cpp，非法值返回错误（调用方按 400 处理）。
+func (s *Store) UpdateSpaceMeta(id int64, name *string, defaultLang *string) error {
+	var sets []string
+	var args []any
+	if name != nil {
+		n := strings.TrimSpace(*name)
+		if n == "" {
+			return errors.New("空间名称不能为空")
+		}
+		sets = append(sets, "name=?")
+		args = append(args, n)
 	}
-	res, err := s.DB.Exec(`UPDATE spaces SET name=? WHERE id=?`, name, id)
+	if defaultLang != nil {
+		v := strings.TrimSpace(*defaultLang)
+		if !ValidSpaceDefaultLang(v) {
+			return fmt.Errorf("默认编程语言不合法：%s（仅支持 python/cpp，''=未设置）", v)
+		}
+		sets = append(sets, "default_lang=?")
+		args = append(args, v)
+	}
+	if len(sets) == 0 {
+		return errors.New("无更新字段")
+	}
+	args = append(args, id)
+	res, err := s.DB.Exec(`UPDATE spaces SET `+strings.Join(sets, ",")+` WHERE id=?`, args...)
 	if err != nil {
 		return err
 	}

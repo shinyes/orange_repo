@@ -267,6 +267,7 @@ func (s *Store) migrateDomains() error {
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			domain_id INTEGER NOT NULL REFERENCES domains(id) ON DELETE CASCADE,
 			name TEXT NOT NULL,
+			default_lang TEXT NOT NULL DEFAULT '', -- 默认编程语言：''=未设置（按 python）；仅 python/cpp
 			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 		);`,
 		`CREATE TABLE IF NOT EXISTS space_members (
@@ -284,6 +285,10 @@ func (s *Store) migrateDomains() error {
 	}
 	// 排行榜公开开关（存量库补列；默认公开）
 	if err := s.ensureColumn("domains", "leaderboard_public", `leaderboard_public INTEGER NOT NULL DEFAULT 1`); err != nil {
+		return err
+	}
+	// 空间默认编程语言（存量库补列；''=未设置 → 前端沿用 python）
+	if err := s.ensureColumn("spaces", "default_lang", `default_lang TEXT NOT NULL DEFAULT ''`); err != nil {
 		return err
 	}
 	return nil

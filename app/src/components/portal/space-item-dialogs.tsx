@@ -324,7 +324,6 @@ export function QuizEditDialog(props: {
             <Label>每轮题目数量（0=不限，整范围为一轮）</Label>
             <Input type="number" min={0} max={200} value={roundSize} onChange={(e) => setRoundSize(e.target.value)} placeholder="如：10" />
           </div>
-          <PublicToggleRow checked={isPublic} disabled={busy} onCheckedChange={setIsPublic} />
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => props.onOpenChange(false)}>取消</Button>
@@ -335,18 +334,23 @@ export function QuizEditDialog(props: {
   )
 }
 
-// ---------- 可见成员分配（门户管理员） ----------
+// ---------- 可见性（公开开关 + 可见成员分配，门户管理员） ----------
 
 export function VisibleUsersDialog(props: {
   spaceId: number
   kind: 'training' | 'practice' | 'quiz'
   itemId: number
   title: string
+  /** 当前是否公开（公开=空间内所有成员可见，无需逐个分配） */
+  isPublic?: boolean
+  /** 切换公开：由调用方用完整字段调用对应更新接口（避免重置该项目的其它字段） */
+  onTogglePublic?: (v: boolean) => Promise<void> | void
   open: boolean
   onClose: () => void
   onSaved: () => void
 }) {
   const [selected, setSelected] = useState<Set<number>>(new Set())
+  const [pub, setPub] = useState(!!props.isPublic)
   const [busy, setBusy] = useState(false)
   const membersQ = useQuery({
     queryKey: ['space', props.spaceId, 'members'],
@@ -363,14 +367,28 @@ export function VisibleUsersDialog(props: {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.open, props.itemId, visQ.data])
+  // 打开时同步外部最新公开状态（列表可能刚被其它操作刷新）
+  useEffect(() => {
+    if (props.open) setPub(!!props.isPublic)
+  }, [props.open, props.itemId, props.isPublic])
 
   const members = membersQ.data?.members ?? []
 
   async function save() {
     setBusy(true)
     try {
+      // 先保存公开状态（若变更），再保存成员名单
+      if (props.onTogglePublic && pub !== !!props.isPublic) {
+        await props.onTogglePublic(pub)
+      }
       await api.setVisibleUsers(props.kind, props.spaceId, props.itemId, [...selected])
-      toast.success(selected.size === 0 ? '已设为无成员可见（仅管理员）' : `已分配 ${selected.size} 位成员可见`)
+      toast.success(
+        pub
+          ? '已设为公开（空间内所有成员可见）'
+          : selected.size === 0
+            ? '已设为无成员可见（仅管理员）'
+            : `已分配 ${selected.size} 位成员可见`,
+      )
       props.onSaved()
       props.onClose()
     } catch (e) {
@@ -393,27 +411,40 @@ export function VisibleUsersDialog(props: {
     <Dialog open={props.open} onOpenChange={(v) => !v && props.onClose()}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>可见成员 · {props.title}</DialogTitle>
+          <DialogTitle>可见性 · {props.title}</DialogTitle>
           <DialogDescription>
-            未公开时，仅被分配的成员能在门户看到并进入该项目（默认无成员可见，管理员始终可见）；若已在编辑弹窗开启「公开」，则空间内所有成员可见，无需在此分配。
+            公开后空间内所有成员可见；不公开则仅下列被分配的成员可见（默认无成员可见，管理员始终可见）。
           </DialogDescription>
         </DialogHeader>
-        <div className="max-h-72 space-y-1 overflow-y-auto">
-          {members.length === 0 ? (
-            <p className="py-6 text-center text-xs text-muted-foreground">该空间暂无成员，请先在「空间管理」添加成员。</p>
-          ) : (
-            members.map((m) => (
-              <label key={m.userId} className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted">
-                <input type="checkbox" className="size-4 accent-[var(--primary)]" checked={selected.has(m.userId)} onChange={() => toggle(m.userId)} />
-                <span className="min-w-0 flex-1 truncate">{m.username}</span>
-              </label>
-            ))
-          )}
-        </div>
+
+        {/* 公开开关（原在编辑弹窗，现统一到本浮窗） */}
+        {props.onTogglePublic && (
+          <PublicToggleRow checked={pub} disabled={busy} onCheckedChange={setPub} />
+        )}
+
+        {!pub && (
+          <div className="max-h-72 space-y-1 overflow-y-auto">
+            {members.length === 0 ? (
+              <p className="py-6 text-center text-xs text-muted-foreground">该空间暂无成员，请先在「空间管理」添加成员。</p>
+            ) : (
+              members.map((m) => (
+                <label key={m.userId} className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted">
+                  <input type="checkbox" className="size-4 accent-[var(--primary)]" checked={selected.has(m.userId)} onChange={() => toggle(m.userId)} />
+                  <span className="min-w-0 flex-1 truncate">{m.username}</span>
+                </label>
+              ))
+            )}
+          </div>
+        )}
+        {pub && (
+          <p className="rounded-lg border border-dashed px-3 py-2 text-xs text-muted-foreground">
+            当前为公开：空间内所有成员都能看到并进入，无需逐个分配。
+          </p>
+        )}
         <DialogFooter>
           <Button variant="outline" onClick={props.onClose}>取消</Button>
           <Button onClick={() => void save()} disabled={busy}>
-            {busy ? '保存中…' : '保存分配'}
+            {busy ? '保存中…' : '保存'}
           </Button>
         </DialogFooter>
       </DialogContent>

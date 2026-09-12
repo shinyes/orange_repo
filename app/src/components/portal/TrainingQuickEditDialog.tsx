@@ -25,7 +25,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ProblemPickerDialog, typeLabel } from '@/components/portal/problem-picker'
-import { PublicToggleRow } from '@/components/portal/public-toggle'
 
 export function TrainingQuickEditDialog(props: {
   spaceId: number
@@ -132,19 +131,6 @@ export function TrainingQuickEditDialog(props: {
                     />
                     <span className="text-xs text-muted-foreground">答对绿勾 / 达限标红</span>
                   </div>
-                </div>
-                {/* 公开开关 */}
-                <div className="sm:col-span-2">
-                  <PublicToggleRow
-                    checked={!!training.isPublic}
-                    disabled={busy}
-                    onCheckedChange={(v) =>
-                      void run(
-                        () => api.updateSpaceTraining(spaceId, trainingId, { isPublic: v }),
-                        v ? '已设为公开（空间内所有成员可见）' : '已设为仅可见名单可见',
-                      )
-                    }
-                  />
                 </div>
               </div>
 

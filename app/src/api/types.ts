@@ -22,6 +22,9 @@ export interface PortalSpace {
   domainId: number
   domainName?: string
   name: string
+  /** 空间默认编程语言：''/缺省=未设置（做题页沿用 python）；仅 'python' / 'cpp'。
+   *  用户在某题上手动选过语言（本地记忆）时优先于该默认值。 */
+  defaultLang?: string
   /** 当前用户能否查看该域排行榜（false=域设置为不公开且非管理员）→ 隐藏排行榜入口 */
   canViewLeaderboard?: boolean
 }
@@ -421,6 +424,8 @@ export interface ProblemFilterState {
   q: string
   tags: string[]
   type: ProblemType | ''
+  /** 可选限量（服务端只回前 N 条，另回 total 总数）——题库大时选题弹窗用 */
+  limit?: number
 }
 
 // ---------- 域 / 空间（管理 API） ----------
@@ -463,6 +468,8 @@ export interface Space {
   domainId: number
   name: string
   createdAt: string
+  /** 空间默认编程语言：''=未设置（做题页沿用 python）；仅 'python' / 'cpp' */
+  defaultLang?: string
 }
 
 export interface SpaceMember {

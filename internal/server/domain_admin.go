@@ -391,7 +391,9 @@ func (s *Server) handleCreateSpace(c *fiber.Ctx) error {
 	return respondData(c, fiber.StatusCreated, fiber.Map{"id": id})
 }
 
-// handleRenameSpace PATCH /api/admin/spaces/:id {name}。
+// handleRenameSpace PATCH /api/admin/spaces/:id 空间元信息部分更新：
+// body {name?, defaultLang?}——仅更新请求中出现的字段（旧调用只传 name 保持兼容）。
+// defaultLang 仅允许 ''（未设置 → 做题页沿用 python）/ python / cpp，非法值 400。
 func (s *Server) handleRenameSpace(c *fiber.Ctx) error {
 	id, err := paramID(c, "id")
 	if err != nil {
@@ -402,12 +404,22 @@ func (s *Server) handleRenameSpace(c *fiber.Ctx) error {
 		return err
 	}
 	var req struct {
-		Name string `json:"name"`
+		Name        *string `json:"name"`
+		DefaultLang *string `json:"defaultLang"`
 	}
 	if err := c.BodyParser(&req); err != nil {
 		return respondError(c, fiber.StatusBadRequest, "invalid request")
 	}
-	if err := s.Store.RenameSpace(id, req.Name); err != nil {
+	if req.Name == nil && req.DefaultLang == nil {
+		return respondError(c, fiber.StatusBadRequest, "缺少更新字段（name 或 defaultLang）")
+	}
+	if req.Name != nil && strings.TrimSpace(*req.Name) == "" {
+		return respondError(c, fiber.StatusBadRequest, "空间名称不能为空")
+	}
+	if req.DefaultLang != nil && !store.ValidSpaceDefaultLang(strings.TrimSpace(*req.DefaultLang)) {
+		return respondError(c, fiber.StatusBadRequest, "默认编程语言仅支持 python/cpp（''=未设置）")
+	}
+	if err := s.Store.UpdateSpaceMeta(id, req.Name, req.DefaultLang); err != nil {
 		if err == store.ErrNotFound {
 			return respondError(c, fiber.StatusNotFound, "空间不存在")
 		}

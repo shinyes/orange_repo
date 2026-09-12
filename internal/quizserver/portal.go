@@ -111,9 +111,9 @@ func (s *Server) spaceBrief(id int64) (quizstore.SpaceBrief, error) {
 	// 空间 + 域名一次查询
 	var b quizstore.SpaceBrief
 	var dName sql.NullString
-	if err := s.QS.Repo.DB.QueryRow(`SELECT sp.id,sp.domain_id,d.name,sp.name FROM spaces sp
+	if err := s.QS.Repo.DB.QueryRow(`SELECT sp.id,sp.domain_id,d.name,sp.name,sp.default_lang FROM spaces sp
 		LEFT JOIN domains d ON d.id=sp.domain_id WHERE sp.id=?`, id).
-		Scan(&b.ID, &b.DomainID, &dName, &b.Name); err != nil {
+		Scan(&b.ID, &b.DomainID, &dName, &b.Name, &b.DefaultLang); err != nil {
 		return quizstore.SpaceBrief{}, err
 	}
 	if dName.Valid {
@@ -123,7 +123,7 @@ func (s *Server) spaceBrief(id int64) (quizstore.SpaceBrief, error) {
 }
 
 func (s *Server) spacesOfAllDomains() ([]quizstore.SpaceBrief, error) {
-	rows, err := s.QS.Repo.DB.Query(`SELECT sp.id,sp.domain_id,d.name,sp.name FROM spaces sp
+	rows, err := s.QS.Repo.DB.Query(`SELECT sp.id,sp.domain_id,d.name,sp.name,sp.default_lang FROM spaces sp
 		LEFT JOIN domains d ON d.id=sp.domain_id ORDER BY sp.domain_id,sp.id`)
 	if err != nil {
 		return nil, err
@@ -133,7 +133,7 @@ func (s *Server) spacesOfAllDomains() ([]quizstore.SpaceBrief, error) {
 	for rows.Next() {
 		var b quizstore.SpaceBrief
 		var dName sql.NullString
-		if err := rows.Scan(&b.ID, &b.DomainID, &dName, &b.Name); err != nil {
+		if err := rows.Scan(&b.ID, &b.DomainID, &dName, &b.Name, &b.DefaultLang); err != nil {
 			return nil, err
 		}
 		if dName.Valid {

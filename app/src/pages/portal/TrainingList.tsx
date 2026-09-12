@@ -98,6 +98,16 @@ export function TrainingList() {
           kind="training"
           itemId={visibleFor.id}
           title={visibleFor.title}
+          isPublic={!!visibleFor.isPublic}
+          onTogglePublic={(v) =>
+            api.updateSpaceTraining(space.id, visibleFor.id, {
+              title: visibleFor.title,
+              description: visibleFor.description,
+              tags: visibleFor.tags,
+              maxAttempts: visibleFor.maxAttempts,
+              isPublic: v,
+            })
+          }
           open
           onClose={() => setVisibleFor(null)}
           onSaved={() => void home.refetch()}

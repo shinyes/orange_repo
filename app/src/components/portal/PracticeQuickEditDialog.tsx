@@ -21,7 +21,6 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ProblemPickerDialog, typeLabel } from '@/components/portal/problem-picker'
-import { PublicToggleRow } from '@/components/portal/public-toggle'
 
 export function PracticeQuickEditDialog(props: {
   spaceId: number
@@ -101,21 +100,6 @@ export function PracticeQuickEditDialog(props: {
     )
   }
 
-  // 公开开关即改即存（含当前标题/描述，防止覆盖其他未保存字段）
-  function togglePublic(v: boolean) {
-    if (v === isPublic) return
-    const t = title.trim()
-    if (!t) {
-      toast.error('标题不能为空')
-      return
-    }
-    setIsPublic(v)
-    void run(
-      () => api.updateSpacePractice(spaceId, practiceId, { title: t, description: description.trim(), isPublic: v }),
-      v ? '已设为公开（空间内所有成员可见）' : '已设为仅可见名单可见',
-    )
-  }
-
   // 排序：交换两条目标顺序（服务端按 itemIds 全量排序——须含全部条目）
   function moveItem(idx: number, dir: -1 | 1) {
     const target = idx + dir
@@ -167,8 +151,6 @@ export function PracticeQuickEditDialog(props: {
                     placeholder="练习说明（可选）"
                   />
                 </div>
-                {/* 公开开关（即改即存） */}
-                <PublicToggleRow checked={isPublic} disabled={busy} onCheckedChange={togglePublic} />
               </div>
 
               {/* 题目清单 */}

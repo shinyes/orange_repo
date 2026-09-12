@@ -98,6 +98,15 @@ export function PracticeList() {
           kind="practice"
           itemId={visibleFor.id}
           title={visibleFor.title}
+          isPublic={!!visibleFor.isPublic}
+          onTogglePublic={(v) =>
+            api.updateSpacePractice(space.id, visibleFor.id, {
+              title: visibleFor.title,
+              description: visibleFor.description,
+              tags: visibleFor.tags,
+              isPublic: v,
+            })
+          }
           open
           onClose={() => setVisibleFor(null)}
           onSaved={() => void home.refetch()}

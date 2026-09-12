@@ -68,7 +68,13 @@ func (s *Server) handleListProblems(c *fiber.Ctx) error {
 	if list == nil {
 		list = []model.ProblemSummary{}
 	}
-	return respondData(c, fiber.StatusOK, fiber.Map{"problems": list})
+	// 可选限量：题库规模大时（数千题）选题弹窗只需前 N 条 + 总数，
+	// 避免一次下发全部题目导致加载慢与前端渲染卡顿。
+	total := len(list)
+	if limit := c.QueryInt("limit", 0); limit > 0 && len(list) > limit {
+		list = list[:limit]
+	}
+	return respondData(c, fiber.StatusOK, fiber.Map{"problems": list, "total": total})
 }
 
 func (s *Server) handleCreateProblem(c *fiber.Ctx) error {

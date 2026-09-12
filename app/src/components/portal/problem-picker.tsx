@@ -1,6 +1,12 @@
-// 从当前域仓库题库选题的共享弹窗（空间训练加题 / 练习加题 / 快速编辑共用）。
+// 从当前域仓库选题的共享弹窗（空间训练加题 / 练习加题 / 快速编辑共用）。
 // 题目来自当前域仓库（api.problems 走 dq 自动带 domainId）；已在目标内的题目置灰。
-import { useState } from 'react'
+//
+// 性能：题库可能有数千题——**不改**「一次拉全库再前端过滤」的做法会导致
+// 首开加载久 + 渲染数千行卡顿。这里改为：
+//   1) 搜索词防抖后交服务端过滤（q 参数，服务端按标题/ID 匹配）；
+//   2) 只取前 LIMIT 条（服务端 limit 参数），并展示总数提示；
+//   3) 查询结果按搜索词缓存，输入过程中不重复请求同词。
+import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 
 import { api } from '@/api'
@@ -10,6 +16,11 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { LoaderCircleIcon, SearchIcon } from 'lucide-react'
+
+/** 单次最多取回并渲染的题目条数（超出提示细化搜索）。 */
+const PICK_LIMIT = 100
+/** 搜索防抖间隔（毫秒）。 */
+const SEARCH_DEBOUNCE_MS = 300
 
 export function typeLabel(t?: string): string {
   switch (t) {
@@ -30,17 +41,35 @@ export function ProblemPickerDialog(props: {
   onSubmit: (problemIds: number[]) => void
 }) {
   const [query, setQuery] = useState('')
+  const [debounced, setDebounced] = useState('')
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [submitting, setSubmitting] = useState(false)
+
+  // 搜索防抖：避免每次按键都打服务端
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(query.trim()), SEARCH_DEBOUNCE_MS)
+    return () => clearTimeout(t)
+  }, [query])
+
+  // 关闭时重置（下次打开回到"最近题目"视图）
+  useEffect(() => {
+    if (!props.open) {
+      setQuery('')
+      setDebounced('')
+      setSelected(new Set())
+    }
+  }, [props.open])
+
   const problemsQ = useQuery({
-    queryKey: ['space-problem-picker'],
-    queryFn: () => api.problems({ q: '', tags: [], type: '' }),
+    queryKey: ['space-problem-picker', debounced],
+    queryFn: () => api.problems({ q: debounced, tags: [], type: '', limit: PICK_LIMIT }),
     enabled: props.open,
+    staleTime: 60_000, // 同词 1 分钟内复用缓存（反复打开弹窗不再重复请求）
   })
-  const all = problemsQ.data?.problems ?? []
-  const existing = new Set(props.existingIds ?? [])
-  const q = query.trim().toLowerCase()
-  const visible = q ? all.filter((p) => p.title.toLowerCase().includes(q) || String(p.id).includes(q)) : all
+  const list = problemsQ.data?.problems ?? []
+  const total = problemsQ.data?.total ?? list.length
+  const existing = useMemo(() => new Set(props.existingIds ?? []), [props.existingIds])
+  const truncated = total > list.length
 
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
@@ -65,10 +94,12 @@ export function ProblemPickerDialog(props: {
             <div className="flex items-center justify-center gap-2 py-6 text-xs text-muted-foreground">
               <LoaderCircleIcon className="size-4 animate-spin" /> 加载题目…
             </div>
-          ) : visible.length === 0 ? (
-            <p className="py-6 text-center text-xs text-muted-foreground">没有匹配的题目</p>
+          ) : list.length === 0 ? (
+            <p className="py-6 text-center text-xs text-muted-foreground">
+              {debounced ? '没有匹配的题目' : '题库为空'}
+            </p>
           ) : (
-            visible.map((p) => {
+            list.map((p) => {
               const isExisting = existing.has(p.id)
               const isSelected = selected.has(p.id)
               return (
@@ -103,6 +134,13 @@ export function ProblemPickerDialog(props: {
             })
           )}
         </div>
+
+        {/* 结果被截断时提示细化搜索（避免误以为题库里就这么多） */}
+        {truncated && (
+          <p className="text-[11px] text-muted-foreground">
+            共 {total} 条，仅显示前 {list.length} 条 —— 输入关键词可精确定位。
+          </p>
+        )}
 
         <DialogFooter>
           <Button variant="outline" onClick={() => props.onOpenChange(false)}>取消</Button>

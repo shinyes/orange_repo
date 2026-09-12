@@ -5,6 +5,7 @@
 // 提交 AC 后轮询带 trainingId 使训练条目标记通过（格子变绿）。
 // 测评记录：工具栏 History 按钮 → Dialog 拉该训练×题提交历史（ojSubmissions(id, trainingId)）。
 import { useEffect, useRef, useState } from 'react'
+import { useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import {
   ChevronLeftIcon,
@@ -27,7 +28,7 @@ import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
-import { cloudDraftIsNewer, genericStarter, localDraftTime, markLocalDraftTime, resolveStarter, saveDraftDebounced, syncLocalDraftTime, useCloudDraft } from '@/lib/use-programming-workspace'
+import { cloudDraftIsNewer, genericStarter, localDraftTime, markLocalDraftTime, resolveStarter, saveDraftDebounced, syncLocalDraftTime, useCloudDraft, useSpaceDefaultLang } from '@/lib/use-programming-workspace'
 import { CONSOLE_DEFAULT_H, useConsoleResize } from '@/hooks/use-console-resize'
 
 const DRAFT_PREFIX = 'orangeoj:draft:'
@@ -51,7 +52,12 @@ export function TrainingProgrammingCard({ problemId, trainingId, solved, onSolve
     retry: 1,
   })
 
-  const [lang, setLang] = useState<CodeLang>(() => (localStorage.getItem(`${DRAFT_PREFIX}lang-${trainingId}-${problemId}`) as CodeLang) || 'python')
+  // 该题语言记忆 key：用户手动切换语言时写入 → 优先于空间默认值
+  const langKey = `${DRAFT_PREFIX}lang-${trainingId}-${problemId}`
+  // 初始语言：本地记忆（用户为该题选过）→ 空间默认语言（训练属于空间）→ python。
+  const { spaceId } = useParams()
+  const spaceLang = useSpaceDefaultLang(Number(spaceId) || null)
+  const [lang, setLang] = useState<CodeLang>(() => (localStorage.getItem(langKey) as CodeLang) || spaceLang || 'python')
   // 初始 code：本地草稿 →（下方 reconcile）云草稿 → 题目模板 → 通用模板
   const [code, setCode] = useState(() => localStorage.getItem(draftKey(problemId, lang, trainingId)) ?? genericStarter(lang))
   const [consoleText, setConsoleText] = useState('控制台已就绪')
@@ -118,16 +124,25 @@ export function TrainingProgrammingCard({ problemId, trainingId, solved, onSolve
     saveDraftDebounced(problemId, lang, next, 'training', trainingId)
   }
 
-  function switchLang(l: CodeLang) {
+  function switchLang(l: CodeLang, remember = true) {
     if (l === lang) return
     touchedRef.current = false
     draftWarnedRef.current = false
     setLang(l)
     setCode(localStorage.getItem(draftKey(problemId, l, trainingId)) ?? genericStarter(l))
-    localStorage.setItem(`${DRAFT_PREFIX}lang-${trainingId}-${problemId}`, l)
+    if (remember) localStorage.setItem(langKey, l)
     setConsoleText('语言已切换，草稿分别保存')
     setConsoleVariant('default')
   }
+
+  // 空间默认语言（首帧未取到空间信息时随查询到达）：用户未为该题选过语言（无本地记忆）
+  // 且尚未开始编辑 → 按空间默认语言打开。不写本地记忆——空间设置变更后下次仍生效；
+  // 用户手动切换语言由 switchLang 写入本地记忆，届时不再被空间默认值覆盖。
+  useEffect(() => {
+    if (!spaceLang || localStorage.getItem(langKey) || touchedRef.current) return
+    switchLang(spaceLang, false)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [spaceLang])
 
   async function poll(submissionId: number): Promise<SubmissionPoll> {
     for (let i = 0; i < 200; i++) {

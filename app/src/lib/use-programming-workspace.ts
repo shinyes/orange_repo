@@ -2,12 +2,14 @@
 //  1. resolveStarter —— 起始代码解析：题目级模板(starterPy/starterCpp)非空优先，否则通用模板；
 //  2. useCloudDraft —— 云端草稿加载（按登录用户隔离在服务端；同一题×语言语义，跨端/跨页互通）；
 //  3. saveDraftDebounced —— 云端草稿 debounce 自动保存（fire-and-forget，失败静默——本地草稿已实时
-//     写 localStorage 作离线缓存，页面自身的草稿写入逻辑保留）。
+//     写 localStorage 作离线缓存，页面自身的草稿写入逻辑保留）；
+//  4. useSpaceDefaultLang —— 空间默认编程语言（spaces.defaultLang）：本地未为该题选过语言时的初始语言。
 // 各页保留各自的本地草稿 key 与渲染细节，初始代码顺序统一为：
 //     本地草稿 → 云端草稿（异步）→ 题目模板 → 通用模板。
 import { useEffect, useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/api'
-import type { CodeLang } from '@/api/types'
+import type { CodeLang, PortalSpace } from '@/api/types'
 
 /** 云端保存 debounce 间隔。 */
 const DRAFT_SAVE_DEBOUNCE_MS = 2000
@@ -28,6 +30,42 @@ export function resolveStarter(
   const t = problem ? (lang === 'cpp' ? problem.starterCpp : problem.starterPy) : undefined
   if (t != null && t.trim() !== '') return t
   return ''
+}
+
+// ---------- 空间默认编程语言 ----------
+
+/** 门户空间查询 key（与 SpaceShell/SpacePicker/portal-context 共用同一条缓存，不额外发请求）。 */
+const PORTAL_SPACES_KEY = ['portal-spaces']
+
+/**
+ * 空间默认语言解析：仅 'python' / 'cpp' 合法。
+ * ''（未设置）、缺省、未知取值 → null —— 调用方沿用原有 python 行为。
+ */
+export function spaceDefaultLang(raw: string | undefined | null): CodeLang | null {
+  return raw === 'python' || raw === 'cpp' ? raw : null
+}
+
+/**
+ * 空间默认编程语言（spaces.defaultLang）：本地未为该题选过语言（无本地语言记忆）时的初始语言。
+ *
+ * 空间数据取自 ['portal-spaces'] 查询缓存——与门户各页共用同一条查询（不额外发请求）：
+ * 首帧命中缓存则同步得到（无“先 python 再跳 cpp”的闪烁与重复草稿请求）；
+ * 未命中（直接刷新/深链进入做题页）时随查询结果到达后返回（调用方据此应用一次默认值）。
+ * spaceId 缺失/空间未知/未设置 → null（保持改动前的 python 行为）。
+ */
+export function useSpaceDefaultLang(spaceId: number | null): CodeLang | null {
+  const qc = useQueryClient()
+  const [lang, setLang] = useState<CodeLang | null>(() => {
+    if (!spaceId) return null
+    const cached = qc.getQueryData<{ spaces: PortalSpace[] }>(PORTAL_SPACES_KEY)
+    return spaceDefaultLang(cached?.spaces.find((s) => s.id === spaceId)?.defaultLang)
+  })
+  const q = useQuery({ queryKey: PORTAL_SPACES_KEY, queryFn: api.portalSpaces })
+  useEffect(() => {
+    if (!spaceId || !q.data) return
+    setLang(spaceDefaultLang(q.data.spaces.find((s) => s.id === spaceId)?.defaultLang))
+  }, [q.data, spaceId])
+  return lang
 }
 
 /**

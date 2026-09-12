@@ -52,7 +52,7 @@ export function SpaceAdmin() {
   const domainName = domainsQ.data?.domains.find((d) => d.id === domainId)?.name
 
   const [creating, setCreating] = useState(false)
-  const [renaming, setRenaming] = useState<Space | null>(null)
+  const [editing, setEditing] = useState<Space | null>(null)
   const [deleting, setDeleting] = useState<Space | null>(null)
   const [expanded, setExpanded] = useState<number | null>(null)
 
@@ -94,7 +94,7 @@ export function SpaceAdmin() {
               space={sp}
               expanded={expanded === sp.id}
               onToggle={() => setExpanded(expanded === sp.id ? null : sp.id)}
-              onRename={() => setRenaming(sp)}
+              onEdit={() => setEditing(sp)}
               onDelete={() => setDeleting(sp)}
             />
           ))}
@@ -102,7 +102,7 @@ export function SpaceAdmin() {
       )}
 
       <CreateSpaceDialog open={creating} onOpenChange={setCreating} onCreated={() => void spacesQ.refetch()} />
-      <RenameSpaceDialog space={renaming} onOpenChange={(v) => !v && setRenaming(null)} onDone={() => void spacesQ.refetch()} />
+      <SpaceSettingsDialog space={editing} onOpenChange={(v) => !v && setEditing(null)} onDone={() => void spacesQ.refetch()} />
       {deleting && (
         <ConfirmDialog
           open
@@ -133,7 +133,7 @@ function SpaceCard(props: {
   space: Space
   expanded: boolean
   onToggle: () => void
-  onRename: () => void
+  onEdit: () => void
   onDelete: () => void
 }) {
   const { space, expanded } = props
@@ -144,11 +144,15 @@ function SpaceCard(props: {
           <ChevronRightIcon className={`size-4 text-muted-foreground transition-transform ${expanded ? 'rotate-90' : ''}`} />
           <LayoutGridIcon className="size-4 shrink-0 text-primary/70" />
           <span className="min-w-0 flex-1 truncate text-sm font-medium">{space.name}</span>
+          {/* 空间默认编程语言（未设置时不显示；做题页初始语言用） */}
+          {space.defaultLang ? (
+            <Badge variant="outline" className="shrink-0 text-[10px]">默认 {langText(space.defaultLang)}</Badge>
+          ) : null}
           <Badge variant="secondary" className="text-[10px]">#{space.id}</Badge>
         </button>
         <div className="flex items-center gap-1">
-          <Button size="xs" variant="ghost" onClick={props.onRename}>
-            <PencilIcon data-icon="inline-start" /> 改名
+          <Button size="xs" variant="ghost" onClick={props.onEdit}>
+            <PencilIcon data-icon="inline-start" /> 设置
           </Button>
           <Button size="xs" variant="ghost" className="text-destructive" onClick={props.onDelete}>
             <Trash2Icon data-icon="inline-start" /> 删除
@@ -1141,14 +1145,29 @@ function CreateSpaceDialog(props: { open: boolean; onOpenChange: (v: boolean) =>
   )
 }
 
-function RenameSpaceDialog(props: { space: Space | null; onOpenChange: (v: boolean) => void; onDone: () => void }) {
+// 空间设置（改名 + 默认编程语言）：部分更新接口，仅提交的字段被修改。
+// 默认语言用于成员在该空间打开编程题时的初始语言（用户在题目上手动选过语言时以本地记忆为准）。
+const LANG_OPTIONS = [
+  { value: '', label: '未设置（沿用 Python）' },
+  { value: 'python', label: 'Python' },
+  { value: 'cpp', label: 'C++' },
+] as const
+
+/** 语言取值显示名（''=未设置）。 */
+function langText(v: string): string {
+  return LANG_OPTIONS.find((o) => o.value === v)?.label ?? v
+}
+
+function SpaceSettingsDialog(props: { space: Space | null; onOpenChange: (v: boolean) => void; onDone: () => void }) {
   const [name, setName] = useState('')
+  const [defaultLang, setDefaultLang] = useState('')
   const [busy, setBusy] = useState(false)
   const sp = props.space
   const [lastId, setLastId] = useState<number | null>(null)
   if (sp && lastId !== sp.id) {
     setLastId(sp.id)
     setName(sp.name)
+    setDefaultLang(sp.defaultLang ?? '')
   } else if (!sp && lastId !== null) {
     setLastId(null)
   }
@@ -1156,23 +1175,47 @@ function RenameSpaceDialog(props: { space: Space | null; onOpenChange: (v: boole
     if (!sp || !name.trim()) return
     setBusy(true)
     try {
-      await api.renameSpace(sp.id, name.trim())
-      toast.success('空间已重命名')
+      await api.updateSpaceMeta(sp.id, { name: name.trim(), defaultLang })
+      toast.success('空间设置已保存')
       props.onDone()
       props.onOpenChange(false)
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '重命名失败')
+      toast.error(e instanceof Error ? e.message : '保存失败')
     } finally {
       setBusy(false)
     }
   }
   return (
     <Dialog open={sp !== null} onOpenChange={props.onOpenChange}>
-      <DialogContent className="sm:max-w-xs">
+      <DialogContent className="sm:max-w-sm">
         <DialogHeader>
-          <DialogTitle>重命名空间</DialogTitle>
+          <DialogTitle>空间设置</DialogTitle>
+          <DialogDescription>默认编程语言用于成员在该空间打开编程题时的初始语言（未设置=沿用 Python）。</DialogDescription>
         </DialogHeader>
-        <Input value={name} onChange={(e) => setName(e.target.value)} autoFocus onKeyDown={(e) => e.key === 'Enter' && void save()} />
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <Label>空间名称</Label>
+            <Input value={name} onChange={(e) => setName(e.target.value)} autoFocus onKeyDown={(e) => e.key === 'Enter' && void save()} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>默认编程语言</Label>
+            <Select
+              items={LANG_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+              value={defaultLang}
+              onValueChange={(v) => setDefaultLang(v as string)}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {LANG_OPTIONS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">学生此前为某道题单独选过语言时，仍以他自己的选择为准。</p>
+          </div>
+        </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => props.onOpenChange(false)}>取消</Button>
           <Button onClick={() => void save()} disabled={!name.trim() || busy}>

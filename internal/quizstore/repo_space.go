@@ -24,6 +24,9 @@ type SpaceBrief struct {
 	DomainID   int64  `json:"domainId"`
 	DomainName string `json:"domainName,omitempty"`
 	Name       string `json:"name"`
+	// DefaultLang 空间默认编程语言：''=未设置（做题页沿用 python）；仅 'python' / 'cpp'。
+	// 用户在某题上手动选过语言（本地记忆）时优先于该默认值。
+	DefaultLang string `json:"defaultLang"`
 	// CanViewLeaderboard 当前用户能否查看该空间所属域的排行榜
 	// （管理员恒 true；成员取决于域的排行榜公开设置）——前端据此隐藏入口
 	CanViewLeaderboard bool `json:"canViewLeaderboard"`
@@ -116,7 +119,7 @@ func (r *RepoReader) SpaceDomain(spaceID int64) (int64, error) {
 
 // UserDomainSpaceIDs 用户加入的全部空间（门户切换；space_members 在主库）。
 func (r *RepoReader) UserDomainSpaceIDs(userID int64) ([]SpaceBrief, error) {
-	rows, err := r.DB.Query(`SELECT sp.id,sp.domain_id,d.name,sp.name FROM space_members m
+	rows, err := r.DB.Query(`SELECT sp.id,sp.domain_id,d.name,sp.name,sp.default_lang FROM space_members m
 		JOIN spaces sp ON sp.id=m.space_id
 		LEFT JOIN domains d ON d.id=sp.domain_id
 		WHERE m.user_id=? ORDER BY sp.id`, userID)
@@ -128,7 +131,7 @@ func (r *RepoReader) UserDomainSpaceIDs(userID int64) ([]SpaceBrief, error) {
 	for rows.Next() {
 		var b SpaceBrief
 		var dName sql.NullString
-		if err := rows.Scan(&b.ID, &b.DomainID, &dName, &b.Name); err != nil {
+		if err := rows.Scan(&b.ID, &b.DomainID, &dName, &b.Name, &b.DefaultLang); err != nil {
 			return nil, err
 		}
 		if dName.Valid {

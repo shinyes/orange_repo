@@ -56,6 +56,7 @@ export function filterQuery(f: ProblemFilterState, extra?: Record<string, string
   if (f.q) p.set('q', f.q)
   for (const t of f.tags) p.append('tags', t)
   if (f.type) p.set('type', f.type)
+  if (f.limit && f.limit > 0) p.set('limit', String(f.limit))
   for (const [k, v] of Object.entries(extra ?? {})) p.set(k, v)
   const s = p.toString()
   return s ? `?${s}` : ''
@@ -63,7 +64,8 @@ export function filterQuery(f: ProblemFilterState, extra?: Record<string, string
 
 export const adminApi = {
   // ---- 题目 ----
-  problems: (f: ProblemFilterState) => req<{ problems: ProblemSummary[] }>(dq(`/api/problems${filterQuery(f)}`)),
+  problems: (f: ProblemFilterState & { limit?: number }) =>
+    req<{ problems: ProblemSummary[]; total?: number }>(dq(`/api/problems${filterQuery(f)}`)),
   createProblem: (payload: ProblemPayload) =>
     req<{ problem: Problem }>(dq('/api/problems'), json({ method: 'POST', body: JSON.stringify(payload) })),
   getProblem: (id: number) => req<{ problem: Problem }>(`/api/problems/${id}`),
@@ -202,8 +204,12 @@ export const adminApi = {
   // ---- 空间管理（global_admin 带 domainId / domain_admin 自动本域） ----
   spaces: () => req<{ spaces: Space[] }>(dq('/api/admin/spaces')),
   createSpace: (name: string) => req<{ id: number }>(dq('/api/admin/spaces'), json({ method: 'POST', body: JSON.stringify({ name }) })),
-  renameSpace: (id: number, name: string) =>
-    req<void>(`/api/admin/spaces/${id}`, json({ method: 'PATCH', body: JSON.stringify({ name }) })),
+  /** 部分更新空间元信息（PATCH /api/admin/spaces/:id）：仅请求中出现的字段被修改；
+   *  defaultLang 仅允许 ''（未设置 → 做题页沿用 python）/ 'python' / 'cpp'，非法值后端 400。 */
+  updateSpaceMeta: (id: number, payload: { name?: string; defaultLang?: string }) =>
+    req<void>(`/api/admin/spaces/${id}`, json({ method: 'PATCH', body: JSON.stringify(payload) })),
+  /** 空间改名（= updateSpaceMeta 仅传 name，保留旧调用语义）。 */
+  renameSpace: (id: number, name: string) => adminApi.updateSpaceMeta(id, { name }),
   deleteSpace: (id: number) => req<void>(`/api/admin/spaces/${id}`, { method: 'DELETE' }),
   spaceMembers: (id: number) => req<{ members: SpaceMember[] }>(`/api/admin/spaces/${id}/members`),
   setSpaceMembers: (id: number, userIds: number[]) =>
