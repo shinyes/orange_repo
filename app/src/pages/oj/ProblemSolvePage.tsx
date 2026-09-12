@@ -229,9 +229,15 @@ function ProgrammingSolve({ problem, backTo, review, practiceId }: { problem: Oj
   const langKey = `${DRAFT_KEY}-${ctxTag}-lang-${problem.id}`
   // 初始语言：本地记忆（用户为该题选过）→ 空间默认语言（spaces.defaultLang）→ python。
   // 做题页无空间路由参数：当前空间取门户记录的当前空间（未设置/无空间 → 沿用 python）。
-  const spaceLang = useSpaceDefaultLang(savedSpaceId())
-  const [lang, setLang] = useState<CodeLang>(() => (localStorage.getItem(langKey) as CodeLang) || spaceLang || 'python')
-  // 初始 code：本地草稿 →（异步）云草稿 → 题目模板（starterPy/starterCpp）→ 通用模板。
+  const { lang: spaceLang, ready: spaceLangReady } = useSpaceDefaultLang(savedSpaceId())
+  const rememberedLang = localStorage.getItem(langKey) as CodeLang | null
+  const [lang, setLang] = useState<CodeLang>(() => rememberedLang || spaceLang || 'python')
+  // 语言是否**已定**：有本地记忆即已定；否则需等空间默认语言到达**且已应用到 lang**
+  // （只等 ready 不够——那一帧 lang 仍是 python，草稿会先按 python 取一次，造成重复请求与闪烁）。
+  // 未定期间：不发草稿请求、不渲染右栏编辑器。
+  const langSettled = rememberedLang != null
+    || (spaceLangReady && (spaceLang == null || lang === spaceLang))
+  // 初始 code：本地草稿 →（异步）云草稿 → 题目模板(starterPy/starterCpp) → 通用模板。
   const [code, setCode] = useState(() => localStorage.getItem(draftLocal(problem.id, lang)) ?? resolveStarter(lang, problem))
   const [consoleText, setConsoleText] = useState('控制台已就绪')
   const [consoleVariant, setConsoleVariant] = useState<'default' | 'error' | 'success'>('default')
@@ -244,7 +250,8 @@ function ProgrammingSolve({ problem, backTo, review, practiceId }: { problem: Oj
   const [historyOpen, setHistoryOpen] = useState(false)
 
   // 云端草稿（按 题×语言×上下文 GET）：加载完成后回填——本地已有草稿则保留本地。
-  const cloudDraft = useCloudDraft(problem.id, lang, ctxKind, ctxId)
+  // langReady=false（空间默认语言未定）时先不取，避免先按 python 取一次再切语言重复请求。
+  const cloudDraft = useCloudDraft(problem.id, lang, ctxKind, ctxId, langSettled)
   // 本会话内当前语言是否已被用户手动编辑（一旦输入，云端草稿不再覆盖；切语言时重置）。
   const touchedRef = useRef(false)
   function enterLang() {
@@ -429,6 +436,13 @@ function ProgrammingSolve({ problem, backTo, review, practiceId }: { problem: Oj
       }
       right={
         <div className="flex h-full min-h-[420px] min-w-0 flex-col rounded-2xl border bg-card">
+          {!langSettled ? (
+            // 空间默认语言尚未确定（深链冷缓存）：先不渲染工具栏/编辑器，避免语言与代码闪一下
+            <div className="flex flex-1 items-center justify-center gap-2 text-xs text-muted-foreground">
+              <Loader2Icon className="size-4 animate-spin" /> 正在载入编辑器…
+            </div>
+          ) : (
+          <>
           <div className="flex flex-wrap items-center gap-1.5 border-b p-2">
             {review && (
               <span className="mr-1 inline-flex items-center rounded-md border border-sky-300 bg-sky-50 px-2 py-0.5 text-[11px] font-semibold text-sky-700">
@@ -519,6 +533,8 @@ function ProgrammingSolve({ problem, backTo, review, practiceId }: { problem: Oj
               {consoleText}
             </pre>
           </div>
+          </>
+          )}
         </div>
       }
           />

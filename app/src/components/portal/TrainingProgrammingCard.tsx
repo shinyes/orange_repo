@@ -56,8 +56,14 @@ export function TrainingProgrammingCard({ problemId, trainingId, solved, onSolve
   const langKey = `${DRAFT_PREFIX}lang-${trainingId}-${problemId}`
   // 初始语言：本地记忆（用户为该题选过）→ 空间默认语言（训练属于空间）→ python。
   const { spaceId } = useParams()
-  const spaceLang = useSpaceDefaultLang(Number(spaceId) || null)
-  const [lang, setLang] = useState<CodeLang>(() => (localStorage.getItem(langKey) as CodeLang) || spaceLang || 'python')
+  const { lang: spaceLang, ready: spaceLangReady } = useSpaceDefaultLang(Number(spaceId) || null)
+  const rememberedLang = localStorage.getItem(langKey) as CodeLang | null
+  const [lang, setLang] = useState<CodeLang>(() => rememberedLang || spaceLang || 'python')
+  // 语言是否**已定**：有本地记忆即已定；否则需等空间默认语言到达且已应用到 lang
+  // （训练卡位于空间页内，门户空间列表通常已缓存 → 首帧即已定，无额外等待）。
+  // 未定期间不发草稿请求，避免先按 python 取一次再切语言。
+  const langReady = rememberedLang != null
+    || (spaceLangReady && (spaceLang == null || lang === spaceLang))
   // 初始 code：本地草稿 →（下方 reconcile）云草稿 → 题目模板 → 通用模板
   const [code, setCode] = useState(() => localStorage.getItem(draftKey(problemId, lang, trainingId)) ?? genericStarter(lang))
   const [consoleText, setConsoleText] = useState('控制台已就绪')
@@ -74,7 +80,7 @@ export function TrainingProgrammingCard({ problemId, trainingId, solved, onSolve
 
   // 云端草稿：本地为空且用户未输入时，随 cloudLoaded/题目数据到达逐级回填（云草稿 → 题目模板 → 通用）；
   // 仅云草稿回填写本地草稿，模板本身不落本地（避免挡住后续云草稿）。
-  const cloudDraft = useCloudDraft(problemId, lang, 'training', trainingId)
+  const cloudDraft = useCloudDraft(problemId, lang, 'training', trainingId, langReady)
   useEffect(() => {
     if (touchedRef.current) return
     const key = draftKey(problemId, lang, trainingId)

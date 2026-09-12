@@ -48,24 +48,30 @@ export function spaceDefaultLang(raw: string | undefined | null): CodeLang | nul
 /**
  * 空间默认编程语言（spaces.defaultLang）：本地未为该题选过语言（无本地语言记忆）时的初始语言。
  *
- * 空间数据取自 ['portal-spaces'] 查询缓存——与门户各页共用同一条查询（不额外发请求）：
- * 首帧命中缓存则同步得到（无“先 python 再跳 cpp”的闪烁与重复草稿请求）；
- * 未命中（直接刷新/深链进入做题页）时随查询结果到达后返回（调用方据此应用一次默认值）。
- * spaceId 缺失/空间未知/未设置 → null（保持改动前的 python 行为）。
+ * 空间数据取自 ['portal-spaces'] 查询缓存——与门户各页共用同一条查询（不额外发请求）。
+ * 返回值区分两种「没有默认值」：
+ *   - `ready=false`：空间列表尚未拿到（深链/冷缓存）→ 调用方应**等**，不要先按 python 起草稿请求；
+ *   - `ready=true` 且 `lang=null`：空间确实没设默认（或空间未知）→ 调用方回退 python。
+ * 命中缓存时首帧即 ready（无闪烁、无重复草稿请求）。
  */
-export function useSpaceDefaultLang(spaceId: number | null): CodeLang | null {
+export function useSpaceDefaultLang(spaceId: number | null): { lang: CodeLang | null; ready: boolean } {
   const qc = useQueryClient()
-  const [lang, setLang] = useState<CodeLang | null>(() => {
-    if (!spaceId) return null
+  const [state, setState] = useState<{ lang: CodeLang | null; ready: boolean }>(() => {
+    if (!spaceId) return { lang: null, ready: true } // 无空间上下文：直接回退 python
     const cached = qc.getQueryData<{ spaces: PortalSpace[] }>(PORTAL_SPACES_KEY)
-    return spaceDefaultLang(cached?.spaces.find((s) => s.id === spaceId)?.defaultLang)
+    if (!cached) return { lang: null, ready: false } // 冷缓存：等待空间列表，避免先按 python 起跑
+    return { lang: spaceDefaultLang(cached.spaces.find((s) => s.id === spaceId)?.defaultLang), ready: true }
   })
   const q = useQuery({ queryKey: PORTAL_SPACES_KEY, queryFn: api.portalSpaces })
   useEffect(() => {
-    if (!spaceId || !q.data) return
-    setLang(spaceDefaultLang(q.data.spaces.find((s) => s.id === spaceId)?.defaultLang))
+    if (!spaceId) {
+      setState({ lang: null, ready: true })
+      return
+    }
+    if (!q.data) return
+    setState({ lang: spaceDefaultLang(q.data.spaces.find((s) => s.id === spaceId)?.defaultLang), ready: true })
   }, [q.data, spaceId])
-  return lang
+  return state
 }
 
 /**
@@ -74,12 +80,14 @@ export function useSpaceDefaultLang(spaceId: number | null): CodeLang | null {
  * 返回 { cloudLoaded, initialCode, updatedAt }——updatedAt 为云端最后保存时间（毫秒时间戳，
  * 无草稿/解析失败为 0），由调用方与本地时间戳比较，避免用旧草稿覆盖新草稿。
  */
-export function useCloudDraft(problemId: number, lang: CodeLang, ctxKind?: string, ctxId?: number): { cloudLoaded: boolean; initialCode: string; updatedAt: number } {
+export function useCloudDraft(problemId: number, lang: CodeLang, ctxKind?: string, ctxId?: number, enabled = true): { cloudLoaded: boolean; initialCode: string; updatedAt: number } {
   const [state, setState] = useState<{ cloudLoaded: boolean; initialCode: string; updatedAt: number }>({ cloudLoaded: false, initialCode: '', updatedAt: 0 })
   useEffect(() => {
     let alive = true
     setState({ cloudLoaded: false, initialCode: '', updatedAt: 0 })
-    if (!problemId) {
+    if (!problemId || !enabled) {
+      // 未启用（如空间默认语言尚未确定）：先不发请求，等语言定下来再取对应语言的草稿
+      if (!enabled) return
       setState({ cloudLoaded: true, initialCode: '', updatedAt: 0 })
       return
     }
@@ -98,7 +106,7 @@ export function useCloudDraft(problemId: number, lang: CodeLang, ctxKind?: strin
     return () => {
       alive = false
     }
-  }, [problemId, lang, ctxKind, ctxId])
+  }, [problemId, lang, ctxKind, ctxId, enabled])
   return state
 }
 
