@@ -55,11 +55,27 @@ export function preserveLineBreaks(text: string): string {
 // renderMathHTML 把 sanitize 后的 HTML 中的公式定界符（$$…$$ / $…$ / \[…\] / \(…\)）
 // 渲染为 KaTeX HTML（renderToString）。**文本级替换，无 DOM 侵入、可重复执行**——
 // 避免了 auto-render 的动态 DOM 修改在组件重渲染/重挂时丢失或破坏公式的问题。
+//
+// 注意：此处输入是 marked（+DOMPurify）产出的 **HTML**，公式源码里的 & < > 已被实体化
+// （如矩阵换列符 & 变成 &amp;）。KaTeX 需要原始 TeX，故取出的源码必须先做实体解码，
+// 否则 & 会被排版成字面量 "&amp;"（矩阵换列、\text{a\&b} 等都会错）。
+function decodeEntities(s: string): string {
+  return s
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#0*39;/g, "'")
+    .replace(/&#x0*27;/gi, "'")
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&') // 必须最后：避免把 &amp;lt; 误解成 <
+}
+
 function renderMathHTML(html: string, katex: { renderToString: (tex: string, opts: Record<string, unknown>) => string }): string {
   const esc = (s: string) => s
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;')
-  const render = (tex: string, display: boolean): string => {
+  const render = (rawTex: string, display: boolean): string => {
+    const tex = decodeEntities(rawTex) // HTML 实体 → 原始 TeX（& < > 等）
     try {
       return katex.renderToString(tex, {
         displayMode: display,
