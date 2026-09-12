@@ -86,8 +86,10 @@ func TestListInDomainIncludesProblemCount(t *testing.T) {
 	if gotCount["混合训练"] != 2 {
 		t.Errorf("混合训练 problemCount = %d, want 2（与题册内条数一致）", gotCount["混合训练"])
 	}
-	if _, ok := gotCount["空训练"]; ok {
-		t.Errorf("空训练无本域题目，不应出现在域 A 列表中")
+	// 空题册也必须出现在域列表里：题册栏「+题册」新建后题册内没有题目，
+	// 若按"含本域题目"过滤就会立刻消失（用户可见缺陷：看不到也搜不到）。
+	if gotCount["空训练"] != 0 {
+		t.Errorf("空训练 problemCount = %d, want 0（空题册可见但题目数为 0）", gotCount["空训练"])
 	}
 
 	// 域内练习列表：同上。
@@ -102,8 +104,9 @@ func TestListInDomainIncludesProblemCount(t *testing.T) {
 	if gotPracticeCount["域A练习"] != 3 {
 		t.Errorf("域A练习 problemCount = %d, want 3", gotPracticeCount["域A练习"])
 	}
-	if _, ok := gotPracticeCount["空练习"]; ok {
-		t.Errorf("空练习无本域题目，不应出现在域 A 列表中")
+	// 同训练：新建的空练习册立即可见（口径一致）。
+	if gotPracticeCount["空练习"] != 0 {
+		t.Errorf("空练习 problemCount = %d, want 0（空练习册可见但题目数为 0）", gotPracticeCount["空练习"])
 	}
 
 	// 全量列表（未选域）：空题册仍显示 0，不得因修复而变成缺省值异常。

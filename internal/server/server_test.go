@@ -1646,8 +1646,12 @@ func TestRepoListProblemCountAPI(t *testing.T) {
 	} else if m["problemCount"].(float64) != 2 {
 		t.Fatalf("按域训练 problemCount = %v, want 2", m["problemCount"])
 	}
-	if m := findTraining(tl, "空训练"); m != nil {
-		t.Fatalf("空训练无本域题目，不应出现在按域列表中: %v", m)
+	// 空题册也必须出现（题目数为 0）：题册栏新建后题目尚未添加，
+	// 若按"含本域题目"过滤会立刻从列表消失（用户可见缺陷：看不到也搜不到）。
+	if m := findTraining(tl, "空训练"); m == nil {
+		t.Fatalf("按域训练列表缺少「空训练」（新建的空题册必须可见）: %v", tl)
+	} else if m["problemCount"].(float64) != 0 {
+		t.Fatalf("空训练按域 problemCount = %v, want 0", m["problemCount"])
 	}
 
 	_, pl := doJSON(t, app, "GET", "/api/practices"+domainQ, gc, nil)

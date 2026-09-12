@@ -9,7 +9,12 @@ import (
 	"orangeoj/internal/model"
 )
 
-// ListTrainingsInDomain 返回含至少一道该域题目的训练模板（仓库页按域选模板用）。
+// ListTrainingsInDomain 返回该域的题册（仓库页/题册栏按域显示用）。
+// 归属口径（模板表无 domain 列，按条目题目域推导，与 TrainingInDomain 保持一致）：
+//   - 含至少一道该域题目 → 属于该域；
+//   - **一道题目都没有（新建的空题册）→ 也算属于该域**，否则刚从题册栏新建的题册
+//     会立刻从列表里消失（看不到也搜不到）——空题册无法归属于任何域，展示到当前域即可。
+//
 // problemCount 与 ListTrainings 同口径（题册内全部条目），供管理端题册栏显示「N 题」。
 func (s *Store) ListTrainingsInDomain(domainID int64) ([]model.Training, error) {
 	rows, err := s.DB.Query(`SELECT DISTINCT t.id,t.uuid,t.title,t.description,t.tags_json,t.created_at,
@@ -20,6 +25,9 @@ func (s *Store) ListTrainingsInDomain(domainID int64) ([]model.Training, error) 
 			SELECT 1 FROM training_items i JOIN training_chapters c ON i.chapter_id=c.id
 			JOIN problems p ON p.id=i.problem_id
 			WHERE c.training_id=t.id AND p.domain_id=?
+		) OR NOT EXISTS (
+			SELECT 1 FROM training_items i2 JOIN training_chapters c2 ON i2.chapter_id=c2.id
+			WHERE c2.training_id=t.id
 		) ORDER BY t.id`, domainID)
 	if err != nil {
 		return nil, err
@@ -45,7 +53,8 @@ func (s *Store) ListTrainingsInDomain(domainID int64) ([]model.Training, error) 
 	return out, rows.Err()
 }
 
-// ListPracticesInDomain 含至少一道该域题目的练习模板。
+// ListPracticesInDomain 该域的练习题册（口径同 ListTrainingsInDomain：含该域题目，
+// 或**空题册**——新建后立即可见）。
 // problemCount 与 ListPractices 同口径（题册内全部条目），供管理端题册栏显示「N 题」。
 func (s *Store) ListPracticesInDomain(domainID int64) ([]model.Practice, error) {
 	rows, err := s.DB.Query(`SELECT DISTINCT p.id,p.uuid,p.title,p.description,p.tags_json,p.created_at,
@@ -55,6 +64,8 @@ func (s *Store) ListPracticesInDomain(domainID int64) ([]model.Practice, error) 
 		WHERE EXISTS (
 			SELECT 1 FROM practice_items i JOIN problems pr ON pr.id=i.problem_id
 			WHERE i.practice_id=p.id AND pr.domain_id=?
+		) OR NOT EXISTS (
+			SELECT 1 FROM practice_items i2 WHERE i2.practice_id=p.id
 		) ORDER BY p.id`, domainID)
 	if err != nil {
 		return nil, err

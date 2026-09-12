@@ -116,6 +116,20 @@ export function BookletColumn() {
     return { folders: filterFolders(folderNodes), items: items.filter(match) }
   }, [q, folderNodes, items])
 
+  // 搜索时展开全部目录：否则命中的题册藏在折叠目录里，看起来"搜不到"。
+  const effectiveExpanded = useMemo(() => {
+    if (!q) return expanded
+    const all: Record<number, boolean> = { ...expanded }
+    const walk = (nodes: FolderNode[]) => {
+      for (const n of nodes) {
+        all[n.dir.id] = true
+        walk(n.children)
+      }
+    }
+    walk(folderNodes)
+    return all
+  }, [q, expanded, folderNodes])
+
   const isLoading = trainingsQ.isLoading || practicesQ.isLoading || dirsQ.isLoading
   const activeDirName = activeFolderId != null ? folderNameOf(folderNodes, activeFolderId) : null
   const folderIds = useMemo(() => new Set(dirs.map((d) => d.id)), [dirs])
@@ -277,6 +291,11 @@ export function BookletColumn() {
 
   async function createItem(kind: 'training' | 'practice' | 'directory', name: string) {
     try {
+      // 新建目标目录：若当前选中的是目录，新题册/子目录会放进去——
+      // 必须展开该目录，否则它藏在折叠目录里，看起来"没建成功"。
+      if (activeFolderId != null) {
+        setExpanded((prev) => ({ ...prev, [activeFolderId]: true }))
+      }
       if (kind === 'directory') {
         await api.createBookletDirectory(name, activeFolderId)
         await qc.invalidateQueries({ queryKey: ['booklet-directories'] })
@@ -361,7 +380,7 @@ export function BookletColumn() {
               level={0}
               items={filtered.items}
               dirs={dirs}
-              expanded={expanded}
+              expanded={effectiveExpanded}
               activeFolderId={activeFolderId}
               drag={drag}
               dropZone={dropZone}
