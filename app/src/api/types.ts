@@ -46,7 +46,7 @@ export interface TrainingBrief {
   tags: string[]
   maxAttempts: number
   problemCount: number
-  /** 公开：空间内所有成员可见；缺省/未落地前按 undefined 处理（不显示公开标签） */
+  /** 开放：与「在分配名单中」同时满足时成员才可见；缺省/未落地前按 undefined 处理 */
   isPublic?: boolean
 }
 
@@ -58,7 +58,7 @@ export interface PracticeBrief {
   description: string
   tags: string[]
   problemCount: number
-  /** 公开：空间内所有成员可见；缺省/未落地前按 undefined 处理（不显示公开标签） */
+  /** 开放：与「在分配名单中」同时满足时成员才可见；缺省/未落地前按 undefined 处理 */
   isPublic?: boolean
 }
 
@@ -74,7 +74,7 @@ export interface QuizBrief {
   /** 每轮题数（0=不限制：整范围一轮） */
   roundSize?: number
   problemCount: number
-  /** 公开：空间内所有成员可见；缺省/未落地前按 undefined 处理（不显示公开标签） */
+  /** 开放：与「在分配名单中」同时满足时成员才可见；缺省/未落地前按 undefined 处理 */
   isPublic?: boolean
 }
 
@@ -488,7 +488,7 @@ export interface SpaceTraining {
   tags: string[]
   maxAttempts: number
   problemCount: number
-  /** 公开：空间内所有成员可见；缺省/未落地前按 undefined 处理 */
+  /** 开放：与「在分配名单中」同时满足时成员才可见；缺省按 undefined 处理 */
   isPublic?: boolean
 }
 
@@ -518,7 +518,7 @@ export interface SpacePractice {
   description: string
   tags: string[]
   problemCount: number
-  /** 公开：空间内所有成员可见；缺省/未落地前按 undefined 处理 */
+  /** 开放：与「在分配名单中」同时满足时成员才可见；缺省按 undefined 处理 */
   isPublic?: boolean
 }
 
@@ -542,7 +542,7 @@ export interface SpaceQuiz {
   repoKind?: string
   repoId?: number
   problemCount: number
-  /** 公开：空间内所有成员可见；缺省/未落地前按 undefined 处理 */
+  /** 开放：与「在分配名单中」同时满足时成员才可见；缺省按 undefined 处理 */
   isPublic?: boolean
 }
 

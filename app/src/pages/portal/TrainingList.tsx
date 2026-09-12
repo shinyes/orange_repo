@@ -171,7 +171,7 @@ function TrainingCard({ t, spaceId, canEdit, onEdit, onVisible, onDelete }: {
         <span className="flex min-w-0 items-center gap-2 font-medium">
           <FolderKanbanIcon className="size-4 shrink-0 text-primary" />
           <span className="min-w-0 truncate">{t.title}</span>
-          {t.isPublic && <Badge variant="secondary" className="shrink-0 px-1.5 text-[10px] font-normal text-emerald-600">公开</Badge>}
+          {t.isPublic && <Badge variant="secondary" className="shrink-0 px-1.5 text-[10px] font-normal text-emerald-600">开放</Badge>}
         </span>
         {t.description && <p className="line-clamp-2 text-xs text-muted-foreground">{t.description}</p>}
         <span className="mt-1 flex items-center justify-between text-xs text-muted-foreground">

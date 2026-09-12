@@ -144,7 +144,8 @@ func (s *Server) spacesOfAllDomains() ([]quizstore.SpaceBrief, error) {
 	return out, rows.Err()
 }
 
-// handlePortalSpaceHome GET /api/portal/space/:id/home → 三区概览（member 仅见已分配项目）。
+// handlePortalSpaceHome GET /api/portal/space/:id/home → 三区概览
+// （member 仅见「已开放且已分配」的项目；管理员恒见全部）。
 func (s *Server) handlePortalSpaceHome(c *fiber.Ctx) error {
 	spaceID, err := s.resolveSpace(c)
 	if err != nil {

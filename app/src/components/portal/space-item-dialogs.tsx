@@ -50,7 +50,7 @@ export function NewTrainingDialog(props: {
         maxAttempts: Number.isFinite(ma) && ma > 0 ? ma : undefined,
         isPublic,
       })
-      toast.success(isPublic ? '训练已创建并公开（空间内所有成员可见）' : '训练已创建（默认无成员可见，可点眼睛按钮分配）')
+      toast.success(isPublic ? '训练已创建（已开放：还需在可见性里分配成员才可见）' : '训练已创建（未开放：仅管理员可见，可在可见性里开放并分配）')
       props.onCreated()
       props.onOpenChange(false)
     } catch (e) {
@@ -65,7 +65,7 @@ export function NewTrainingDialog(props: {
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>新建训练</DialogTitle>
-          <DialogDescription>设置标题/描述与限次；未开启公开时默认无成员可见，可在卡片上用 👁 按钮分配。</DialogDescription>
+          <DialogDescription>设置标题/描述与限次；创建后在卡片的「可见性」里开放并分配成员。</DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
           <div className="space-y-1.5">
@@ -118,7 +118,7 @@ export function NewPracticeDialog(props: {
     setBusy(true)
     try {
       await api.createSpacePractice(props.spaceId, { title: t, description: description.trim() || undefined, isPublic })
-      toast.success(isPublic ? '练习已创建并公开（空间内所有成员可见）' : '练习已创建（默认无成员可见，可点眼睛按钮分配）')
+      toast.success(isPublic ? '练习已创建（已开放：还需在可见性里分配成员才可见）' : '练习已创建（未开放：仅管理员可见，可在可见性里开放并分配）')
       props.onCreated()
       props.onOpenChange(false)
     } catch (e) {
@@ -133,7 +133,7 @@ export function NewPracticeDialog(props: {
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>新建练习</DialogTitle>
-          <DialogDescription>设置标题/描述；未开启公开时默认无成员可见，可在卡片上用 👁 按钮分配。</DialogDescription>
+          <DialogDescription>设置标题/描述；创建后在卡片的「可见性」里开放并分配成员。</DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
           <div className="space-y-1.5">
@@ -216,7 +216,7 @@ export function NewQuizDialog(props: {
         <DialogHeader>
           <DialogTitle>新建刷题项目</DialogTitle>
           <DialogDescription>
-            范围内单选/判断题循环复习：做过少做、答错的下轮多做、同轮不重复。未开启公开时默认无成员可见，可在卡片上用 👁 按钮分配。
+            范围内单选/判断题循环复习：做过少做、答错的下轮多做、同轮不重复。创建后在卡片的「可见性」里开放并分配成员。
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
@@ -294,7 +294,7 @@ export function QuizEditDialog(props: {
         roundSize: rs,
         isPublic,
       })
-      toast.success(isPublic ? '已保存并公开（空间内所有成员可见）' : rs > 0 ? '已保存（每轮 ' + rs + ' 题）' : '已保存（整范围一轮）')
+      toast.success(rs > 0 ? '已保存（每轮 ' + rs + ' 题）' : '已保存（整范围一轮）')
       props.onSaved()
       props.onOpenChange(false)
     } catch (e) {
@@ -334,16 +334,16 @@ export function QuizEditDialog(props: {
   )
 }
 
-// ---------- 可见性（公开开关 + 可见成员分配，门户管理员） ----------
+// ---------- 可见性（开放开关 + 成员分配；两者同时满足才可见，门户管理员） ----------
 
 export function VisibleUsersDialog(props: {
   spaceId: number
   kind: 'training' | 'practice' | 'quiz'
   itemId: number
   title: string
-  /** 当前是否公开（公开=空间内所有成员可见，无需逐个分配） */
+  /** 当前是否开放（开放 + 已分配 才对该成员可见） */
   isPublic?: boolean
-  /** 切换公开：由调用方用完整字段调用对应更新接口（避免重置该项目的其它字段） */
+  /** 切换开放：由调用方用完整字段调用对应更新接口（避免重置该项目的其它字段） */
   onTogglePublic?: (v: boolean) => Promise<void> | void
   open: boolean
   onClose: () => void
@@ -367,7 +367,7 @@ export function VisibleUsersDialog(props: {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.open, props.itemId, visQ.data])
-  // 打开时同步外部最新公开状态（列表可能刚被其它操作刷新）
+  // 打开时同步外部最新开放状态（列表可能刚被其它操作刷新）
   useEffect(() => {
     if (props.open) setPub(!!props.isPublic)
   }, [props.open, props.itemId, props.isPublic])
@@ -377,14 +377,14 @@ export function VisibleUsersDialog(props: {
   async function save() {
     setBusy(true)
     try {
-      // 先保存公开状态（若变更），再保存成员名单
+      // 先保存开放状态（若变更），再保存成员名单
       if (props.onTogglePublic && pub !== !!props.isPublic) {
         await props.onTogglePublic(pub)
       }
       await api.setVisibleUsers(props.kind, props.spaceId, props.itemId, [...selected])
       toast.success(
         pub
-          ? '已设为公开（空间内所有成员可见）'
+          ? '已开放（还需分配名单，成员才可见）'
           : selected.size === 0
             ? '已设为无成员可见（仅管理员）'
             : `已分配 ${selected.size} 位成员可见`,
@@ -413,17 +413,21 @@ export function VisibleUsersDialog(props: {
         <DialogHeader>
           <DialogTitle>可见性 · {props.title}</DialogTitle>
           <DialogDescription>
-            公开后空间内所有成员可见；不公开则仅下列被分配的成员可见（默认无成员可见，管理员始终可见）。
+            成员需同时满足「已开放」且「在分配名单中」才可见；两者缺一不可，管理员始终可见。
           </DialogDescription>
         </DialogHeader>
 
-        {/* 公开开关（原在编辑弹窗，现统一到本浮窗） */}
+        {/* 开放开关（原在编辑弹窗，现统一到本浮窗） */}
         {props.onTogglePublic && (
           <PublicToggleRow checked={pub} disabled={busy} onCheckedChange={setPub} />
         )}
 
-        {!pub && (
-          <div className="max-h-72 space-y-1 overflow-y-auto">
+        {/* 分配名单（与开放开关是「与」关系：即使开放，未分配者也看不到） */}
+        <div className="space-y-1.5">
+          <p className="text-sm font-medium">
+            分配名单{selected.size > 0 ? `（已选 ${selected.size} 人）` : ''}
+          </p>
+          <div className="max-h-64 space-y-1 overflow-y-auto rounded-lg border bg-background p-1">
             {members.length === 0 ? (
               <p className="py-6 text-center text-xs text-muted-foreground">该空间暂无成员，请先在「空间管理」添加成员。</p>
             ) : (
@@ -435,12 +439,15 @@ export function VisibleUsersDialog(props: {
               ))
             )}
           </div>
-        )}
-        {pub && (
-          <p className="rounded-lg border border-dashed px-3 py-2 text-xs text-muted-foreground">
-            当前为公开：空间内所有成员都能看到并进入，无需逐个分配。
-          </p>
-        )}
+        </div>
+
+        {/* 当前生效范围提示：让"为什么看不到/谁能看到"一目了然 */}
+        <p className="rounded-lg border border-dashed px-3 py-2 text-xs text-muted-foreground">
+          {!pub && selected.size === 0 && '当前：未开放且未分配 —— 仅管理员可见。'}
+          {!pub && selected.size > 0 && `当前：已分配 ${selected.size} 人，但未开放 —— 成员仍不可见（需同时开放）。`}
+          {pub && selected.size === 0 && '当前：已开放但未分配任何人 —— 成员不可见（需分配名单）。'}
+          {pub && selected.size > 0 && `当前：已开放且已分配 ${selected.size} 人 —— 仅这 ${selected.size} 位成员可见。`}
+        </p>
         <DialogFooter>
           <Button variant="outline" onClick={props.onClose}>取消</Button>
           <Button onClick={() => void save()} disabled={busy}>

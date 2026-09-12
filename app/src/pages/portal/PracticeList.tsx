@@ -170,7 +170,7 @@ function PracticeCard({ p, spaceId, canEdit, onEdit, onVisible, onDelete }: {
         <span className="flex min-w-0 items-center gap-2 font-medium">
           <ClipboardListIcon className="size-4 shrink-0 text-primary" />
           <span className="min-w-0 truncate">{p.title}</span>
-          {p.isPublic && <Badge variant="secondary" className="shrink-0 px-1.5 text-[10px] font-normal text-emerald-600">公开</Badge>}
+          {p.isPublic && <Badge variant="secondary" className="shrink-0 px-1.5 text-[10px] font-normal text-emerald-600">开放</Badge>}
         </span>
         {p.description && <p className="line-clamp-2 text-xs text-muted-foreground">{p.description}</p>}
         <span className="mt-1 flex items-center justify-between text-xs text-muted-foreground">

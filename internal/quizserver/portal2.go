@@ -693,6 +693,14 @@ func (s *Server) handlePortalQuizReset(c *fiber.Ctx) error {
 	if _, err := s.resolveSpaceCtx(c, spaceID); err != nil {
 		return err
 	}
+	// 项目级可见性（开放 + 已分配）——与其他刷题入口一致，避免成员对不可见项目仍能重置会话
+	vis, err := s.QS.Repo.QuizVisibleForUser(qid, viewerID(user))
+	if err != nil {
+		return respondError(c, fiber.StatusInternalServerError, err.Error())
+	}
+	if !vis {
+		return respondError(c, fiber.StatusNotFound, "刷题项目不存在")
+	}
 	unlock := s.lockQuizSession(user.ID, qid)
 	defer unlock()
 	if err := s.QS.ResetQuizSession(user.ID, qid); err != nil {

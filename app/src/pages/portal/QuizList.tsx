@@ -175,7 +175,7 @@ function QuizCard({ q, spaceId, canEdit, onEdit, onVisible, onDelete }: {
         <span className="flex min-w-0 items-center gap-2 font-medium">
           <BookOpenIcon className="size-4 shrink-0 text-primary" />
           <span className="min-w-0 truncate">{q.title}</span>
-          {q.isPublic && <Badge variant="secondary" className="shrink-0 px-1.5 text-[10px] font-normal text-emerald-600">公开</Badge>}
+          {q.isPublic && <Badge variant="secondary" className="shrink-0 px-1.5 text-[10px] font-normal text-emerald-600">开放</Badge>}
         </span>
         <span className="mt-1 text-xs text-muted-foreground">
           {q.sourceType === 'repo' ? '题单范围 · 循环复习' : '标签范围 · 循环复习'}

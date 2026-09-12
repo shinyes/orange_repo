@@ -121,13 +121,22 @@ func newRevealEnv(t *testing.T) *revealEnv {
 		t.Fatal(err)
 	}
 
-	// 阶段 3：回主库写空间成员
+	// 阶段 3：回主库写空间成员 + 可见名单
+	// 可见性语义已改为「已开放 AND 已分配到可见名单」（缺一不可）：两个训练虽 is_public=true，
+	// 仍须把 stu1 写进 space_training_visible，否则成员连详情/作答入口都进不去（404），
+	// 本文件考察的「答案揭示时机」就无从验证。授予名单只是让 fixture 满足新语义，不改判定预期。
 	main2, err := store.Open(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = main2.Close() })
 	if err := main2.SetSpaceMembers(spaceID, []int64{stuID}); err != nil {
+		t.Fatal(err)
+	}
+	if err := main2.SetVisibleUsers("space_training_visible", env.limited, []int64{stuID}); err != nil {
+		t.Fatal(err)
+	}
+	if err := main2.SetVisibleUsers("space_training_visible", env.unlimited, []int64{stuID}); err != nil {
 		t.Fatal(err)
 	}
 

@@ -59,7 +59,7 @@ func newPortalEnv(t *testing.T) (*fiber.App, map[string]int64, int64, string) {
 		}
 		ids[fmt.Sprintf("p%d", i)] = id
 	}
-	trID, err := main.CreateSpaceTraining(spaceID, "单元训练", "", nil, 2, false)
+	trID, err := main.CreateSpaceTraining(spaceID, "单元训练", "", nil, 2, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,13 +68,13 @@ func newPortalEnv(t *testing.T) (*fiber.App, map[string]int64, int64, string) {
 	_, _ = main.AddSpaceChapterItems(ch1, []int64{ids["p1"]})
 	ch2, _ := main.CreateSpaceChapter(trID, "判断")
 	_, _ = main.AddSpaceChapterItems(ch2, []int64{ids["p2"]})
-	prID, err := main.CreateSpacePractice(spaceID, "期中卷", "", nil, false)
+	prID, err := main.CreateSpacePractice(spaceID, "期中卷", "", nil, true)
 	if err != nil {
 		t.Fatal(err)
 	}
 	ids["practice"] = prID
 	_ = main.AddSpacePracticeItems(prID, []int64{ids["p1"], ids["p2"]})
-	qID, err := main.CreateSpaceQuiz(spaceID, "每日刷题", nil, "tags", "", 0, 0, false)
+	qID, err := main.CreateSpaceQuiz(spaceID, "每日刷题", nil, "tags", "", 0, 0, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,7 +104,9 @@ func newPortalEnv(t *testing.T) (*fiber.App, map[string]int64, int64, string) {
 	if err := main2.SetSpaceMembers(spaceID, []int64{stuID}); err != nil {
 		t.Fatal(err)
 	}
-	// 可见成员授权：默认无成员可见——测试为 stu1 分配训练/练习/刷题（与产品语义一致）
+	// 可见性语义 = 「已开放(is_public=1) AND 已分配(在可见名单)」（缺一不可，管理员恒可见）。
+	// 故 fixture 两个条件都要满足：项目建为 is_public=true，并为 stu1 分配训练/练习/刷题名单。
+	// 「仅分配未开放」「仅开放未分配」两种半边情形不可见，由 space_visibility_*_test.go 覆盖。
 	if err := main2.SetVisibleUsers("space_training_visible", ids["training"], []int64{stuID}); err != nil {
 		t.Fatal(err)
 	}

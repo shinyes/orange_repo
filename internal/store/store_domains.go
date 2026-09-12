@@ -359,7 +359,7 @@ func (s *Store) migrateSpaceContent() error {
 			description TEXT NOT NULL DEFAULT '',
 			tags_json TEXT NOT NULL DEFAULT '[]',
 			max_attempts INTEGER NOT NULL DEFAULT 3, -- 训练级客观题统一选择上限
-			is_public INTEGER NOT NULL DEFAULT 0, -- 1=空间全体成员可见（免可见名单）；0=仅可见名单（默认）
+			is_public INTEGER NOT NULL DEFAULT 0, -- 1=已开放；成员可见需「已开放 + 在可见名单」（缺一不可）
 			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 		);`,
 		`CREATE TABLE IF NOT EXISTS space_training_chapters (
@@ -381,7 +381,7 @@ func (s *Store) migrateSpaceContent() error {
 			title TEXT NOT NULL,
 			description TEXT NOT NULL DEFAULT '',
 			tags_json TEXT NOT NULL DEFAULT '[]',
-			is_public INTEGER NOT NULL DEFAULT 0, -- 1=空间全体成员可见（免可见名单）；0=仅可见名单（默认）
+			is_public INTEGER NOT NULL DEFAULT 0, -- 1=已开放；成员可见需「已开放 + 在可见名单」（缺一不可）
 			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 		);`,
 		`CREATE TABLE IF NOT EXISTS space_practice_items (
@@ -401,7 +401,7 @@ func (s *Store) migrateSpaceContent() error {
 			repo_kind TEXT NOT NULL DEFAULT '',
 			repo_id INTEGER NOT NULL DEFAULT 0,
 			round_size INTEGER NOT NULL DEFAULT 0,
-			is_public INTEGER NOT NULL DEFAULT 0, -- 1=空间全体成员可见（免可见名单）；0=仅可见名单（默认）
+			is_public INTEGER NOT NULL DEFAULT 0, -- 1=已开放；成员可见需「已开放 + 在可见名单」（缺一不可）
 			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 		);`,
 		// ---------- 空间内容可见成员授权（空=默认无成员可见；管理员始终可见） ----------

@@ -170,17 +170,17 @@ func (r *RepoReader) DomainSpaceIDs(domainID int64) ([]int64, error) {
 // ---------- 空间训练/练习/刷题结构（门户只读） ----------
 
 // visibleClause 可见性过滤 SQL 片段（userID<=0 = 管理员不过滤）。
-// member（userID>0）：is_public=1（空间全体成员可见，公开项）直接放行；
-// 否则须命中可见名单 v。调用方已先行校验空间成员身份（resolveSpaceCtx），
-// 故此处无需重复成员判定。
+// member（userID>0）：须**同时**满足「已开放」(is_public=1) 与「已分配到可见名单」；
+// 仅开放未分配、或仅分配未开放，都对成员不可见（管理员恒可见）。
+// 调用方已先行校验空间成员身份（resolveSpaceCtx），故此处无需重复成员判定。
 func visibleClause(table, kind, alias string, userID int64) string {
 	if userID <= 0 {
 		return ""
 	}
-	return fmt.Sprintf(" AND (is_public=1 OR EXISTS(SELECT 1 FROM %s v WHERE v.%s_id=%s.id AND v.user_id=%d))", table, kind, alias, userID)
+	return fmt.Sprintf(" AND (is_public=1 AND EXISTS(SELECT 1 FROM %s v WHERE v.%s_id=%s.id AND v.user_id=%d))", table, kind, alias, userID)
 }
 
-// ListSpaceTrainingsBrief 空间训练列表（含题量；member：公开项+已分配可见的）。
+// ListSpaceTrainingsBrief 空间训练列表（含题量；member：仅「已开放且已分配」的项目）。
 func (r *RepoReader) ListSpaceTrainingsBrief(spaceID, userID int64) ([]SpaceTrainingBrief, error) {
 	rows, err := r.DB.Query(`SELECT t.id,t.uuid,t.space_id,t.title,t.description,t.tags_json,t.max_attempts,t.is_public,
 		(SELECT COUNT(*) FROM space_training_items i JOIN space_training_chapters c ON i.chapter_id=c.id WHERE c.training_id=t.id)
@@ -205,7 +205,7 @@ func (r *RepoReader) ListSpaceTrainingsBrief(spaceID, userID int64) ([]SpaceTrai
 }
 
 // GetSpaceTrainingBrief 单训练（含章节+条目题目类型/uuid——作答限次判定）。
-// userID>0 时校验可见性（member：公开项或已分配；否则 ErrNotFound）。
+// userID>0 时校验可见性（member：已开放且已分配；否则 ErrNotFound）。
 func (r *RepoReader) GetSpaceTrainingBrief(trainingID, userID int64) (*SpaceTrainingBrief, []SpaceTrainingChapter, error) {
 	var b SpaceTrainingBrief
 	var tags string
@@ -282,7 +282,7 @@ func (r *RepoReader) spaceTrainingItems(chapterID int64) ([]SpaceTrainingItem, e
 	return out, nil
 }
 
-// ListSpacePracticesBrief 空间练习列表（member：公开项+已分配的）。
+// ListSpacePracticesBrief 空间练习列表（member：已开放且已分配的）。
 func (r *RepoReader) ListSpacePracticesBrief(spaceID, userID int64) ([]SpacePracticeBrief, error) {
 	rows, err := r.DB.Query(`SELECT p.id,p.uuid,p.space_id,p.title,p.description,p.tags_json,p.is_public,
 		(SELECT COUNT(*) FROM space_practice_items i WHERE i.practice_id=p.id)
@@ -306,7 +306,7 @@ func (r *RepoReader) ListSpacePracticesBrief(spaceID, userID int64) ([]SpacePrac
 	return nonNilSlice(out), rows.Err()
 }
 
-// GetSpacePracticeBrief 单练习（含条目；userID>0 校验可见性：公开项或已分配）。
+// GetSpacePracticeBrief 单练习（含条目；userID>0 校验可见性：已开放且已分配）。
 func (r *RepoReader) GetSpacePracticeBrief(practiceID, userID int64) (*SpacePracticeBrief, []SpacePracticeItem, error) {
 	var b SpacePracticeBrief
 	var tags string
@@ -358,7 +358,7 @@ func (r *RepoReader) GetSpacePracticeBrief(practiceID, userID int64) (*SpacePrac
 	return &b, items, nil
 }
 
-// ListSpaceQuizzesBrief 空间刷题项目列表（member：公开项+已分配的）。
+// ListSpaceQuizzesBrief 空间刷题项目列表（member：已开放且已分配的）。
 func (r *RepoReader) ListSpaceQuizzesBrief(spaceID, userID int64) ([]SpaceQuizBrief, error) {
 	rows, err := r.DB.Query(`SELECT id,uuid,space_id,title,tags_json,source_type,repo_kind,repo_id,round_size,is_public
 		FROM space_quizzes WHERE space_id=?`+visibleClause("space_quiz_visible", "quiz", "space_quizzes", userID)+` ORDER BY id`, spaceID)
@@ -382,71 +382,42 @@ func (r *RepoReader) ListSpaceQuizzesBrief(spaceID, userID int64) ([]SpaceQuizBr
 }
 
 // QuizVisibleForUser 该用户是否可见某刷题项目（作答流校验；userID<=0 管理员恒可见）。
-// is_public=1 → 空间全体成员可见（空间成员身份由调用方 resolveSpaceCtx 校验）；
-// 否则查可见名单。
+// 须同时满足：项目已开放(is_public=1) 且 该用户在可见名单中。
+// （空间成员身份由调用方 resolveSpaceCtx 校验。）
+//
+// 注：训练/练习的作答入口用 GetSpaceTrainingBrief / GetSpacePracticeBrief（内部带
+// visibleClause）判定可见性，故这里只保留刷题所需的入口——原先成对存在的
+// Training/PracticeVisibleForUser 无任何生产调用，已删除，避免"看似有第二道防线"。
 func (r *RepoReader) QuizVisibleForUser(quizID, userID int64) (bool, error) {
-	if userID <= 0 {
-		return true, nil
-	}
+	return visibleForUser(r, "space_quizzes", "space_quiz_visible", "quiz", quizID, userID)
+}
+
+// visibleForUser 统一的「开放 + 分配」双重判定：
+// 项目不存在→false；管理员（userID<=0）→true（存在的项目恒可见）；
+// 未开放→false；已开放但未分配→false。
+// 注意：存在性判定先于管理员短路——不存在的 id 对任何角色都是 false，
+// 避免「管理员对不存在的项目也可见」这种与各入口 404 口径不一致的行为。
+func visibleForUser(r *RepoReader, itemTable, visibleTable, kind string, itemID, userID int64) (bool, error) {
 	var isPublic int
-	err := r.DB.QueryRow(`SELECT is_public FROM space_quizzes WHERE id=?`, quizID).Scan(&isPublic)
+	err := r.DB.QueryRow(`SELECT is_public FROM `+itemTable+` WHERE id=?`, itemID).Scan(&isPublic)
 	if errors.Is(err, sql.ErrNoRows) {
 		return false, nil
 	}
 	if err != nil {
 		return false, err
 	}
-	if isPublic == 1 {
+	if userID <= 0 {
 		return true, nil
 	}
+	if isPublic != 1 {
+		return false, nil
+	}
 	var n int
-	err = r.DB.QueryRow(`SELECT COUNT(1) FROM space_quiz_visible v WHERE v.quiz_id=? AND v.user_id=?`, quizID, userID).Scan(&n)
+	err = r.DB.QueryRow(`SELECT COUNT(1) FROM `+visibleTable+` v WHERE v.`+kind+`_id=? AND v.user_id=?`, itemID, userID).Scan(&n)
 	if err != nil {
 		return false, err
 	}
 	return n > 0, nil
-}
-
-// TrainingVisibleForUser / PracticeVisibleForUser 作答流校验（管理员恒可见；
-// is_public=1 → 空间全体成员可见，否则查可见名单）。
-func (r *RepoReader) TrainingVisibleForUser(trainingID, userID int64) (bool, error) {
-	if userID <= 0 {
-		return true, nil
-	}
-	var isPublic int
-	err := r.DB.QueryRow(`SELECT is_public FROM space_trainings WHERE id=?`, trainingID).Scan(&isPublic)
-	if errors.Is(err, sql.ErrNoRows) {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	if isPublic == 1 {
-		return true, nil
-	}
-	var n int
-	err = r.DB.QueryRow(`SELECT COUNT(1) FROM space_training_visible v WHERE v.training_id=? AND v.user_id=?`, trainingID, userID).Scan(&n)
-	return n > 0, err
-}
-
-func (r *RepoReader) PracticeVisibleForUser(practiceID, userID int64) (bool, error) {
-	if userID <= 0 {
-		return true, nil
-	}
-	var isPublic int
-	err := r.DB.QueryRow(`SELECT is_public FROM space_practices WHERE id=?`, practiceID).Scan(&isPublic)
-	if errors.Is(err, sql.ErrNoRows) {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	if isPublic == 1 {
-		return true, nil
-	}
-	var n int
-	err = r.DB.QueryRow(`SELECT COUNT(1) FROM space_practice_visible v WHERE v.practice_id=? AND v.user_id=?`, practiceID, userID).Scan(&n)
-	return n > 0, err
 }
 
 // decodeRepoTags 解析主库 tags_json（与 store.decodeTags 等价，避免跨包私有依赖）。
