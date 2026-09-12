@@ -451,11 +451,12 @@ function ProgrammingSolve({ problem, backTo, review, practiceId }: { problem: Oj
             )}
             <Select value={lang} onValueChange={(v) => switchLang(v as CodeLang)} disabled={review}>
               <SelectTrigger className="h-8 w-[130px] text-xs">
-                <SelectValue />
+                {/* 显示选中项的语言名（与下方选项同源文案：Python3 / C++） */}
+                <SelectValue>{(v) => langLabel(String(v ?? lang))}</SelectValue>
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="python">Python 3</SelectItem>
-                <SelectItem value="cpp">C++ (g++ 11)</SelectItem>
+                <SelectItem value="python">{langLabel('python')}</SelectItem>
+                <SelectItem value="cpp">{langLabel('cpp')}</SelectItem>
               </SelectContent>
             </Select>
             <Button size="sm" className="h-8 bg-emerald-600 text-xs hover:bg-emerald-700" disabled={!!busyAction || review} title={review ? '回顾模式不可运行' : undefined} onClick={() => setShowCustomInput(true)}>

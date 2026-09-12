@@ -38,11 +38,15 @@ export function isAcceptedVerdict(v: string): boolean {
   return v === 'AC' || v === 'OK'
 }
 
+// 语言显示名（选择器选项与选中后显示、测评记录等处统一用同一份文案，避免"选项与显示不一致"）。
+export const LANG_LABELS: Record<string, string> = {
+  python: 'Python3',
+  cpp: 'C++',
+}
+
 // 语言标签。
 export function langLabel(lang: string): string {
-  if (lang === 'cpp') return 'C++'
-  if (lang === 'python') return 'Python 3'
-  return lang
+  return LANG_LABELS[lang] ?? lang
 }
 
 // 题目状态徽标（编程/客观共用）。

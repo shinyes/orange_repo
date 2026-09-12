@@ -30,6 +30,7 @@ import {
 import { cn } from '@/lib/utils'
 import { cloudDraftIsNewer, genericStarter, localDraftTime, markLocalDraftTime, resolveStarter, saveDraftDebounced, syncLocalDraftTime, useCloudDraft, useSpaceDefaultLang } from '@/lib/use-programming-workspace'
 import { CONSOLE_DEFAULT_H, useConsoleResize } from '@/hooks/use-console-resize'
+import { langLabel } from '@/pages/oj/oj-utils'
 
 const DRAFT_PREFIX = 'orangeoj:draft:'
 
@@ -222,11 +223,12 @@ export function TrainingProgrammingCard({ problemId, trainingId, solved, onSolve
       <div className="mb-2 flex flex-wrap items-center gap-1.5">
         <Select value={lang} onValueChange={(v) => switchLang(v as CodeLang)}>
           <SelectTrigger className="h-8 w-[130px] text-xs">
-            <SelectValue />
+            {/* 显示选中项的语言名（与下方选项同源文案：Python3 / C++） */}
+            <SelectValue>{(v) => langLabel(String(v ?? lang))}</SelectValue>
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="python">Python 3</SelectItem>
-            <SelectItem value="cpp">C++ (g++ 11)</SelectItem>
+            <SelectItem value="python">{langLabel('python')}</SelectItem>
+            <SelectItem value="cpp">{langLabel('cpp')}</SelectItem>
           </SelectContent>
         </Select>
         <Button size="sm" variant="outline" className="h-8 text-xs" disabled={!!busy} onClick={() => setShowCustomInput(true)}>
@@ -327,9 +329,8 @@ function verdictText(v: string): string {
   return map[v] ?? v
 }
 
-function langText(lang: string): string {
-  return lang === 'cpp' ? 'C++' : lang === 'python' ? 'Python 3' : lang
-}
+// 语言显示名统一取自 oj-utils（与语言选择器选项同源文案：Python3 / C++）
+const langText = langLabel
 
 function submitTypeText(t: string) {
   return t === 'run' ? '运行' : t === 'test' ? '测试' : t === 'submit' ? '提交' : '客观题'
