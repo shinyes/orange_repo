@@ -38,7 +38,7 @@ services:
       #   · 必须挂在子域的根路径，不能用路径前缀（如 /scratch-app/）：上游编辑器 webpack publicPath
       #     硬编码为 "/"，运行期以绝对路径取 /chunks/* 与 /static/blocks-media/*，挂前缀下必然 404
       #   · 只配 ORANGEOJ_SCRATCH_URL 不配内部地址 = 子域直连容器（自行暴露端口 + 证书）
-      #   · 两者都不配 = 未部署（Scratch 空间页显示提示，其余功能不受影响）
+      #   · 两者都不配（或只配内部地址）= 未部署：服务照常启动，Scratch 空间页显示提示，其余功能不受影响
       # 反向代理侧：把该子域解析到同一台机器并转发到主服务的 8080（主站会按 Host 分流给容器）。
       ORANGEOJ_SCRATCH_URL: "${ORANGEOJ_SCRATCH_URL:-}"
       ORANGEOJ_SCRATCH_INTERNAL_URL: "http://orangescratch:80"

@@ -123,12 +123,49 @@ func TestScratchContainerProxiedByHost(t *testing.T) {
 		t.Fatalf("仅配公开地址时不应反代，实际 body=%.60q", string(b))
 	}
 
-	// ⑦ 配了内部地址但没给公开地址 → 启动即报错（避免"配了却不生效"的静默失败）
-	if _, err := app.Open(app.Config{
+	// ⑦ 配了内部地址但没给公开地址 → **只告警不拦启动**：服务照常可用，Scratch 视为未部署。
+	// （曾经把这种情况当硬错误，直接把线上服务拦死；可选功能配置不全不应导致整站起不来。）
+	partial, err := app.Open(app.Config{
 		DataDir:            t.TempDir(),
 		WebDist:            web,
 		ScratchInternalURL: container.URL,
-	}); err == nil {
-		t.Fatal("只配内部地址时应启动失败（缺少公开地址，主站无法按 Host 反代）")
+	})
+	if err != nil {
+		t.Fatalf("只配内部地址时应正常启动（仅告警），实际报错：%v", err)
 	}
+	defer partial.Close()
+	if code, body := getFrom(partial, "orangeoj.test.example", "/api/config"); code != http.StatusOK || strings.Contains(body, `"scratchUrl":"http`) {
+		t.Fatalf("未配公开地址时不应下发 scratchUrl：code=%d body=%.120q", code, body)
+	}
+	if code, body := getFrom(partial, scratchHost, "/"); code != http.StatusOK || !strings.Contains(body, "main-site-spa") {
+		t.Fatalf("未配公开地址时不应反代：code=%d body=%.60q", code, body)
+	}
+
+	// ⑧ 内部地址非法 → 同样只告警，不影响启动
+	invalidTarget, err := app.Open(app.Config{
+		DataDir:            t.TempDir(),
+		WebDist:            web,
+		ScratchURL:         "https://" + scratchHost,
+		ScratchInternalURL: "://bad-url",
+	})
+	if err != nil {
+		t.Fatalf("内部地址非法时应正常启动（仅告警），实际报错：%v", err)
+	}
+	defer invalidTarget.Close()
+	if code, body := getFrom(invalidTarget, scratchHost, "/"); code != http.StatusOK || !strings.Contains(body, "main-site-spa") {
+		t.Fatalf("内部地址非法时不应反代：code=%d body=%.60q", code, body)
+	}
+}
+
+// getFrom 对指定 App 发一次带 Host 的请求（与上面的 get 同语义，便于对多个 App 断言）。
+func getFrom(a *app.App, host, path string) (int, string) {
+	req := httptest.NewRequest(http.MethodGet, path, nil)
+	req.Host = host
+	resp, err := a.Fiber.Test(req, 5000)
+	if err != nil {
+		return 0, err.Error()
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	return resp.StatusCode, string(body)
 }

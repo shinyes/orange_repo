@@ -35,8 +35,10 @@ type Config struct {
 	// 空 = 未部署：Scratch 空间页显示"未部署"提示。例：https://scratch.example.com
 	ScratchURL string
 	// ScratchInternalURL Scratch 容器的**内部**地址（如 http://orangescratch:80）。
-	// 设置后主站在 /scratch-app/ 反向代理它：容器无需对外暴露端口，浏览器同源访问，
-	// 也不必为它单独准备子域与证书。与 ScratchURL 同时设置时以本项为准（代理模式）。
+	// 与 ScratchURL（公开子域）同时设置时，主站按 Host 命中该子域并在**根路径**反代到容器：
+	// 容器无需对外暴露端口，也无需为它单独准备证书。
+	// 只配本项而缺 ScratchURL 时：**仅告警并忽略**（Scratch 视为未部署），不影响服务启动——
+	// Scratch 是可选功能，配置不全不应导致整站起不来。
 	ScratchInternalURL string
 	JudgeRunner        judge.Runner // 判题 runner（nil=禁用判题队列）
 	JudgeWorkers       int
@@ -61,27 +63,33 @@ func Open(cfg Config) (*App, error) {
 		uploadsDir = filepath.Join(cfg.DataDir, "uploads")
 	}
 
-	// 0) Scratch 反代配置先校验（在打开数据库之前）：配置不合法时直接失败，
-	//    避免"已打开库才发现配置错误"导致句柄泄漏（测试曾因此清理不掉临时目录）。
+	// 0) Scratch 反代配置先解析（在打开数据库之前，避免配置错误时漏掉已打开的库句柄）。
+	//
+	// 配置不全时**只告警不拦启动**：Scratch 是可选功能，配错了应该退化为"未部署"，
+	// 而不是让整个服务起不来（曾把"只配内部地址"当硬错误，直接把线上服务拦死过一次）。
 	scratchURL := strings.TrimRight(strings.TrimSpace(cfg.ScratchURL), "/")
 	internal := strings.TrimRight(strings.TrimSpace(cfg.ScratchInternalURL), "/")
 	var scratchTarget *url.URL
 	var scratchHost string
 	if internal != "" {
-		target, err := url.Parse(internal)
-		if err != nil || target.Host == "" {
-			return nil, fmt.Errorf("scratch internal url 不合法: %q", internal)
+		switch {
+		case scratchURL == "":
+			warnf("已配置 ORANGEOJ_SCRATCH_INTERNAL_URL 但缺少公开地址 ORANGEOJ_SCRATCH_URL；" +
+				"已忽略内部地址，Scratch 视为未部署（其余功能不受影响）。" +
+				"要启用请补上公开子域，例如 ORANGEOJ_SCRATCH_URL=https://scratch.example.com")
+		default:
+			target, err := url.Parse(internal)
+			public, perr := url.Parse(scratchURL)
+			switch {
+			case err != nil || target.Host == "":
+				warnf("ORANGEOJ_SCRATCH_INTERNAL_URL 不合法（%q）：已忽略，Scratch 视为未部署", internal)
+			case perr != nil || public.Host == "":
+				warnf("ORANGEOJ_SCRATCH_URL 不合法（%q）：已忽略，Scratch 视为未部署", scratchURL)
+			default:
+				scratchTarget = target
+				scratchHost = hostOnly(public.Host)
+			}
 		}
-		if scratchURL == "" {
-			return nil, fmt.Errorf("配置了 scratch 内部地址时必须同时给出公开地址（-scratch-url），" +
-				"例如 https://scratch.example.com（主站按该域名反代）")
-		}
-		public, err := url.Parse(scratchURL)
-		if err != nil || public.Host == "" {
-			return nil, fmt.Errorf("scratch 公开地址不合法: %q", scratchURL)
-		}
-		scratchTarget = target
-		scratchHost = hostOnly(public.Host)
 	}
 
 	// 1) 主库打开（store schema：题库/域/空间结构表）。
@@ -208,4 +216,9 @@ func hostOnly(host string) string {
 		return host[:i]
 	}
 	return host
+}
+
+// warnf 输出配置告警（不影响启动）。前缀与主程序日志风格一致，便于在 docker logs 里定位。
+func warnf(format string, args ...any) {
+	fmt.Fprintf(os.Stderr, "[WARN] "+format+"\n", args...)
 }
