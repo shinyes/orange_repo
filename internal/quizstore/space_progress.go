@@ -144,6 +144,8 @@ type PracticeSubmission struct {
 	UserID           int64     `json:"userId"`
 	ObjectiveCorrect int       `json:"objectiveCorrect"`
 	CreatedAt        time.Time `json:"createdAt"` // RFC3339（与判题 submissions 同格式，供前端按时点过滤）
+	// 管理端「全部成员」视图回带（成员查自己的记录时不填）
+	UserName string `json:"userName,omitempty"`
 }
 
 // SavePracticeSubmission 保存一次交卷（answersJSON 为快照 JSON，元素 {problemId,correct,uuid}），
@@ -183,8 +185,45 @@ func (s *Store) SavePracticeSubmission(practiceID, userID int64, answersJSON str
 
 // ListPracticeSubmissions 练习的提交记录（按 id 倒序；供结果回顾）。
 func (s *Store) ListPracticeSubmissions(practiceID, userID int64) ([]PracticeSubmission, error) {
-	rows, err := s.DB.Query(`SELECT id,practice_id,user_id,objective_correct,created_at
-		FROM space_practice_submissions WHERE practice_id=? AND user_id=? ORDER BY id DESC`, practiceID, userID)
+	return s.listPracticeSubmissions(practiceID, userID, false)
+}
+
+// ListPracticeSubmissionsAllUsers 该练习全部成员的交卷记录（管理端查看，倒序，上限 200）。
+// 带出提交者用户名（LEFT JOIN users；与 quizstore 同库）。权限由调用方（handler）确认。
+func (s *Store) ListPracticeSubmissionsAllUsers(practiceID int64) ([]PracticeSubmission, error) {
+	return s.listPracticeSubmissions(practiceID, 0, true)
+}
+
+// PracticeSubmissionBelongsTo 该交卷记录是否属于该练习。
+// 管理端查看他人答卷时的归属校验：只能读本练习的记录，避免拿别的练习的 id 越权。
+func (s *Store) PracticeSubmissionBelongsTo(submissionID, practiceID int64) (bool, error) {
+	var n int
+	err := s.DB.QueryRow(`SELECT COUNT(1) FROM space_practice_submissions WHERE id=? AND practice_id=?`,
+		submissionID, practiceID).Scan(&n)
+	return n > 0, err
+}
+
+// listPracticeSubmissions allUsers=true 时忽略 userID（取该练习全部成员）并 JOIN 用户名。
+func (s *Store) listPracticeSubmissions(practiceID, userID int64, allUsers bool) ([]PracticeSubmission, error) {
+	q := `SELECT s.id,s.practice_id,s.user_id,s.objective_correct,s.created_at`
+	if allUsers {
+		q += `,COALESCE(u.username,'')`
+	}
+	q += ` FROM space_practice_submissions s`
+	if allUsers {
+		q += ` LEFT JOIN users u ON u.id=s.user_id`
+	}
+	q += ` WHERE s.practice_id=?`
+	args := []any{practiceID}
+	if !allUsers {
+		q += ` AND s.user_id=?`
+		args = append(args, userID)
+	}
+	q += ` ORDER BY s.id DESC`
+	if allUsers {
+		q += ` LIMIT 200`
+	}
+	rows, err := s.DB.Query(q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -193,19 +232,42 @@ func (s *Store) ListPracticeSubmissions(practiceID, userID int64) ([]PracticeSub
 	for rows.Next() {
 		var sub PracticeSubmission
 		var rawCreated string
-		if err := rows.Scan(&sub.ID, &sub.PracticeID, &sub.UserID, &sub.ObjectiveCorrect, &rawCreated); err != nil {
+		if allUsers {
+			if err := rows.Scan(&sub.ID, &sub.PracticeID, &sub.UserID, &sub.ObjectiveCorrect, &rawCreated, &sub.UserName); err != nil {
+				return nil, err
+			}
+		} else if err := rows.Scan(&sub.ID, &sub.PracticeID, &sub.UserID, &sub.ObjectiveCorrect, &rawCreated); err != nil {
 			return nil, err
 		}
-		// created_at 兼容两种存量格式：SQLite CURRENT_TIMESTAMP("YYYY-MM-DD HH:MM:SS" UTC)
-		// 与早期 ISO("YYYY-MM-DDTHH:MM:SSZ")——统一转 time.Time（RFC3339 输出）
-		if t, err := time.Parse(time.RFC3339, rawCreated); err == nil {
-			sub.CreatedAt = t
-		} else if t, err := time.ParseInLocation("2006-01-02 15:04:05", rawCreated, time.UTC); err == nil {
-			sub.CreatedAt = t
-		}
+		sub.CreatedAt = parsePracticeTime(rawCreated)
 		out = append(out, sub)
 	}
 	return nonNilSlice(out), rows.Err()
+}
+
+// parsePracticeTime 兼容两种存量格式：SQLite CURRENT_TIMESTAMP("YYYY-MM-DD HH:MM:SS" UTC)
+// 与早期 ISO("YYYY-MM-DDTHH:MM:SSZ")；解析失败返回零值。
+func parsePracticeTime(raw string) time.Time {
+	if t, err := time.Parse(time.RFC3339, raw); err == nil {
+		return t
+	}
+	if t, err := time.ParseInLocation("2006-01-02 15:04:05", raw, time.UTC); err == nil {
+		return t
+	}
+	return time.Time{}
+}
+
+// GetPracticeSubmissionMeta 取交卷记录的提交时间（管理端查看他人答卷时用于展示；不存在返回 ErrNotFound）。
+func (s *Store) GetPracticeSubmissionMeta(submissionID int64) (time.Time, error) {
+	var raw string
+	err := s.DB.QueryRow(`SELECT created_at FROM space_practice_submissions WHERE id=?`, submissionID).Scan(&raw)
+	if errors.Is(err, sql.ErrNoRows) {
+		return time.Time{}, ErrNotFound
+	}
+	if err != nil {
+		return time.Time{}, err
+	}
+	return parsePracticeTime(raw), nil
 }
 
 // GetPracticeSubmission 取交卷快照（不存在返回 ErrNotFound）。

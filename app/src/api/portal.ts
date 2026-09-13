@@ -69,8 +69,11 @@ export const portalApi = {
       `/api/portal/space/${spaceId}/practice/${practiceId}/submit`,
       json({ method: 'POST', body: JSON.stringify({ answers }) }),
     ),
-  portalPracticeSubmissions: (spaceId: number | string, practiceId: number | string) =>
-    req<{ submissions: PracticeSubmission[] }>(`/api/portal/space/${spaceId}/practice/${practiceId}/submissions`),
+  /** 练习交卷记录；scope=all 时（仅管理员生效）返回全部成员，含 userName */
+  portalPracticeSubmissions: (spaceId: number | string, practiceId: number | string, scope?: 'all') =>
+    req<{ submissions: PracticeSubmission[]; scope?: string }>(
+      `/api/portal/space/${spaceId}/practice/${practiceId}/submissions${scope === 'all' ? '?scope=all' : ''}`,
+    ),
   portalPracticeSubmissionDetail: (spaceId: number | string, practiceId: number | string, submissionId: number | string) =>
     req<PracticeRecordDetail>(`/api/portal/space/${spaceId}/practice/${practiceId}/submissions/${submissionId}`),
   // 整卷作答云端草稿（换设备续答）

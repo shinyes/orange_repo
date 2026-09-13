@@ -162,6 +162,8 @@ export interface PracticeSubmission {
   userId: number
   objectiveCorrect: number
   createdAt: string
+  /** 管理端「全部成员」视图回带：提交者用户名 */
+  userName?: string
 }
 
 /** 答题卡回看：一次交卷的逐题明细（练习全卷条目） */

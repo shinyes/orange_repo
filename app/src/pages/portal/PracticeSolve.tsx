@@ -13,6 +13,7 @@ import type {
 } from '@/api/types'
 import { OPTION_LABELS } from '@/components/portal/objective'
 import { Button } from '@/components/ui/button'
+import { usePortalSession } from '@/pages/portal/portal-context'
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
   AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -827,41 +828,70 @@ function correctAnswerText(r: PracticeResultItem): string {
 // ---------- 交卷历史 ----------
 
 // 左栏「我的提交记录」卡（最近记录；超过 3 条后区域内滚动）
-function HistoryCard({ sid, pid }: { sid: number; pid: number }) {
+// 练习交卷记录查询：管理员可切「全部成员」（含提交者用户名），成员只看自己。
+// 左栏快捷卡与「全部提交记录」弹窗共用，避免两处实现漂移。
+function usePracticeSubmissions(sid: number, pid: number, isAdmin: boolean) {
+  const [scope, setScope] = useState<'self' | 'all'>('all')
+  const effective: 'self' | 'all' = isAdmin ? scope : 'self'
   const q = useQuery({
-    queryKey: ['portal-practice-submissions', sid, pid],
-    queryFn: () => api.portalPracticeSubmissions(sid, pid),
+    queryKey: ['portal-practice-submissions', sid, pid, effective],
+    queryFn: () => api.portalPracticeSubmissions(sid, pid, effective === 'all' ? 'all' : undefined),
   })
-  const list = q.data?.submissions ?? []
+  return { q, list: q.data?.submissions ?? [], scope: effective, setScope, showUser: effective === 'all' }
+}
+
+/** 管理端「全部成员 / 仅我的」切换（成员不渲染）。 */
+function ScopeToggle({ scope, onChange }: { scope: 'self' | 'all'; onChange: (s: 'self' | 'all') => void }) {
+  return (
+    <div className="flex gap-1">
+      <Button size="xs" variant={scope === 'all' ? 'default' : 'outline'} onClick={() => onChange('all')}>
+        全部成员
+      </Button>
+      <Button size="xs" variant={scope === 'self' ? 'default' : 'outline'} onClick={() => onChange('self')}>
+        仅我的
+      </Button>
+    </div>
+  )
+}
+
+function HistoryCard({ sid, pid }: { sid: number; pid: number }) {
+  const isAdmin = usePortalSession().user.role !== 'member'
+  const { q, list, scope, setScope, showUser } = usePracticeSubmissions(sid, pid, isAdmin)
   return (
     <div>
       <div className="flex items-center justify-between gap-2">
-        <span className="text-xs font-bold text-muted-foreground">我的提交记录</span>
+        <span className="text-xs font-bold text-muted-foreground">{showUser ? '提交记录' : '我的提交记录'}</span>
         {list.length > 0 && <span className="text-[10px] tabular-nums text-muted-foreground/80">共 {list.length} 次</span>}
       </div>
+      {isAdmin && <div className="mt-1.5"><ScopeToggle scope={scope} onChange={setScope} /></div>}
       {q.isLoading && <p className="py-2.5 text-center text-[11px] text-muted-foreground">加载中…</p>}
       {!q.isLoading && list.length === 0 && (
         <p className="py-2.5 text-[11px] text-muted-foreground">暂无提交记录，交卷后显示在此</p>
       )}
       {list.length > 0 && (
-        <>
-          <div className={cn('mt-1', list.length > 3 && 'max-h-[96px] overflow-y-auto pr-0.5')}>
-            {list.map((s) => (
-              <Link
-                key={s.id}
-                to={`/s/${sid}/practice/${pid}/record/${s.id}`}
-                title="点击查看该次答题卡"
-                className="flex h-8 items-center gap-2 rounded-md py-1.5 pr-1 text-xs transition-colors hover:bg-orange-50/60"
-              >
-                <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-orange-50 text-[10px] font-bold tabular-nums text-orange-600">
-                  {s.objectiveCorrect}
-                </span>
-                <span className="min-w-0 truncate text-muted-foreground">答对 {s.objectiveCorrect} 题</span>
-                <span className="ml-auto shrink-0 tabular-nums text-muted-foreground/80">{formatTime(s.createdAt)}</span>
-              </Link>
-            ))}
-          </div>
-        </>
+        <div className={cn('mt-1', list.length > 3 && 'max-h-[96px] overflow-y-auto pr-0.5')}>
+          {list.map((s) => (
+            <Link
+              key={s.id}
+              to={`/s/${sid}/practice/${pid}/record/${s.id}`}
+              title="点击查看该次答题卡"
+              className="flex h-8 items-center gap-2 rounded-md py-1.5 pr-1 text-xs transition-colors hover:bg-orange-50/60"
+            >
+              <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-orange-50 text-[10px] font-bold tabular-nums text-orange-600">
+                {s.objectiveCorrect}
+              </span>
+              <span className="min-w-0 truncate text-muted-foreground">
+                {showUser && (
+                  <span className="mr-1 rounded bg-muted px-1 py-0.5 text-[10px] text-foreground">
+                    {s.userName || `用户 #${s.userId}`}
+                  </span>
+                )}
+                答对 {s.objectiveCorrect} 题
+              </span>
+              <span className="ml-auto shrink-0 tabular-nums text-muted-foreground/80">{formatTime(s.createdAt)}</span>
+            </Link>
+          ))}
+        </div>
       )}
     </div>
   )
@@ -869,16 +899,14 @@ function HistoryCard({ sid, pid }: { sid: number; pid: number }) {
 
 // 全部提交记录（Dialog 全量列表；左栏快捷卡 + 顶栏「全部提交记录」共用）
 function PracticeHistoryDialog({ sid, pid, open, onClose }: { sid: number; pid: number; open: boolean; onClose: () => void }) {
-  const q = useQuery({
-    queryKey: ['portal-practice-submissions', sid, pid],
-    queryFn: () => api.portalPracticeSubmissions(sid, pid),
-  })
-  const list = q.data?.submissions ?? []
+  const isAdmin = usePortalSession().user.role !== 'member'
+  const { q, list, scope, setScope, showUser } = usePracticeSubmissions(sid, pid, isAdmin)
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>全部提交记录</DialogTitle>
+          <DialogTitle>{showUser ? '全部成员的提交记录' : '全部提交记录'}</DialogTitle>
+          {isAdmin && <div className="mt-1"><ScopeToggle scope={scope} onChange={setScope} /></div>}
         </DialogHeader>
         <div className="max-h-[60vh] overflow-y-auto">
           {q.isLoading && <p className="py-6 text-center text-xs text-muted-foreground">加载中…</p>}
@@ -891,6 +919,11 @@ function PracticeHistoryDialog({ sid, pid, open, onClose }: { sid: number; pid: 
               to={`/s/${sid}/practice/${pid}/record/${s.id}`}
               className="flex items-center gap-3 border-b px-2 py-2.5 text-xs transition-colors last:border-b-0 hover:bg-orange-50/50"
             >
+              {showUser && (
+                <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] text-foreground">
+                  {s.userName || `用户 #${s.userId}`}
+                </span>
+              )}
               <span className="tabular-nums text-muted-foreground">#{s.id}</span>
               <span className="font-medium text-emerald-600">答对 {s.objectiveCorrect} 题</span>
               <span className="ml-auto tabular-nums text-muted-foreground">{formatTime(s.createdAt)}</span>

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -38,9 +39,9 @@ func (s *Server) handlePortalPractice(c *fiber.Ctx) error {
 
 // practiceAnswerItem 交卷快照元素。
 type practiceAnswerItem struct {
-	ProblemID int64  `json:"problemId"`
-	Answer    json.RawMessage `json:"answer"`   // 客观题：index/bool
-	UUID      string `json:"uuid,omitempty"`    // 题目 uuid（练习条目已带）
+	ProblemID int64           `json:"problemId"`
+	Answer    json.RawMessage `json:"answer"`         // 客观题：index/bool
+	UUID      string          `json:"uuid,omitempty"` // 题目 uuid（练习条目已带）
 }
 
 // handlePortalPracticeSubmit POST /api/portal/space/:id/practice/:pid/submit
@@ -136,10 +137,10 @@ func (s *Server) handlePortalPracticeSubmit(c *fiber.Ctx) error {
 		return respondError(c, fiber.StatusInternalServerError, err.Error())
 	}
 	return respondData(c, fiber.StatusOK, fiber.Map{
-		"submissionId":    submissionID,
-		"results":         results,
+		"submissionId":     submissionID,
+		"results":          results,
 		"objectiveCorrect": correctCount,
-		"objectiveTotal":  objectiveTotal,
+		"objectiveTotal":   objectiveTotal,
 	})
 }
 
@@ -242,11 +243,20 @@ func (s *Server) handlePortalPracticeSubmissions(c *fiber.Ctx) error {
 	if p.SpaceID != spaceID {
 		return respondError(c, fiber.StatusNotFound, "练习不存在")
 	}
+	// 管理端：?scope=all 查看全部成员的交卷记录（含提交者用户名）。
+	// 非管理员即便传 scope=all 也只返回本人（不报错、不越权）。
+	if strings.EqualFold(strings.TrimSpace(c.Query("scope")), "all") && isAdminRole(user.Role) {
+		subs, err := s.QS.ListPracticeSubmissionsAllUsers(pid)
+		if err != nil {
+			return err
+		}
+		return respondData(c, fiber.StatusOK, fiber.Map{"submissions": subs, "scope": "all"})
+	}
 	subs, err := s.QS.ListPracticeSubmissions(pid, user.ID)
 	if err != nil {
 		return err
 	}
-	return respondData(c, fiber.StatusOK, fiber.Map{"submissions": subs})
+	return respondData(c, fiber.StatusOK, fiber.Map{"submissions": subs, "scope": "self"})
 }
 
 // handlePortalPracticeSubmissionDetail GET /api/portal/space/:id/practice/:pid/submissions/:sid
@@ -272,18 +282,35 @@ func (s *Server) handlePortalPracticeSubmissionDetail(c *fiber.Ctx) error {
 	if p.SpaceID != spaceID {
 		return respondError(c, fiber.StatusNotFound, "练习不存在")
 	}
-	// 提交记录归属校验（只能看自己的）
-	subs, err := s.QS.ListPracticeSubmissions(pid, user.ID)
-	if err != nil {
-		return err
-	}
+	// 提交记录归属校验：成员只能看自己的；管理员可看本练习内任意成员的交卷
+	// （只按"记录属于本练习"校验，避免用别的练习的记录 id 越权读取）。
 	var createdAt string
 	owned := false
-	for _, sb := range subs {
-		if sb.ID == sid {
-			createdAt = sb.CreatedAt.Format(time.RFC3339)
-			owned = true
-			break
+	if isAdminRole(user.Role) {
+		ok, err := s.QS.PracticeSubmissionBelongsTo(sid, pid)
+		if err != nil {
+			return err
+		}
+		owned = ok
+		if ok {
+			// 时间为脏值（无法解析）时留空，由前端按"未知"处理——不下发 0001-01-01T00:00:00Z
+			if sb, err := s.QS.GetPracticeSubmissionMeta(sid); err == nil && !sb.IsZero() {
+				createdAt = sb.Format(time.RFC3339)
+			}
+		}
+	} else {
+		subs, err := s.QS.ListPracticeSubmissions(pid, user.ID)
+		if err != nil {
+			return err
+		}
+		for _, sb := range subs {
+			if sb.ID == sid {
+				if !sb.CreatedAt.IsZero() {
+					createdAt = sb.CreatedAt.Format(time.RFC3339)
+				}
+				owned = true
+				break
+			}
 		}
 	}
 	if !owned {
@@ -358,11 +385,11 @@ func (s *Server) handlePortalPracticeSubmissionDetail(c *fiber.Ctx) error {
 		out = append(out, d)
 	}
 	return respondData(c, fiber.StatusOK, fiber.Map{
-		"submissionId":    sid,
-		"practiceId":      pid,
-		"createdAt":       createdAt,
+		"submissionId":     sid,
+		"practiceId":       pid,
+		"createdAt":        createdAt,
 		"objectiveCorrect": objCorrect,
-		"items":           out,
+		"items":            out,
 	})
 }
 

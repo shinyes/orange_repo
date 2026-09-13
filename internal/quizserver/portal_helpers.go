@@ -31,7 +31,13 @@ func viewerID(user *accounts.User) int64 {
 func (s *Server) resolveSpaceCtx(c *fiber.Ctx, spaceID int64) (int64, error) {
 	user := currentUser(c)
 	if isAdminRole(user.Role) {
-		if user.Role == accounts.RoleDomainAdmin && user.DomainID != nil {
+		// 域管理员必须限定在本域；**未关联域**（domain_id 为空，脏数据/历史数据才可能出现）
+		// 不能跳过校验——否则等于放行任意空间（曾导致 ?scope=all 可跨域读他人姓名与答卷）。
+		// 与排行榜入口（rankDomainOf）口径一致：403「域管理员未关联域」。
+		if user.Role == accounts.RoleDomainAdmin {
+			if user.DomainID == nil {
+				return 0, respondError(c, fiber.StatusForbidden, "域管理员未关联域")
+			}
 			ok, err := s.QS.Repo.SpaceOfDomain(spaceID, *user.DomainID)
 			if err != nil {
 				return 0, err
