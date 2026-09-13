@@ -1,0 +1,4 @@
+# 素材（SVG/PNG/WAV 等）按二进制处理：禁止 git 做换行归一化
+# 否则每次 checkout/commit 都会刷出成百上千条 "LF will be replaced by CRLF" 警告，
+# 且 SVG 内容会被改写（虽不影响渲染，但没必要动别人的素材字节）。
+scratch-assets/* -text
