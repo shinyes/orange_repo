@@ -57,20 +57,25 @@ COPY --from=web /build/node_modules/@scratch/scratch-gui/src/lib/libraries /lib
 COPY scratch-assets /local-assets
 RUN set -eux; \
     mkdir -p /scratch-assets; \
-    cp -r /local-assets/. /scratch-assets/ 2>/dev/null || true; \
+    if [ -d /local-assets ]; then \
+      find /local-assets -maxdepth 1 -type f \
+        \( -name '*.svg' -o -name '*.png' -o -name '*.wav' -o -name '*.mp3' \
+           -o -name '*.jpg' -o -name '*.jpeg' -o -name '*.gif' -o -name '*.webp' \) \
+        -exec cp -n {} /scratch-assets/ \; ; \
+    fi; \
     if [ -n "$ASSET_BUNDLE_URL" ]; then \
       echo "下载素材包: $ASSET_BUNDLE_URL"; \
       curl -fsSL --retry 3 --connect-timeout 20 "$ASSET_BUNDLE_URL" -o /tmp/assets.tar.gz \
         && tar xzf /tmp/assets.tar.gz -C /scratch-assets \
         || echo "警告：素材包下载/解包失败，继续走联网抓取"; \
     fi; \
-    local_count=$(find /scratch-assets -type f ! -name 'README.md' | wc -l); \
-    echo "预置素材文件数（本地目录 + 素材包）: $local_count"; \
+    local_count=$(find /scratch-assets -type f \( -name '*.svg' -o -name '*.png' -o -name '*.wav' -o -name '*.mp3' -o -name '*.jpg' -o -name '*.jpeg' -o -name '*.gif' -o -name '*.webp' \) | wc -l); \
+    echo "预置素材文件数（仓库 scratch-assets/ + 素材包）: $local_count"; \
     /usr/local/bin/scratchassets -lib /lib -out /scratch-assets -workers 12 \
       || /usr/local/bin/scratchassets -lib /lib -out /scratch-assets -workers 4 \
       || true; \
-    count=$(find /scratch-assets -type f ! -name 'README.md' -a ! -name 'asset-count.txt' | wc -l); \
-    echo "素材库镜像文件数: $count（期望 1000+；为 0 表示构建机访问不到 assets.scratch.mit.edu）"; \
+    count=$(find /scratch-assets -type f \( -name '*.svg' -o -name '*.png' -o -name '*.wav' -o -name '*.mp3' -o -name '*.jpg' -o -name '*.jpeg' -o -name '*.gif' -o -name '*.webp' \) | wc -l); \
+    echo "素材库镜像文件数: $count（期望 1000+；为 0 表示既没有预置素材、也访问不到素材源）"; \
     echo "$count" > /scratch-assets/asset-count.txt; \
     if [ "$count" -eq 0 ]; then \
       echo "警告：素材库为空——编辑器核心功能可用，但角色/造型/声音素材库将缺失。"; \
@@ -78,8 +83,8 @@ RUN set -eux; \
            "把结果放进仓库 scratch-assets/ 目录；或用 --build-arg ASSET_BUNDLE_URL=<素材包URL>。" >&2; \
     fi; \
     if [ "$ASSET_MIRROR_REQUIRED" = "1" ] && [ "$count" -lt 100 ]; then \
-      echo "错误：素材库镜像不完整（$count 个文件）——构建机无法访问素材源，或需预置素材/素材包；" >&2; \
-      echo "     抓取失败明细见上方 '失败:' 行（最多 40 条）" >&2; \
+      echo "错误：素材库镜像不完整（$count 个文件）——仓库 scratch-assets/ 未包含素材，" >&2; \
+      echo "     且构建机无法访问素材源。请先预置素材（见 scratch-assets/README.md）" >&2; \
       exit 1; \
     fi
 
