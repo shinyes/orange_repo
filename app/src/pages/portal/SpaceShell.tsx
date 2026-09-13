@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { NavLink, Outlet, useNavigate, useOutletContext, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { UserRoundIcon, FolderKanbanIcon, ClipboardListIcon, BookOpenIcon, TrophyIcon, ArrowLeftIcon, BlocksIcon } from 'lucide-react'
@@ -26,6 +26,45 @@ export function SpaceShell({ user, onLogout }: { user: User; onLogout: () => voi
   }, [space])
 
   // 空间列表已加载完成（含空列表）：若当前空间不在其中 → 弹回空间选择
+  // 注意：这些守卫必须放在**所有 hooks 之后**，否则首帧与后续帧的 hooks 数量不一致
+  //（React 报 error #310「Rendered more hooks than during the previous render」）。
+
+  // 编辑器加载优化：Scratch 空间里提前与 Scratch 子域建连（preconnect/dns-prefetch 不传字节），
+  // 鼠标悬停「Scratch」页签时再后台预取主包（gzip 后约 5.5MB）——点进去时通常已命中缓存。
+  const cfgQ = useQuery({
+    queryKey: ['app-config'],
+    queryFn: api.appConfig,
+    staleTime: 5 * 60_000,
+    enabled: space?.kind === 'scratch',
+  })
+  const scratchOrigin = (cfgQ.data?.scratchUrl ?? '').replace(/\/$/, '')
+  const prefetched = useRef(false)
+  useEffect(() => {
+    if (!scratchOrigin) return
+    const links: HTMLLinkElement[] = []
+    const add = (rel: string, href: string, as?: string) => {
+      const l = document.createElement('link')
+      l.rel = rel
+      l.href = href
+      if (as) l.as = as
+      document.head.appendChild(l)
+      links.push(l)
+    }
+    add('preconnect', scratchOrigin)
+    add('dns-prefetch', scratchOrigin)
+    return () => links.forEach((l) => l.remove())
+  }, [scratchOrigin])
+  const prefetchEditor = useCallback(() => {
+    if (prefetched.current || !scratchOrigin) return
+    prefetched.current = true
+    const l = document.createElement('link')
+    l.rel = 'prefetch'
+    l.as = 'script'
+    l.href = `${scratchOrigin}/scratch-gui-standalone.js`
+    document.head.appendChild(l)
+  }, [scratchOrigin])
+
+  // ---- 以下是守卫与派生数据（不得再出现 hooks）----
   if (spacesQ.isError) {
     return <ShellError msg="空间列表加载失败" onBack={() => navigate('/')} />
   }
@@ -72,6 +111,8 @@ export function SpaceShell({ user, onLogout }: { user: User; onLogout: () => voi
               <NavLink
                 key={t.to}
                 to={t.to}
+                onMouseEnter={t.label === 'Scratch' ? prefetchEditor : undefined}
+                onFocus={t.label === 'Scratch' ? prefetchEditor : undefined}
                 className={({ isActive }) =>
                   cn(
                     'flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm transition-colors',

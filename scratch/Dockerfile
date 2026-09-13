@@ -29,6 +29,7 @@ RUN set -eux; \
     cp node_modules/@scratch/scratch-gui/dist/scratch-gui-standalone.js /out/; \
     cp node_modules/@scratch/scratch-gui/dist/extension-worker.js /out/; \
     cp -r node_modules/@scratch/scratch-gui/dist/chunks/. /out/chunks/; \
+    find /out -name '*.map' -delete; \
     cp host/index.html host/host.js /out/; \
     cp -r node_modules/scratch-blocks/media/. /out/static/blocks-media/; \
     cp -r node_modules/scratch-blocks/media/. /out/static/blocks-media/default/; \
