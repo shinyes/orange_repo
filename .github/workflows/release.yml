@@ -109,8 +109,12 @@ jobs:
           cache-to: type=gha,mode=max,scope=release-judge
 
       # ---------- Scratch 编辑器镜像（独立容器，AGPL 组件；素材库在构建期抓取） ----------
-      # 说明：素材库镜像需要构建机能访问 https://assets.scratch.mit.edu；GitHub 托管 runner 可访问。
-      # 若某次构建抓取失败，镜像仍会产出（素材为空），可加 ASSET_MIRROR_REQUIRED=1 改为硬失败。
+      # 素材库镜像需要构建机能访问 https://assets.scratch.mit.edu（共约 1347 个资源）。
+      # 这里用 ASSET_MIRROR_REQUIRED=1 让"素材不全"直接构建失败——避免产出素材为空的镜像
+      # （曾经出现过：镜像压缩包只有 71MB，说明素材根本没进去，却"构建成功"了）。
+      # 若构建机确实访问不到该域名：先在能联网的机器上跑
+      #   go run ./cmd/scratchassets -out ./scratch-assets
+      # 把结果放进仓库的 scratch-assets/ 目录（或提交），再构建即可离线产出完整镜像。
       - name: Extract scratch image metadata
         id: meta-scratch
         uses: docker/metadata-action@v5
@@ -129,6 +133,8 @@ jobs:
           file: ./scratch/Dockerfile
           push: true
           platforms: linux/amd64
+          build-args: |
+            ASSET_MIRROR_REQUIRED=1
           tags: ${{ steps.meta-scratch.outputs.tags }}
           labels: ${{ steps.meta-scratch.outputs.labels }}
           cache-from: type=gha,scope=release-scratch
