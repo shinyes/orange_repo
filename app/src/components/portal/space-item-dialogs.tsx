@@ -14,11 +14,14 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { PublicToggleRow } from '@/components/portal/public-toggle'
+import { RepoPicker } from '@/components/portal/repo-picker'
 
 // ---------- 新建训练（门户管理员） ----------
 
 export function NewTrainingDialog(props: {
   spaceId: number
+  /** 空间所属域：仓库模板选择器按此域过滤（门户无管理端域上下文） */
+  spaceDomainId: number
   open: boolean
   onOpenChange: (v: boolean) => void
   onCreated: () => void
@@ -27,11 +30,16 @@ export function NewTrainingDialog(props: {
   const [description, setDescription] = useState('')
   const [maxAttempts, setMaxAttempts] = useState('3')
   const [isPublic, setIsPublic] = useState(false)
+  // 从仓库模板拷贝（与空间管理页一致）：勾选后选择来源模板，创建时复制其章节/条目结构
+  const [fromRepo, setFromRepo] = useState(false)
+  const [repoKind, setRepoKind] = useState<'training' | 'practice'>('training')
+  const [repoId, setRepoId] = useState('')
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
     if (props.open) {
       setTitle(''); setDescription(''); setMaxAttempts('3'); setIsPublic(false)
+      setFromRepo(false); setRepoId(''); setRepoKind('training')
     }
   }, [props.open])
 
@@ -39,6 +47,10 @@ export function NewTrainingDialog(props: {
     const t = title.trim()
     if (!t) {
       toast.error('请输入训练标题')
+      return
+    }
+    if (fromRepo && !repoId) {
+      toast.error('请选择要拷贝的仓库模板')
       return
     }
     const ma = Number(maxAttempts)
@@ -49,8 +61,15 @@ export function NewTrainingDialog(props: {
         description: description.trim() || undefined,
         maxAttempts: Number.isFinite(ma) && ma > 0 ? ma : undefined,
         isPublic,
+        ...(fromRepo && repoId ? { fromRepo: { kind: repoKind, id: Number(repoId) } } : {}),
       })
-      toast.success(isPublic ? '训练已创建（已开放：还需在可见性里分配成员才可见）' : '训练已创建（未开放：仅管理员可见，可在可见性里开放并分配）')
+      toast.success(
+        fromRepo
+          ? '训练已创建并拷贝模板结构（还需在可见性里开放并分配成员）'
+          : isPublic
+            ? '训练已创建（已开放：还需在可见性里分配成员才可见）'
+            : '训练已创建（未开放：仅管理员可见，可在可见性里开放并分配）',
+      )
       props.onCreated()
       props.onOpenChange(false)
     } catch (e) {
@@ -62,10 +81,10 @@ export function NewTrainingDialog(props: {
 
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-md">
         <DialogHeader>
           <DialogTitle>新建训练</DialogTitle>
-          <DialogDescription>设置标题/描述与限次；创建后在卡片的「可见性」里开放并分配成员。</DialogDescription>
+          <DialogDescription>可自建（随后加章节/题目），或从当前域仓库模板拷贝结构；创建后在卡片的「可见性」里开放并分配成员。</DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
           <div className="space-y-1.5">
@@ -81,11 +100,25 @@ export function NewTrainingDialog(props: {
             <Input type="number" min={0} value={maxAttempts} onChange={(e) => setMaxAttempts(e.target.value)} />
             <p className="text-[11px] text-muted-foreground">0 = 不限次数</p>
           </div>
+          <div className="space-y-1.5">
+            <Label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                className="size-3.5 accent-[var(--primary)]"
+                checked={fromRepo}
+                onChange={(e) => setFromRepo(e.target.checked)}
+              />
+              从仓库模板拷贝结构
+            </Label>
+            {fromRepo && (
+              <RepoPicker repoKind={repoKind} onRepoKind={setRepoKind} value={repoId} onChange={setRepoId} domainId={props.spaceDomainId} />
+            )}
+          </div>
           <PublicToggleRow checked={isPublic} disabled={busy} onCheckedChange={setIsPublic} />
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => props.onOpenChange(false)}>取消</Button>
-          <Button onClick={() => void create()} disabled={busy}>{busy ? '创建中…' : '创建'}</Button>
+          <Button onClick={() => void create()} disabled={busy || (fromRepo && !repoId)}>{busy ? '创建中…' : '创建'}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -96,6 +129,8 @@ export function NewTrainingDialog(props: {
 
 export function NewPracticeDialog(props: {
   spaceId: number
+  /** 空间所属域：仓库模板选择器按此域过滤 */
+  spaceDomainId: number
   open: boolean
   onOpenChange: (v: boolean) => void
   onCreated: () => void
@@ -103,10 +138,17 @@ export function NewPracticeDialog(props: {
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [isPublic, setIsPublic] = useState(false)
+  // 从仓库模板拷贝（与空间管理页一致）
+  const [fromRepo, setFromRepo] = useState(false)
+  const [repoKind, setRepoKind] = useState<'training' | 'practice'>('practice')
+  const [repoId, setRepoId] = useState('')
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
-    if (props.open) { setTitle(''); setDescription(''); setIsPublic(false) }
+    if (props.open) {
+      setTitle(''); setDescription(''); setIsPublic(false)
+      setFromRepo(false); setRepoId(''); setRepoKind('practice')
+    }
   }, [props.open])
 
   async function create() {
@@ -115,10 +157,25 @@ export function NewPracticeDialog(props: {
       toast.error('请输入练习标题')
       return
     }
+    if (fromRepo && !repoId) {
+      toast.error('请选择要拷贝的仓库模板')
+      return
+    }
     setBusy(true)
     try {
-      await api.createSpacePractice(props.spaceId, { title: t, description: description.trim() || undefined, isPublic })
-      toast.success(isPublic ? '练习已创建（已开放：还需在可见性里分配成员才可见）' : '练习已创建（未开放：仅管理员可见，可在可见性里开放并分配）')
+      await api.createSpacePractice(props.spaceId, {
+        title: t,
+        description: description.trim() || undefined,
+        isPublic,
+        ...(fromRepo && repoId ? { fromRepo: { kind: repoKind, id: Number(repoId) } } : {}),
+      })
+      toast.success(
+        fromRepo
+          ? '练习已创建并拷贝模板结构（还需在可见性里开放并分配成员）'
+          : isPublic
+            ? '练习已创建（已开放：还需在可见性里分配成员才可见）'
+            : '练习已创建（未开放：仅管理员可见，可在可见性里开放并分配）',
+      )
       props.onCreated()
       props.onOpenChange(false)
     } catch (e) {
@@ -130,10 +187,10 @@ export function NewPracticeDialog(props: {
 
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-md">
         <DialogHeader>
           <DialogTitle>新建练习</DialogTitle>
-          <DialogDescription>设置标题/描述；创建后在卡片的「可见性」里开放并分配成员。</DialogDescription>
+          <DialogDescription>可自建（随后加题目），或从当前域仓库模板拷贝结构；创建后在卡片的「可见性」里开放并分配成员。</DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
           <div className="space-y-1.5">
@@ -144,11 +201,25 @@ export function NewPracticeDialog(props: {
             <Label>描述（可选）</Label>
             <Textarea rows={2} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="练习说明" />
           </div>
+          <div className="space-y-1.5">
+            <Label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                className="size-3.5 accent-[var(--primary)]"
+                checked={fromRepo}
+                onChange={(e) => setFromRepo(e.target.checked)}
+              />
+              从仓库模板拷贝结构
+            </Label>
+            {fromRepo && (
+              <RepoPicker repoKind={repoKind} onRepoKind={setRepoKind} value={repoId} onChange={setRepoId} domainId={props.spaceDomainId} />
+            )}
+          </div>
           <PublicToggleRow checked={isPublic} disabled={busy} onCheckedChange={setIsPublic} />
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => props.onOpenChange(false)}>取消</Button>
-          <Button onClick={() => void create()} disabled={busy}>{busy ? '创建中…' : '创建'}</Button>
+          <Button onClick={() => void create()} disabled={busy || (fromRepo && !repoId)}>{busy ? '创建中…' : '创建'}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

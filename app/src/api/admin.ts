@@ -148,6 +148,8 @@ export const adminApi = {
 
   // ---- 训练（仓库题册模板） ----
   trainings: () => req<{ trainings: Training[] }>(dq('/api/trainings')),
+  /** 指定域的仓库训练模板（门户页无管理端域上下文：按空间所属域取；管理端用当前所选域） */
+  trainingsInDomain: (domainId: number) => req<{ trainings: Training[] }>(`/api/trainings?domainId=${domainId}`),
   createTraining: (title: string, description = '', tags: string[] = [], folderId: number | null = null) =>
     req<{ id: number }>(dq('/api/trainings'), json({ method: 'POST', body: JSON.stringify({ title, description, tags, folderId }) })),
   getTraining: (id: number) => req<{ training: Training; chapters: Chapter[] }>(`/api/trainings/${id}`),
@@ -171,6 +173,8 @@ export const adminApi = {
 
   // ---- 练习（仓库题册模板） ----
   practices: () => req<{ practices: Practice[] }>(dq('/api/practices')),
+  /** 指定域的仓库练习模板（同 trainingsInDomain） */
+  practicesInDomain: (domainId: number) => req<{ practices: Practice[] }>(`/api/practices?domainId=${domainId}`),
   createPractice: (title: string, description = '', tags: string[] = [], folderId: number | null = null) =>
     req<{ id: number }>(dq('/api/practices'), json({ method: 'POST', body: JSON.stringify({ title, description, tags, folderId }) })),
   getPractice: (id: number) => req<{ practice: Practice; items: PracticeItem[] }>(`/api/practices/${id}`),

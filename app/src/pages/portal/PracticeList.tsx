@@ -79,7 +79,7 @@ export function PracticeList() {
         </div>
       )}
 
-      <NewPracticeDialog spaceId={space.id} open={creating} onOpenChange={setCreating} onCreated={() => void home.refetch()} />
+      <NewPracticeDialog spaceId={space.id} spaceDomainId={space.domainId} open={creating} onOpenChange={setCreating} onCreated={() => void home.refetch()} />
 
       {editing && (
         <PracticeQuickEditDialog

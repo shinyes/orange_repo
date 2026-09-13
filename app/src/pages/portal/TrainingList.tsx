@@ -79,7 +79,7 @@ export function TrainingList() {
         </div>
       )}
 
-      <NewTrainingDialog spaceId={space.id} open={creating} onOpenChange={setCreating} onCreated={() => void home.refetch()} />
+      <NewTrainingDialog spaceId={space.id} spaceDomainId={space.domainId} open={creating} onOpenChange={setCreating} onCreated={() => void home.refetch()} />
 
       {editing && (
         <TrainingQuickEditDialog
