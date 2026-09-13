@@ -141,12 +141,17 @@ func (s *Store) CountDomainProblems(domainID int64) (int, error) {
 // ---------- 空间 ----------
 
 // CreateSpace 域内新建空间（同域内名称唯一）。
-func (s *Store) CreateSpace(domainID int64, name string) (int64, error) {
+// CreateSpace 新建空间。kind 为空按 'normal'；'scratch' 表示额外提供 Scratch 创作页。
+func (s *Store) CreateSpace(domainID int64, name string, kind ...string) (int64, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return 0, errors.New("空间名称不能为空")
 	}
-	res, err := s.DB.Exec(`INSERT INTO spaces(domain_id,name) VALUES(?,?)`, domainID, name)
+	k := SpaceKindNormal
+	if len(kind) > 0 {
+		k = NormalizeSpaceKind(kind[0])
+	}
+	res, err := s.DB.Exec(`INSERT INTO spaces(domain_id,name,kind) VALUES(?,?,?)`, domainID, name, k)
 	if err != nil {
 		return 0, err
 	}
@@ -155,7 +160,7 @@ func (s *Store) CreateSpace(domainID int64, name string) (int64, error) {
 
 // ListSpaces 域内空间列表。
 func (s *Store) ListSpaces(domainID int64) ([]model.Space, error) {
-	rows, err := s.DB.Query(`SELECT id,domain_id,name,default_lang,created_at FROM spaces WHERE domain_id=? ORDER BY id`, domainID)
+	rows, err := s.DB.Query(`SELECT id,domain_id,name,default_lang,kind,created_at FROM spaces WHERE domain_id=? ORDER BY id`, domainID)
 	if err != nil {
 		return nil, err
 	}
@@ -163,7 +168,7 @@ func (s *Store) ListSpaces(domainID int64) ([]model.Space, error) {
 	var out []model.Space
 	for rows.Next() {
 		var sp model.Space
-		if err := rows.Scan(&sp.ID, &sp.DomainID, &sp.Name, &sp.DefaultLang, &sp.CreatedAt); err != nil {
+		if err := rows.Scan(&sp.ID, &sp.DomainID, &sp.Name, &sp.DefaultLang, &sp.Kind, &sp.CreatedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, sp)
@@ -174,8 +179,8 @@ func (s *Store) ListSpaces(domainID int64) ([]model.Space, error) {
 // GetSpace 取空间（含所属域校验由上层做）。
 func (s *Store) GetSpace(id int64) (*model.Space, error) {
 	sp := &model.Space{}
-	err := s.DB.QueryRow(`SELECT id,domain_id,name,default_lang,created_at FROM spaces WHERE id=?`, id).
-		Scan(&sp.ID, &sp.DomainID, &sp.Name, &sp.DefaultLang, &sp.CreatedAt)
+	err := s.DB.QueryRow(`SELECT id,domain_id,name,default_lang,kind,created_at FROM spaces WHERE id=?`, id).
+		Scan(&sp.ID, &sp.DomainID, &sp.Name, &sp.DefaultLang, &sp.Kind, &sp.CreatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -185,14 +190,28 @@ func (s *Store) GetSpace(id int64) (*model.Space, error) {
 	return sp, nil
 }
 
-// 空间默认编程语言取值：''=未设置（做题页沿用 python），其余仅 python/cpp。
+// 空间类型。
+const (
+	SpaceKindNormal  = "normal"  // 普通空间：训练/练习/刷题
+	SpaceKindScratch = "scratch" // 额外提供「Scratch」创作页（训练/练习/刷题保留）
+)
+
+// NormalizeSpaceKind 规范化空间类型：空/未知 → normal。
+func NormalizeSpaceKind(k string) string {
+	if strings.TrimSpace(strings.ToLower(k)) == SpaceKindScratch {
+		return SpaceKindScratch
+	}
+	return SpaceKindNormal
+}
+
+// 空间默认编程语言取值：”=未设置（做题页沿用 python），其余仅 python/cpp。
 const (
 	SpaceDefaultLangUnset  = ""
 	SpaceDefaultLangPython = "python"
 	SpaceDefaultLangCpp    = "cpp"
 )
 
-// ValidSpaceDefaultLang 空间默认编程语言是否合法（''=未设置；仅 python/cpp）。
+// ValidSpaceDefaultLang 空间默认编程语言是否合法（”=未设置；仅 python/cpp）。
 func ValidSpaceDefaultLang(v string) bool {
 	switch v {
 	case SpaceDefaultLangUnset, SpaceDefaultLangPython, SpaceDefaultLangCpp:
@@ -203,13 +222,14 @@ func ValidSpaceDefaultLang(v string) bool {
 
 // RenameSpace 空间改名。
 func (s *Store) RenameSpace(id int64, name string) error {
-	return s.UpdateSpaceMeta(id, &name, nil)
+	return s.UpdateSpaceMeta(id, &name, nil, nil)
 }
 
 // UpdateSpaceMeta 部分更新空间元信息：仅更新非 nil 的字段
-// （name/defaultLang 均可省略；两者皆 nil 时报错）。
-// defaultLang 仅允许 ''（未设置）/ python / cpp，非法值返回错误（调用方按 400 处理）。
-func (s *Store) UpdateSpaceMeta(id int64, name *string, defaultLang *string) error {
+// （name/defaultLang/kind 均可省略；全部 nil 时报错）。
+// defaultLang 仅允许 ”（未设置）/ python / cpp，非法值返回错误（调用方按 400 处理）。
+// kind 仅允许 normal / scratch。
+func (s *Store) UpdateSpaceMeta(id int64, name *string, defaultLang *string, kind *string) error {
 	var sets []string
 	var args []any
 	if name != nil {
@@ -227,6 +247,14 @@ func (s *Store) UpdateSpaceMeta(id int64, name *string, defaultLang *string) err
 		}
 		sets = append(sets, "default_lang=?")
 		args = append(args, v)
+	}
+	if kind != nil {
+		k := strings.TrimSpace(strings.ToLower(*kind))
+		if k != SpaceKindNormal && k != SpaceKindScratch {
+			return fmt.Errorf("空间类型不合法：%s（仅支持 normal/scratch）", *kind)
+		}
+		sets = append(sets, "kind=?")
+		args = append(args, k)
 	}
 	if len(sets) == 0 {
 		return errors.New("无更新字段")
@@ -430,6 +458,10 @@ func (s *Store) migrateSpaceContent() error {
 		}
 	}
 	// 刷题项目每轮题数（0=不限制：整范围一轮）
+	// 空间类型（normal=普通 | scratch=含 Scratch 创作页）——存量库补列
+	if err := s.ensureColumn("spaces", "kind", `kind TEXT NOT NULL DEFAULT 'normal'`); err != nil {
+		return err
+	}
 	if err := s.ensureColumn("space_quizzes", "round_size", `round_size INTEGER NOT NULL DEFAULT 0`); err != nil {
 		return err
 	}

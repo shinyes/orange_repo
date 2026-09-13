@@ -27,6 +27,8 @@ type SpaceBrief struct {
 	// DefaultLang 空间默认编程语言：''=未设置（做题页沿用 python）；仅 'python' / 'cpp'。
 	// 用户在某题上手动选过语言（本地记忆）时优先于该默认值。
 	DefaultLang string `json:"defaultLang"`
+	// Kind 空间类型：normal=普通；scratch=额外提供「Scratch」创作页（前端据此显示页签）
+	Kind string `json:"kind"`
 	// CanViewLeaderboard 当前用户能否查看该空间所属域的排行榜
 	// （管理员恒 true；成员取决于域的排行榜公开设置）——前端据此隐藏入口
 	CanViewLeaderboard bool `json:"canViewLeaderboard"`

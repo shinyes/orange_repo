@@ -24,6 +24,7 @@ jobs:
         run: |
           echo "image=ghcr.io/shinyes/orangeoj" >> "$GITHUB_OUTPUT"
           echo "judge_image=ghcr.io/shinyes/orangeoj-judge" >> "$GITHUB_OUTPUT"
+          echo "scratch_image=ghcr.io/shinyes/orangeoj-scratch" >> "$GITHUB_OUTPUT"
 
       # judge 镜像仅在其相关文件自上一 tag 有变更时才重建（nsjail 编译耗时；
       # compose 默认引用 judge:latest，未变更时沿用既有镜像）。
@@ -106,6 +107,32 @@ jobs:
           labels: ${{ steps.meta-judge.outputs.labels }}
           cache-from: type=gha,scope=release-judge
           cache-to: type=gha,mode=max,scope=release-judge
+
+      # ---------- Scratch 编辑器镜像（独立容器，AGPL 组件；素材库在构建期抓取） ----------
+      # 说明：素材库镜像需要构建机能访问 https://assets.scratch.mit.edu；GitHub 托管 runner 可访问。
+      # 若某次构建抓取失败，镜像仍会产出（素材为空），可加 ASSET_MIRROR_REQUIRED=1 改为硬失败。
+      - name: Extract scratch image metadata
+        id: meta-scratch
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.vars.outputs.scratch_image }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=ref,event=tag
+            type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') }}
+
+      - name: Build and push scratch image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./scratch/Dockerfile
+          push: true
+          platforms: linux/amd64
+          tags: ${{ steps.meta-scratch.outputs.tags }}
+          labels: ${{ steps.meta-scratch.outputs.labels }}
+          cache-from: type=gha,scope=release-scratch
+          cache-to: type=gha,mode=max,scope=release-scratch
 
       # ---------- Release 附件：主镜像离线包 ----------
       - name: Export main image tarball

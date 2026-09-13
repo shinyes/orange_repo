@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { NavLink, Outlet, useNavigate, useOutletContext, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { UserRoundIcon, FolderKanbanIcon, ClipboardListIcon, BookOpenIcon, TrophyIcon, ArrowLeftIcon } from 'lucide-react'
+import { UserRoundIcon, FolderKanbanIcon, ClipboardListIcon, BookOpenIcon, TrophyIcon, ArrowLeftIcon, BlocksIcon } from 'lucide-react'
 
 import { api } from '@/api'
 import { saveSpaceId } from '@/api/space'
@@ -42,6 +42,10 @@ export function SpaceShell({ user, onLogout }: { user: User; onLogout: () => voi
     { to: `/s/${space.id}/training`, label: '训练', icon: FolderKanbanIcon },
     { to: `/s/${space.id}/practice`, label: '练习', icon: ClipboardListIcon },
     { to: `/s/${space.id}/quiz`, label: '刷题', icon: BookOpenIcon },
+    // Scratch 空间（spaces.kind=scratch）：额外提供创作页；训练/练习/刷题保留
+    ...(space.kind === 'scratch'
+      ? [{ to: `/s/${space.id}/scratch`, label: 'Scratch', icon: BlocksIcon }]
+      : []),
     // 排行榜不公开（域设置关闭）时直接不显示该 tab；管理员始终可见
     ...(space.canViewLeaderboard === false
       ? []

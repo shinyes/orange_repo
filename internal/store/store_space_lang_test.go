@@ -82,7 +82,7 @@ func TestUpdateSpaceMetaDefaultLang(t *testing.T) {
 
 	// 仅 defaultLang：名称不变
 	cpp := SpaceDefaultLangCpp
-	if err := s.UpdateSpaceMeta(spaceID, nil, &cpp); err != nil {
+	if err := s.UpdateSpaceMeta(spaceID, nil, &cpp, nil); err != nil {
 		t.Fatalf("UpdateSpaceMeta(defaultLang=cpp): %v", err)
 	}
 	sp, err := s.GetSpace(spaceID)
@@ -95,7 +95,7 @@ func TestUpdateSpaceMetaDefaultLang(t *testing.T) {
 
 	// 非法取值：报错且库中不变
 	bad := "java"
-	if err := s.UpdateSpaceMeta(spaceID, nil, &bad); err == nil {
+	if err := s.UpdateSpaceMeta(spaceID, nil, &bad, nil); err == nil {
 		t.Fatal("非法 defaultLang 应报错")
 	}
 	if sp, _ = s.GetSpace(spaceID); sp.DefaultLang != "cpp" {
@@ -113,7 +113,7 @@ func TestUpdateSpaceMetaDefaultLang(t *testing.T) {
 	// 两者同时更新
 	name := "双改"
 	py := SpaceDefaultLangPython
-	if err := s.UpdateSpaceMeta(spaceID, &name, &py); err != nil {
+	if err := s.UpdateSpaceMeta(spaceID, &name, &py, nil); err != nil {
 		t.Fatalf("UpdateSpaceMeta(name+defaultLang): %v", err)
 	}
 	if sp, _ = s.GetSpace(spaceID); sp.Name != "双改" || sp.DefaultLang != "python" {
@@ -122,7 +122,7 @@ func TestUpdateSpaceMetaDefaultLang(t *testing.T) {
 
 	// 恢复未设置（'' 合法）
 	unset := SpaceDefaultLangUnset
-	if err := s.UpdateSpaceMeta(spaceID, nil, &unset); err != nil {
+	if err := s.UpdateSpaceMeta(spaceID, nil, &unset, nil); err != nil {
 		t.Fatalf("UpdateSpaceMeta(defaultLang=''): %v", err)
 	}
 	if sp, _ = s.GetSpace(spaceID); sp.DefaultLang != "" {
@@ -130,14 +130,14 @@ func TestUpdateSpaceMetaDefaultLang(t *testing.T) {
 	}
 
 	// 空字段 / 空名称 / 不存在的空间
-	if err := s.UpdateSpaceMeta(spaceID, nil, nil); err == nil {
+	if err := s.UpdateSpaceMeta(spaceID, nil, nil, nil); err == nil {
 		t.Fatal("无更新字段应报错")
 	}
 	empty := "   "
-	if err := s.UpdateSpaceMeta(spaceID, &empty, nil); err == nil {
+	if err := s.UpdateSpaceMeta(spaceID, &empty, nil, nil); err == nil {
 		t.Fatal("空名称应报错")
 	}
-	if err := s.UpdateSpaceMeta(spaceID+999, nil, &cpp); err != ErrNotFound {
+	if err := s.UpdateSpaceMeta(spaceID+999, nil, &cpp, nil); err != ErrNotFound {
 		t.Fatalf("不存在空间错误 = %v, want ErrNotFound", err)
 	}
 

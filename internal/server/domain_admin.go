@@ -1,6 +1,7 @@
 // 域管理 + 空间管理 API（OJ 重构）。
 // 权限：域 CRUD/设域管理员 → 仅系统管理员（global_admin）；
-//       空间 CRUD/成员管理 → 系统管理员或域管理员（后者限本域）。
+//
+//	空间 CRUD/成员管理 → 系统管理员或域管理员（后者限本域）。
 package server
 
 import (
@@ -18,6 +19,7 @@ import (
 // domainScope 解析请求的域作用域：
 //   - domain_admin：强制其归属域
 //   - global_admin：优先 query/body 的 domainId，缺省报错
+//
 // 返回 nil 表示无有效域作用域（调用方按 400 处理）。
 func (s *Server) domainScope(c *fiber.Ctx, user *accounts.User) (*int64, error) {
 	if user.Role == accounts.RoleDomainAdmin {
@@ -380,11 +382,17 @@ func (s *Server) handleCreateSpace(c *fiber.Ctx) error {
 	}
 	var req struct {
 		Name string `json:"name"`
+		// Kind 空间类型：''/normal=普通；scratch=额外提供「Scratch」创作页
+		Kind string `json:"kind"`
 	}
 	if err := c.BodyParser(&req); err != nil {
 		return respondError(c, fiber.StatusBadRequest, "invalid request")
 	}
-	id, err := s.Store.CreateSpace(*scope, req.Name)
+	k := strings.TrimSpace(strings.ToLower(req.Kind))
+	if k != "" && k != store.SpaceKindNormal && k != store.SpaceKindScratch {
+		return respondError(c, fiber.StatusBadRequest, "空间类型仅支持 normal/scratch")
+	}
+	id, err := s.Store.CreateSpace(*scope, req.Name, k)
 	if err != nil {
 		return err
 	}
@@ -392,8 +400,9 @@ func (s *Server) handleCreateSpace(c *fiber.Ctx) error {
 }
 
 // handleRenameSpace PATCH /api/admin/spaces/:id 空间元信息部分更新：
-// body {name?, defaultLang?}——仅更新请求中出现的字段（旧调用只传 name 保持兼容）。
-// defaultLang 仅允许 ''（未设置 → 做题页沿用 python）/ python / cpp，非法值 400。
+// body {name?, defaultLang?, kind?}——仅更新请求中出现的字段（旧调用只传 name 保持兼容）。
+// defaultLang 仅允许 ”（未设置 → 做题页沿用 python）/ python / cpp，非法值 400。
+// kind 仅允许 normal / scratch（scratch = 额外提供「Scratch」创作页），非法值 400。
 func (s *Server) handleRenameSpace(c *fiber.Ctx) error {
 	id, err := paramID(c, "id")
 	if err != nil {
@@ -406,12 +415,13 @@ func (s *Server) handleRenameSpace(c *fiber.Ctx) error {
 	var req struct {
 		Name        *string `json:"name"`
 		DefaultLang *string `json:"defaultLang"`
+		Kind        *string `json:"kind"`
 	}
 	if err := c.BodyParser(&req); err != nil {
 		return respondError(c, fiber.StatusBadRequest, "invalid request")
 	}
-	if req.Name == nil && req.DefaultLang == nil {
-		return respondError(c, fiber.StatusBadRequest, "缺少更新字段（name 或 defaultLang）")
+	if req.Name == nil && req.DefaultLang == nil && req.Kind == nil {
+		return respondError(c, fiber.StatusBadRequest, "缺少更新字段（name 或 defaultLang 或 kind）")
 	}
 	if req.Name != nil && strings.TrimSpace(*req.Name) == "" {
 		return respondError(c, fiber.StatusBadRequest, "空间名称不能为空")
@@ -419,7 +429,13 @@ func (s *Server) handleRenameSpace(c *fiber.Ctx) error {
 	if req.DefaultLang != nil && !store.ValidSpaceDefaultLang(strings.TrimSpace(*req.DefaultLang)) {
 		return respondError(c, fiber.StatusBadRequest, "默认编程语言仅支持 python/cpp（''=未设置）")
 	}
-	if err := s.Store.UpdateSpaceMeta(id, req.Name, req.DefaultLang); err != nil {
+	if req.Kind != nil {
+		k := strings.TrimSpace(strings.ToLower(*req.Kind))
+		if k != store.SpaceKindNormal && k != store.SpaceKindScratch {
+			return respondError(c, fiber.StatusBadRequest, "空间类型仅支持 normal/scratch")
+		}
+	}
+	if err := s.Store.UpdateSpaceMeta(id, req.Name, req.DefaultLang, req.Kind); err != nil {
 		if err == store.ErrNotFound {
 			return respondError(c, fiber.StatusNotFound, "空间不存在")
 		}

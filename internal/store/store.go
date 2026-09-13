@@ -268,6 +268,7 @@ func (s *Store) migrateDomains() error {
 			domain_id INTEGER NOT NULL REFERENCES domains(id) ON DELETE CASCADE,
 			name TEXT NOT NULL,
 			default_lang TEXT NOT NULL DEFAULT '', -- 默认编程语言：''=未设置（按 python）；仅 python/cpp
+			kind TEXT NOT NULL DEFAULT 'normal',   -- 空间类型：normal=普通（训练/练习/刷题）| scratch=含 Scratch 创作页
 			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 		);`,
 		`CREATE TABLE IF NOT EXISTS space_members (

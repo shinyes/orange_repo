@@ -228,6 +228,28 @@ func (s *Store) migrate() error {
 		);`,
 		`CREATE INDEX IF NOT EXISTS idx_game_scores_rank ON game_scores(game, best_score DESC);`,
 		`CREATE INDEX IF NOT EXISTS idx_game_scores_domain ON game_scores(game, domain_id, best_score DESC);`,
+		// ---------- 书包（Scratch 工程库）：文件夹树 + 工程元数据（文件本体落盘 <DataDir>/scratch） ----------
+		`CREATE TABLE IF NOT EXISTS scratch_folders (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			parent_id INTEGER REFERENCES scratch_folders(id) ON DELETE CASCADE,
+			name TEXT NOT NULL,
+			order_no INTEGER NOT NULL DEFAULT 0,
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_scratch_folders_user ON scratch_folders(user_id, parent_id);`,
+		`CREATE TABLE IF NOT EXISTS scratch_projects (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			uuid TEXT NOT NULL UNIQUE,
+			user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			folder_id INTEGER REFERENCES scratch_folders(id) ON DELETE SET NULL,
+			name TEXT NOT NULL,
+			size INTEGER NOT NULL DEFAULT 0,
+			sha256 TEXT NOT NULL DEFAULT '',
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_scratch_projects_user ON scratch_projects(user_id, folder_id, updated_at);`,
 	}
 	for _, stmt := range stmts {
 		if _, err := s.DB.Exec(stmt); err != nil {

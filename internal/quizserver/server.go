@@ -27,6 +27,8 @@ const userLocals = "quiz_user"
 type Server struct {
 	QS         *quizstore.Store
 	UploadsDir string
+	// ScratchDir 书包（Scratch 工程 .sb3）文件根目录；空则回退 <UploadsDir>/../scratch
+	ScratchDir string
 	WebDist    string
 	Runner     judge.Runner
 	// queue 判题队列（Runner 配置时由 New 启动）。
@@ -154,6 +156,17 @@ func (s *Server) RegisterRoutes(app *fiber.App) {
 	portal.Post("/quiz/:qid/answer", s.handlePortalQuizAnswer)
 	portal.Post("/quiz/:qid/reset", s.handlePortalQuizReset)
 	// 休息时间小游戏：成绩提交 + 榜单（本域/全域；game 维度，新增游戏无需改接口）
+	// 书包（Scratch 工程库）：文件夹 + 工程（.sb3 落盘）
+	portal.Get("/scratch/folders", s.handleScratchFoldersList)
+	portal.Post("/scratch/folders", s.handleScratchFolderCreate)
+	portal.Patch("/scratch/folders/:id", s.handleScratchFolderUpdate)
+	portal.Delete("/scratch/folders/:id", s.handleScratchFolderDelete)
+	portal.Get("/scratch/projects", s.handleScratchProjectsList)
+	portal.Post("/scratch/projects", s.handleScratchProjectUpload)
+	portal.Get("/scratch/projects/:id/file", s.handleScratchProjectFile)
+	portal.Get("/scratch/projects/:id/raw", s.handleScratchProjectRaw)
+	portal.Patch("/scratch/projects/:id", s.handleScratchProjectUpdate)
+	portal.Delete("/scratch/projects/:id", s.handleScratchProjectDelete)
 	portal.Post("/game/:game/score", s.handleGameScoreSubmit)
 	portal.Get("/game/:game/rank", s.handleGameRank)
 	// 全局错题集

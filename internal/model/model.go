@@ -146,6 +146,8 @@ type Space struct {
 	// DefaultLang 空间默认编程语言：''=未设置（做题页沿用 python）；仅 'python' / 'cpp'。
 	// 用户在某题上手动选过语言（本地记忆）时优先于该默认值。
 	DefaultLang string `json:"defaultLang"`
+	// Kind 空间类型：'normal'=普通空间；'scratch'=额外提供 Scratch 创作页（训练/练习/刷题保留）。
+	Kind string `json:"kind"`
 }
 
 // SpaceMemberView 空间成员视图（user_id + 用户名，用户名由调用方注入或留空）。

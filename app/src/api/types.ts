@@ -18,6 +18,8 @@ export type ObjectiveType = 'single_choice' | 'true_false'
 // ---------- 空间 ----------
 
 export interface PortalSpace {
+  /** 空间类型：normal=普通；scratch=额外提供「Scratch」创作页 */
+  kind?: string
   id: number
   domainId: number
   domainName?: string
@@ -650,4 +652,23 @@ export interface GameRankView {
   /** 本域榜单：用户没有任何空间归属时为 true（榜单为空，不退化成全域） */
   noDomain?: boolean
   scopeHint?: string
+}
+// ---- 书包（Scratch 工程库）----
+export interface ScratchFolder {
+  id: number
+  parentId?: number
+  name: string
+  orderNo: number
+  createdAt: string
+}
+
+export interface ScratchProject {
+  id: number
+  uuid: string
+  folderId?: number
+  name: string
+  size: number
+  sha256?: string
+  createdAt: string
+  updatedAt: string
 }

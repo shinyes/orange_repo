@@ -27,6 +27,8 @@ func main() {
 	judgeToken := flag.String("judge-token", "", "与 judge-runtime 共享的评测 token（留空则禁用判题入队）")
 	judgeWorkers := flag.Int("judge-workers", 2, "判题队列 worker 数")
 	seed := flag.Bool("seed", false, "空库时导入 samples/orangeoj-sample.zip 示例数据")
+	scratchURL := flag.String("scratch-url", os.Getenv("ORANGEOJ_SCRATCH_URL"), "Scratch 编辑器容器地址（子域，如 https://scratch.example.com；留空=未部署，前端显示未部署提示）")
+	scratchInternal := flag.String("scratch-internal-url", os.Getenv("ORANGEOJ_SCRATCH_INTERNAL_URL"), "Scratch 容器内部地址（如 http://orangescratch:80）；设置后主站反代 /scratch-app/，容器无需对外暴露")
 	flag.Parse()
 
 	// 容器以 root 启动时（绑定挂载宿主机目录的场景），先修正数据目录属主再降权到 65532。
@@ -47,10 +49,12 @@ func main() {
 	}
 
 	a, err := app.Open(app.Config{
-		DataDir:      *dataDir,
-		WebDist:      *webDist,
-		JudgeRunner:  runner,
-		JudgeWorkers: *judgeWorkers,
+		DataDir:            *dataDir,
+		WebDist:            *webDist,
+		ScratchURL:         *scratchURL,
+		ScratchInternalURL: *scratchInternal,
+		JudgeRunner:        runner,
+		JudgeWorkers:       *judgeWorkers,
 	})
 	if err != nil {
 		log.Fatalf("[FATAL] 服务初始化失败: %v", err)

@@ -1,13 +1,23 @@
-# OrangeOJ 生产部署示例（主服务 + 判题沙箱 两容器）
+# OrangeOJ 生产部署示例（主服务 + 判题沙箱 + 可选 Scratch 编辑器 三容器）
 # docker compose -f deploy/docker-compose.yml up -d
 #   → http://localhost:8080（单服务：学生门户 / + 管理端 /admin，默认 admin/123456）
 #   → orangejudge :9090（判题沙箱，不对外）
+#   → orangescratch :8081（Scratch 编辑器静态服务；主站以 iframe 嵌入）
 #
 # orangeoj 主服务 = 单 Go 进程托管单前端（app dist：门户 / + 管理区 /admin 走前端路由）
 # 与全部 API（/api/*），数据在 ./data/orangeoj.db（单库）。
 # orangejudge 是真正执行学生代码的容器（nsjail 隔离），需要 privileged + cgroup v2 挂载；
 # 镜像由 GitHub Actions 发布：judge 相关文件变更的版本构建 ghcr.io/shinyes/orangeoj-judge:<版本>
 # 并刷新 :latest，其余版本沿用 latest（可用 ORANGEOJ_JUDGE_IMAGE 覆盖）。
+#
+# Scratch 编辑器（AGPL-3.0，独立容器，**内部容器模式**，可选）：
+#   · 用途：Scratch 空间里的「Scratch」创作页（离线可用，素材库打在镜像里）
+#   · 不对外暴露端口：主站反代 /scratch-app/ → 浏览器同源访问（无需子域/证书/跨域处理）
+#   · 主站侧配置：ORANGEOJ_SCRATCH_INTERNAL_URL=http://orangescratch:80
+#   · 若你更想让 Scratch 走独立子域直接访问（不经主站反代），改用：
+#       主站 ORANGEOJ_SCRATCH_URL=https://scratch.example.com + 给本服务加 ports: ["8081:80"]
+#   · 两者都留空 = 未部署：Scratch 空间页显示「未部署」提示，其余功能不受影响
+#   · 不需要 Scratch 的部署：删掉本服务与主站的 Scratch 配置即可
 services:
   orangeoj:
     image: ghcr.io/shinyes/orangeoj:latest
@@ -21,6 +31,10 @@ services:
       "-judge-token", "${ORANGEOJ_JUDGE_SHARED_TOKEN:-change-this-in-production}",
       "-judge-workers", "2",
     ]
+    environment:
+      # Scratch 编辑器容器（内部容器，不对外暴露端口）：主站反代 /scratch-app/ → 浏览器同源访问，
+      # 因此不需要子域、不需要额外证书，容器也无需单独鉴权。留空=未部署（Scratch 页显示提示）。
+      ORANGEOJ_SCRATCH_INTERNAL_URL: "http://orangescratch:80"
     ports:
       - "8080:8080"
     volumes:
@@ -60,6 +74,25 @@ services:
       timeout: 10s
       retries: 3
       start_period: 20s
+
+  # Scratch 编辑器（AGPL-3.0，**内部容器**：不映射端口，仅主站反代访问；可选服务）
+  #   · 镜像内置完整素材库（角色/造型/声音/背景），离线可用
+  #   · 主站通过 ORANGEOJ_SCRATCH_INTERNAL_URL=http://orangescratch:80 反代 /scratch-app/
+  #   · 启动后自检：curl -fsS http://127.0.0.1/healthz（容器内）
+  #   · 不需要 Scratch 时：删掉本服务与主站的 ORANGEOJ_SCRATCH_INTERNAL_URL 即可
+  orangescratch:
+    image: ${ORANGEOJ_SCRATCH_IMAGE:-ghcr.io/shinyes/orangeoj-scratch:latest}
+    container_name: orangescratch
+    restart: unless-stopped
+    # 注意：**不写 ports** —— 只在 compose 网络内可达，由主站反代对外提供
+    expose:
+      - "80"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/healthz || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
 
 volumes:
   judge-work:

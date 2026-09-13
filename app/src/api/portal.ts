@@ -7,6 +7,8 @@ import { req, json } from './client'
 import type {
   CodeLang,
   GameRankView,
+  ScratchFolder,
+  ScratchProject,
   ObjectiveAnswer,
   OjDraft,
   OjProblem,
@@ -47,6 +49,45 @@ export const portalApi = {
     req<GameRankView>(
       `/api/portal/game/${game}/rank?scope=${scope}${spaceId ? `&spaceId=${spaceId}` : ''}`,
     ),
+
+  // ---- 运行时配置（公开）----
+  /** Scratch 编辑器地址：同源前缀（主站反代，如 /scratch-app）或子域绝对地址；空=未部署 */
+  appConfig: () => req<{ scratchUrl: string; scratchProtocol: number }>('/api/config'),
+
+  // ---- 书包（Scratch 工程库；服务端存 .sb3，含素材） ----
+  scratchFolders: () =>
+    req<{ folders: ScratchFolder[]; usage: { usedBytes: number; quotaBytes: number; maxProjectBytes: number; maxFolders: number } }>(
+      '/api/portal/scratch/folders',
+    ),
+  createScratchFolder: (name: string, parentId?: number | null) =>
+    req<{ id: number }>('/api/portal/scratch/folders', json({ method: 'POST', body: JSON.stringify({ name, parentId: parentId ?? null }) })),
+  updateScratchFolder: (id: number, patch: { name?: string; parentId?: number }) =>
+    req<void>(`/api/portal/scratch/folders/${id}`, json({ method: 'PATCH', body: JSON.stringify(patch) })),
+  deleteScratchFolder: (id: number) => req<void>(`/api/portal/scratch/folders/${id}`, { method: 'DELETE' }),
+  /** folderId 省略=全部；0=根目录 */
+  scratchProjects: (folderId?: number) =>
+    req<{ projects: ScratchProject[] }>(
+      `/api/portal/scratch/projects${folderId === undefined ? '' : `?folderId=${folderId}`}`,
+    ),
+  /** 上传工程（.sb3 原始字节；服务端校验 PK 魔数与配额） */
+  uploadScratchProject: (name: string, bytes: ArrayBuffer, folderId?: number | null) =>
+    req<{ id: number; uuid: string; size: number }>(
+      `/api/portal/scratch/projects?name=${encodeURIComponent(name)}${folderId ? `&folderId=${folderId}` : ''}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/octet-stream' },
+        body: bytes,
+      },
+    ),
+  /** 下载工程原始字节（用于载入编辑器 / 另存到本机） */
+  scratchProjectBytes: async (id: number): Promise<ArrayBuffer> => {
+    const res = await fetch(`/api/portal/scratch/projects/${id}/raw`, { credentials: 'include' })
+    if (!res.ok) throw new Error(`读取工程失败（${res.status}）`)
+    return res.arrayBuffer()
+  },
+  updateScratchProject: (id: number, patch: { name?: string; folderId?: number }) =>
+    req<void>(`/api/portal/scratch/projects/${id}`, json({ method: 'PATCH', body: JSON.stringify(patch) })),
+  deleteScratchProject: (id: number) => req<void>(`/api/portal/scratch/projects/${id}`, { method: 'DELETE' }),
 
   // ---- 门户：空间训练 ----
   portalTraining: (spaceId: number | string, trainingId: number | string) =>

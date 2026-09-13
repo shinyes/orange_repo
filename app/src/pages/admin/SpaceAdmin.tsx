@@ -1059,6 +1059,8 @@ function CreateSpaceQuizDialog(props: { spaceId: number; open: boolean; onOpenCh
 
 function CreateSpaceDialog(props: { open: boolean; onOpenChange: (v: boolean) => void; onCreated: () => void }) {
   const [name, setName] = useState('')
+  // 空间类型：normal=普通（训练/练习/刷题）；scratch=额外提供「Scratch」创作页（其余功能保留）
+  const [kind, setKind] = useState<'normal' | 'scratch'>('normal')
   const [busy, setBusy] = useState(false)
   async function submit() {
     if (!name.trim()) {
@@ -1067,11 +1069,12 @@ function CreateSpaceDialog(props: { open: boolean; onOpenChange: (v: boolean) =>
     }
     setBusy(true)
     try {
-      await api.createSpace(name.trim())
-      toast.success(`空间「${name.trim()}」已创建`)
+      await api.createSpace(name.trim(), kind)
+      toast.success(kind === 'scratch' ? `Scratch 空间「${name.trim()}」已创建` : `空间「${name.trim()}」已创建`)
       props.onCreated()
       props.onOpenChange(false)
       setName('')
+      setKind('normal')
     } catch (e) {
       toast.error(e instanceof Error ? e.message : '创建失败')
     } finally {
@@ -1080,12 +1083,28 @@ function CreateSpaceDialog(props: { open: boolean; onOpenChange: (v: boolean) =>
   }
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
-      <DialogContent className="sm:max-w-xs">
+      <DialogContent className="sm:max-w-sm">
         <DialogHeader>
           <DialogTitle>新建空间</DialogTitle>
           <DialogDescription>空间 = 做题组织单位（训练/练习/作答隔离）。</DialogDescription>
         </DialogHeader>
         <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="例如：高一（3）班" autoFocus onKeyDown={(e) => e.key === 'Enter' && void submit()} />
+        <div className="space-y-1.5">
+          <label className="text-xs text-muted-foreground">空间类型</label>
+          <div className="flex gap-1.5">
+            <Button size="xs" variant={kind === 'normal' ? 'default' : 'outline'} onClick={() => setKind('normal')}>
+              普通空间
+            </Button>
+            <Button size="xs" variant={kind === 'scratch' ? 'default' : 'outline'} onClick={() => setKind('scratch')}>
+              Scratch 空间
+            </Button>
+          </div>
+          <p className="text-[11px] leading-relaxed text-muted-foreground">
+            {kind === 'scratch'
+              ? '成员会多一个「Scratch」创作页（需要部署 Scratch 容器）；训练/练习/刷题照常可用。'
+              : '标准空间：训练 / 练习 / 刷题 / 排行榜。'}
+          </p>
+        </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => props.onOpenChange(false)}>取消</Button>
           <Button onClick={() => void submit()} disabled={busy || !name.trim()}>

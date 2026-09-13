@@ -207,7 +207,9 @@ export const adminApi = {
 
   // ---- 空间管理（global_admin 带 domainId / domain_admin 自动本域） ----
   spaces: () => req<{ spaces: Space[] }>(dq('/api/admin/spaces')),
-  createSpace: (name: string) => req<{ id: number }>(dq('/api/admin/spaces'), json({ method: 'POST', body: JSON.stringify({ name }) })),
+  /** 新建空间；kind: normal=普通 | scratch=额外提供「Scratch」创作页 */
+  createSpace: (name: string, kind?: 'normal' | 'scratch') =>
+    req<{ id: number }>(dq('/api/admin/spaces'), json({ method: 'POST', body: JSON.stringify({ name, kind: kind ?? '' }) })),
   /** 部分更新空间元信息（PATCH /api/admin/spaces/:id）：仅请求中出现的字段被修改；
    *  defaultLang 仅允许 ''（未设置 → 做题页沿用 python）/ 'python' / 'cpp'，非法值后端 400。 */
   updateSpaceMeta: (id: number, payload: { name?: string; defaultLang?: string }) =>
