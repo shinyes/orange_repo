@@ -2,7 +2,7 @@
 // 空间壳顶栏（返回训练列表/我的）下，三区——左训练导航（章节分组，每格一题常显不折叠）、
 // 中央题目区（客观题先选后提交即判；编程题页内编辑器 运行/测试/提交/控制台）、
 // 底部上一题/下一题。移动端顶栏「题目」按钮 → 浮窗导航。
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
@@ -10,6 +10,7 @@ import {
   ChevronRightIcon,
   CircleCheckBigIcon,
   Code2Icon,
+  CopyIcon,
   Grid3X3Icon,
   Loader2Icon,
 } from 'lucide-react'
@@ -78,6 +79,15 @@ function TrainingFlow({ sid, tid, data, urlNo }: {
   const [statementScale, setStatementScale] = useState(1)
   // 折叠「代码编辑器 + 控制台」：题面占满（编程题专用；仅隐藏不卸载）
   const [editorCollapsed, setEditorCollapsed] = useState(false)
+  // 样例「填入自定义输入」：把样例文本送给右侧编辑卡（seq 保证连点同一按钮也会重新触发）
+  const [sampleFill, setSampleFill] = useState<{ text: string; seq: number } | null>(null)
+  const sampleSeq = useRef(0)
+  const useSampleInput = useCallback((text: string) => {
+    sampleSeq.current += 1
+    setSampleFill({ text, seq: sampleSeq.current })
+    // 编辑器被折叠时先展开，否则弹窗出现在不可见区域
+    setEditorCollapsed(false)
+  }, [])
 
   // 当前题号由 URL 派生（1 基；越界 clamp）——刷新/前进后退保持在对应题
   const activeIdx = urlNo == null ? 0 : Math.min(Math.max(1, urlNo), all.length) - 1
@@ -220,6 +230,7 @@ function TrainingFlow({ sid, tid, data, urlNo }: {
                         onScale={setStatementScale}
                         editorCollapsed={editorCollapsed}
                         onToggleEditor={() => setEditorCollapsed((v) => !v)}
+                        onUseSampleInput={useSampleInput}
                       />
                     </div>
                   }
@@ -232,6 +243,7 @@ function TrainingFlow({ sid, tid, data, urlNo }: {
                           trainingId={tid}
                           solved={itemSolved}
                           onSolved={invalidate}
+                          fillInput={sampleFill}
                         />
                       </div>
                     </div>
@@ -311,13 +323,15 @@ function TrainingFlow({ sid, tid, data, urlNo }: {
 
 // ---------- 编程题题面（题干/格式/样例 完整展示） ----------
 
-function ProgrammingStatement({ problemId, itemSolved, scale, onScale, editorCollapsed, onToggleEditor }: {
+function ProgrammingStatement({ problemId, itemSolved, scale, onScale, editorCollapsed, onToggleEditor, onUseSampleInput }: {
   problemId: number
   itemSolved: boolean
   scale: number
   onScale: (s: number) => void
   editorCollapsed: boolean
   onToggleEditor: () => void
+  /** 样例「填入自定义输入」：把该样例输入送进右侧编辑卡的运行输入框 */
+  onUseSampleInput: (text: string) => void
 }) {
   const q = useQuery({
     queryKey: ['oj-problem', problemId],
@@ -368,7 +382,7 @@ function ProgrammingStatement({ problemId, itemSolved, scale, onScale, editorCol
             <div className="space-y-2">
               {(body.samples ?? []).map((s, i) => (
                 <div key={i} className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  <SampleBox label={`输入样例 ${i + 1}`} text={s.input ?? ''} />
+                  <SampleBox label={`输入样例 ${i + 1}`} text={s.input ?? ''} onUse={() => onUseSampleInput(s.input ?? '')} />
                   <SampleBox label={`输出样例 ${i + 1}`} text={s.output ?? ''} />
                 </div>
               ))}
@@ -390,11 +404,25 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   )
 }
 
-function SampleBox({ label, text }: { label: string; text: string }) {
+// 样例框：输入样例带「填入自定义输入」按钮（与做题页 SampleBox 一致），点击后
+// 把该样例送进右侧编辑卡的运行输入框并打开对话框。
+function SampleBox({ label, text, onUse }: { label: string; text: string; onUse?: () => void }) {
   return (
     <div className="rounded-lg border bg-muted/30">
-      <div className="border-b px-2 py-1 text-[11px] font-medium text-muted-foreground">{label}</div>
-      <pre className="overflow-x-auto px-2 py-1.5 font-mono text-xs whitespace-pre-wrap">{text}</pre>
+      <div className="flex items-center justify-between px-2 py-1">
+        <span className="text-[11px] font-medium text-muted-foreground">{label}</span>
+        {onUse && (
+          <button
+            type="button"
+            className="rounded p-0.5 text-muted-foreground hover:bg-muted"
+            onClick={onUse}
+            title="填入自定义输入"
+          >
+            <CopyIcon className="size-3.5" />
+          </button>
+        )}
+      </div>
+      <pre className="overflow-x-auto border-t px-2 py-1.5 font-mono text-xs whitespace-pre-wrap">{text}</pre>
     </div>
   )
 }

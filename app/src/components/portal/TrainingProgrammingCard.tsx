@@ -40,12 +40,14 @@ function draftKey(problemId: number, lang: CodeLang, trainingId: number) {
   return `${DRAFT_PREFIX}t${trainingId}-${problemId}-${lang}`
 }
 
-export function TrainingProgrammingCard({ problemId, trainingId, solved, onSolved }: {
+export function TrainingProgrammingCard({ problemId, trainingId, solved, onSolved, fillInput }: {
   problemId: number
   trainingId: number
   /** 该题当前是否已通过（决定 AC 后是否轮询标记） */
   solved: boolean
   onSolved: () => void
+  /** 题面样例「填入自定义输入」信号（seq 变化即触发一次：填值并打开运行输入对话框） */
+  fillInput?: { text: string; seq: number } | null
 }) {
   // 题目数据（父级 ProgrammingStatement 已 useQuery 同 key，缓存命中直接取到 starterPy/starterCpp）。
   const problemQ = useQuery({
@@ -79,6 +81,16 @@ export function TrainingProgrammingCard({ problemId, trainingId, solved, onSolve
   const codeRef = useRef(code)
   codeRef.current = code
   const touchedRef = useRef(false)
+
+  // 题面样例「填入自定义输入」：填入运行输入框并打开对话框（与做题页 SampleBox 行为一致）。
+  // 依赖 seq：连续点同一个样例也会重新触发。
+  const lastFillSeq = useRef(0)
+  useEffect(() => {
+    if (!fillInput || fillInput.seq === lastFillSeq.current) return
+    lastFillSeq.current = fillInput.seq
+    setCustomInput(fillInput.text)
+    setShowCustomInput(true)
+  }, [fillInput])
 
   // 云端草稿：本地为空且用户未输入时，随 cloudLoaded/题目数据到达逐级回填（云草稿 → 题目模板 → 通用）；
   // 仅云草稿回填写本地草稿，模板本身不落本地（避免挡住后续云草稿）。
