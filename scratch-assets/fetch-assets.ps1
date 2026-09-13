@@ -145,9 +145,8 @@ $sum = 0
 if ($files.Count -gt 0) { $sum = ($files | Measure-Object -Property Length -Sum).Sum }
 Write-Host ("目录素材文件数：{0}，合计 {1} MB" -f $files.Count, [math]::Round($sum / 1MB, 1))
 Write-Host ""
-Write-Host "接下来（二选一）：" -ForegroundColor Cyan
-Write-Host "  A) 把素材文件拷到仓库 scratch-assets\ 后构建："
+Write-Host "接下来：" -ForegroundColor Cyan
+Write-Host "  · 若上面统计的文件数不足 1347：再跑一次 -Retry 补齐（清单见 manifest.tsv）"
+Write-Host "  · 素材直接放在仓库 scratch-assets\ 下即可随构建进镜像，然后："
 Write-Host "     docker build --build-arg ASSET_MIRROR_REQUIRED=1 -f scratch/Dockerfile -t orangeoj-scratch ."
-Write-Host "  B) 打成素材包上传到 GitHub Release，再用 URL 构建（CI 也能用）："
-Write-Host "     tar -czf scratch-assets.tar.gz -C $Out ."
-Write-Host "     docker build --build-arg ASSET_BUNDLE_URL=<素材包URL> -f scratch/Dockerfile -t orangeoj-scratch ."
+Write-Host "  · 提交更新：git add scratch-assets && git commit -m \"chore(scratch): 更新离线素材库\""

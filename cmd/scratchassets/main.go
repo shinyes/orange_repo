@@ -139,7 +139,7 @@ func main() {
 					msg := lastErrMsg
 					lastErrMu.Unlock()
 					fmt.Printf("连续 %d 个素材下载失败，判定素材源不可达（最新错误：%s）\n", 25, msg)
-					fmt.Println("提示：可在有网络的机器上抓取后放入 scratch-assets/，或用 --build-arg ASSET_BUNDLE_URL 提供素材包")
+					fmt.Println("提示：可在有网络的机器上抓取后放入仓库 scratch-assets/（见该目录 README），再重新构建")
 					os.Exit(3)
 				}
 				failMu.Lock()

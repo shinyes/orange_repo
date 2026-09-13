@@ -9,10 +9,11 @@
 #   · scratch-gui 官方 standalone 产物（未修改上游代码）
 #   · 本站宿主页 host.js / index.html（我们把编辑器挂起来并暴露受控消息通道）
 #   · 积木素材（scratch-blocks/media）
-#   · **完整素材库镜像**（角色/造型/声音/背景，构建期从 assets.scratch.mit.edu 抓取）
+#   · 离线素材库（角色/造型/声音/背景）：来自仓库 scratch-assets/，构建期拷入镜像
 #
 # 构建（在仓库根目录执行）：
-#   docker build -f scratch/Dockerfile -t orangeoj-scratch .
+#   docker build --build-arg ASSET_MIRROR_REQUIRED=1 -f scratch/Dockerfile -t orangeoj-scratch .
+#   （ASSET_MIRROR_REQUIRED=1 会让"素材不完整"直接构建失败；CI 已默认开启）
 
 # ---------- 1) 取 scratch-gui 产物 + 宿主页 ----------
 # 版本对齐主 Dockerfile：node 24（与本地验证环境一致）+ npm install 用 lockfile 保证可复现
@@ -30,30 +31,24 @@ RUN set -eux; \
     cp host/index.html host/host.js /out/; \
     cp -r node_modules/scratch-blocks/media/. /out/static/blocks-media/
 
-# ---------- 2) 构建期抓取完整素材库（角色/造型/声音/背景）----------
-# 需要构建机能访问 https://assets.scratch.mit.edu（GitHub Actions 等常规外网环境可以）。
-# 若构建环境访问不到（内网/镜像被墙），构建仍会成功但素材为空——此时有两种补救：
-#   a) 在能联网的机器上执行：go run ./cmd/scratchassets -out ./scratch-assets
-#      然后把该目录作为构建上下文的一部分（--build-arg 或直接 COPY）打进镜像；
-#   b) 把该目录挂载到运行中的容器：-v /path/scratch-assets:/usr/share/nginx/html/static/scratch-assets
-# 可用 --build-arg ASSET_MIRROR_REQUIRED=1 让"素材为空"直接构建失败（CI 建议开启）。
+# ---------- 2) 组装离线素材库（角色/造型/声音/背景）----------
+# 素材随仓库提供（scratch-assets/，1347 个文件，约 54MB）→ 构建期不依赖外网。
+# 只有"仓库里缺失的素材"才会联网补齐；若构建机没有外网，用
+#   powershell -File scratch-assets/fetch-assets.ps1 -Out scratch-assets -Retry
+# 在能联网的机器上补齐并提交。ASSET_MIRROR_REQUIRED=1 时素材不完整会直接构建失败。
 # 版本必须与 go.mod 的 go 指令一致（当前 go 1.25.5）——用 1.24 会报
 # "go.mod requires go >= 1.25.5 (running go 1.24.x; GOTOOLCHAIN=local)" 直接构建失败。
-# 说明：该阶段只编译 cmd/scratchassets（纯标准库，无第三方依赖），但要能访问 HTTPS
-# 下载素材，故用带 CA 证书的 bookworm 变体。
+# 说明：该阶段只编译 cmd/scratchassets（纯标准库，无第三方依赖）。
 FROM golang:1.25-bookworm AS assets
 WORKDIR /src
 ARG ASSET_MIRROR_REQUIRED=0
-# 可选：素材包 URL（tar.gz）。CI 出口访问不到官方 CDN 时，可把一次抓好的素材包挂到
-# GitHub Release（或任意可下载地址），用 --build-arg ASSET_BUNDLE_URL=... 让构建直接离线供料。
-# 例：ASSET_BUNDLE_URL=https://github.com/<owner>/<repo>/releases/download/scratch-assets-v1/scratch-assets.tar.gz
-ARG ASSET_BUNDLE_URL=
 COPY go.mod go.sum ./
 COPY cmd ./cmd
 RUN go build -o /usr/local/bin/scratchassets ./cmd/scratchassets
 COPY --from=web /build/node_modules/@scratch/scratch-gui/src/lib/libraries /lib
-# 可选：本地已抓取的素材（scratch-assets/ 目录，默认只有 README）——
-# 先铺进目标目录，工具会把已存在的文件当"已下载"跳过，只联网补齐缺失部分。
+# 素材来自仓库 scratch-assets/（1347 个文件，随仓库分发）→ 构建期无需外网。
+# 若某个素材缺失（例如上游素材库更新后仓库还没补），这里的工具会联网补齐；
+# 构建机没有外网时，用 scratch-assets/fetch-assets.ps1 在能联网的机器上补齐后提交即可。
 COPY scratch-assets /local-assets
 RUN set -eux; \
     mkdir -p /scratch-assets; \
@@ -63,28 +58,17 @@ RUN set -eux; \
            -o -name '*.jpg' -o -name '*.jpeg' -o -name '*.gif' -o -name '*.webp' \) \
         -exec cp -n {} /scratch-assets/ \; ; \
     fi; \
-    if [ -n "$ASSET_BUNDLE_URL" ]; then \
-      echo "下载素材包: $ASSET_BUNDLE_URL"; \
-      curl -fsSL --retry 3 --connect-timeout 20 "$ASSET_BUNDLE_URL" -o /tmp/assets.tar.gz \
-        && tar xzf /tmp/assets.tar.gz -C /scratch-assets \
-        || echo "警告：素材包下载/解包失败，继续走联网抓取"; \
-    fi; \
-    local_count=$(find /scratch-assets -type f \( -name '*.svg' -o -name '*.png' -o -name '*.wav' -o -name '*.mp3' -o -name '*.jpg' -o -name '*.jpeg' -o -name '*.gif' -o -name '*.webp' \) | wc -l); \
-    echo "预置素材文件数（仓库 scratch-assets/ + 素材包）: $local_count"; \
+    preset=$(find /scratch-assets -type f \( -name '*.svg' -o -name '*.png' -o -name '*.wav' -o -name '*.mp3' -o -name '*.jpg' -o -name '*.jpeg' -o -name '*.gif' -o -name '*.webp' \) | wc -l); \
+    echo "仓库预置素材文件数: $preset"; \
     /usr/local/bin/scratchassets -lib /lib -out /scratch-assets -workers 12 \
       || /usr/local/bin/scratchassets -lib /lib -out /scratch-assets -workers 4 \
       || true; \
     count=$(find /scratch-assets -type f \( -name '*.svg' -o -name '*.png' -o -name '*.wav' -o -name '*.mp3' -o -name '*.jpg' -o -name '*.jpeg' -o -name '*.gif' -o -name '*.webp' \) | wc -l); \
-    echo "素材库镜像文件数: $count（期望 1000+；为 0 表示既没有预置素材、也访问不到素材源）"; \
+    echo "素材库镜像文件数: $count（仓库应提供 1347；少了说明 scratch-assets/ 不完整）"; \
     echo "$count" > /scratch-assets/asset-count.txt; \
-    if [ "$count" -eq 0 ]; then \
-      echo "警告：素材库为空——编辑器核心功能可用，但角色/造型/声音素材库将缺失。"; \
-      echo "     解决：在有网络的机器上执行 go run ./cmd/scratchassets -out ./scratch-assets，" \
-           "把结果放进仓库 scratch-assets/ 目录；或用 --build-arg ASSET_BUNDLE_URL=<素材包URL>。" >&2; \
-    fi; \
-    if [ "$ASSET_MIRROR_REQUIRED" = "1" ] && [ "$count" -lt 100 ]; then \
-      echo "错误：素材库镜像不完整（$count 个文件）——仓库 scratch-assets/ 未包含素材，" >&2; \
-      echo "     且构建机无法访问素材源。请先预置素材（见 scratch-assets/README.md）" >&2; \
+    if [ "$ASSET_MIRROR_REQUIRED" = "1" ] && [ "$count" -lt 1000 ]; then \
+      echo "错误：素材库不完整（$count 个文件，期望 1347）——请确认 scratch-assets/ 已完整提交，" >&2; \
+      echo "     或用 scratch-assets/fetch-assets.ps1 -Retry 补齐后重新构建" >&2; \
       exit 1; \
     fi
 
