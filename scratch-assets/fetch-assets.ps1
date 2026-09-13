@@ -148,5 +148,5 @@ Write-Host ""
 Write-Host "接下来：" -ForegroundColor Cyan
 Write-Host "  · 若上面统计的文件数不足 1347：再跑一次 -Retry 补齐（清单见 manifest.tsv）"
 Write-Host "  · 素材直接放在仓库 scratch-assets\ 下即可随构建进镜像，然后："
-Write-Host "     docker build --build-arg ASSET_MIRROR_REQUIRED=1 -f scratch/Dockerfile -t orangeoj-scratch ."
+Write-Host "     docker build -f scratch/Dockerfile -t orangeoj-scratch ."
 Write-Host "  · 提交更新：git add scratch-assets && git commit -m \"chore(scratch): 更新离线素材库\""

@@ -12,25 +12,27 @@
 | 来源 | `https://assets.scratch.mit.edu`（Scratch 官方素材库） |
 | 清单 | `manifest.tsv`（每行 `URL<TAB>文件名`，1347 行） |
 
-构建时 Dockerfile 会把素材拷进镜像的 `/static/scratch-assets/`，并写入 `asset-count.txt` 便于自查。
-构建**不依赖外网**：只有仓库里缺失的素材才会尝试联网补齐。
+构建时 Dockerfile 会把素材拷进镜像的 `/static/scratch-assets/`，并按本目录 `manifest.tsv` 的行数
+**校验数量**：少于期望值直接构建失败（防止再出现"素材没进去却构建成功"的小镜像）。
+构建**不需要外网**。
 
 ## 更新素材（当上游素材库新增内容时）
 
 ```powershell
-# 1) 重新生成清单（仓库根目录）
+# 1) 重新生成清单（仓库根目录；仅素材库有变化时才需要）
 go run ./cmd/scratchassets -list scratch-assets/manifest.tsv
 
 # 2) 补齐缺失项（Windows PowerShell 5.1/7 均可；-Jobs 8 并发）
 powershell -ExecutionPolicy Bypass -File scratch-assets\fetch-assets.ps1 -Out scratch-assets -Retry
 
-# 3) 提交
+# 3) 提交（顺手确认数量与清单一致）
 git add scratch-assets && git commit -m "chore(scratch): 更新离线素材库"
 ```
 
 > `fetch-assets.ps1` 必须保存为 **UTF-8 带 BOM**，否则 Windows PowerShell 5.1 会把中文按 ANSI
-> 解析而报语法错误。Linux/macOS 或 CI 上可直接用 Go 工具下载：
-> `go run ./cmd/scratchassets -out ./scratch-assets -workers 12`（已存在的文件自动跳过）。
+> 解析而报语法错误。
+> `cmd/scratchassets` 是**维护用**工具（生成清单 / 补齐素材），不参与镜像构建；
+> 在 Linux/macOS 或 CI 上可直接 `go run ./cmd/scratchassets -out ./scratch-assets -workers 12`。
 
 ## 自查（镜像起来后）
 
