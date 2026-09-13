@@ -25,12 +25,17 @@ COPY app/scratch/package.json app/scratch/package-lock.json ./
 RUN npm install --global=false --no-audit --no-fund --legacy-peer-deps
 COPY app/scratch/host ./host
 RUN set -eux; \
-    mkdir -p /out/static/blocks-media /out/chunks; \
+    mkdir -p /out/static/blocks-media/default /out/static/blocks-media/high-contrast /out/chunks; \
     cp node_modules/@scratch/scratch-gui/dist/scratch-gui-standalone.js /out/; \
     cp node_modules/@scratch/scratch-gui/dist/extension-worker.js /out/; \
     cp -r node_modules/@scratch/scratch-gui/dist/chunks/. /out/chunks/; \
     cp host/index.html host/host.js /out/; \
-    cp -r node_modules/scratch-blocks/media/. /out/static/blocks-media/
+    cp -r node_modules/scratch-blocks/media/. /out/static/blocks-media/; \
+    cp -r node_modules/scratch-blocks/media/. /out/static/blocks-media/default/; \
+    cp -r node_modules/scratch-blocks/media/. /out/static/blocks-media/high-contrast/; \
+    test -f /out/static/blocks-media/default/repeat.svg; \
+    test -f /out/static/blocks-media/default/zoom-in.svg; \
+    test -f /out/static/blocks-media/high-contrast/repeat.svg
 
 # ---------- 2) 运行时：静态服务 + 素材库校验 ----------
 # 素材完整性按仓库清单校验：数量少于 manifest.tsv 的行数即构建失败——

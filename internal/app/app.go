@@ -61,6 +61,29 @@ func Open(cfg Config) (*App, error) {
 		uploadsDir = filepath.Join(cfg.DataDir, "uploads")
 	}
 
+	// 0) Scratch 反代配置先校验（在打开数据库之前）：配置不合法时直接失败，
+	//    避免"已打开库才发现配置错误"导致句柄泄漏（测试曾因此清理不掉临时目录）。
+	scratchURL := strings.TrimRight(strings.TrimSpace(cfg.ScratchURL), "/")
+	internal := strings.TrimRight(strings.TrimSpace(cfg.ScratchInternalURL), "/")
+	var scratchTarget *url.URL
+	var scratchHost string
+	if internal != "" {
+		target, err := url.Parse(internal)
+		if err != nil || target.Host == "" {
+			return nil, fmt.Errorf("scratch internal url 不合法: %q", internal)
+		}
+		if scratchURL == "" {
+			return nil, fmt.Errorf("配置了 scratch 内部地址时必须同时给出公开地址（-scratch-url），" +
+				"例如 https://scratch.example.com（主站按该域名反代）")
+		}
+		public, err := url.Parse(scratchURL)
+		if err != nil || public.Host == "" {
+			return nil, fmt.Errorf("scratch 公开地址不合法: %q", scratchURL)
+		}
+		scratchTarget = target
+		scratchHost = hostOnly(public.Host)
+	}
+
 	// 1) 主库打开（store schema：题库/域/空间结构表）。
 	st, err := store.Open(cfg.DataDir)
 	if err != nil {
@@ -89,37 +112,23 @@ func Open(cfg Config) (*App, error) {
 	app.Get("/api/health", func(c *fiber.Ctx) error { return c.JSON(fiber.Map{"ok": true}) })
 
 	// 公开运行时配置（无需登录）：前端据此决定 Scratch 空间页是嵌 iframe 还是显示"未部署"。
-	scratchURL := strings.TrimRight(strings.TrimSpace(cfg.ScratchURL), "/")
-	internal := strings.TrimRight(strings.TrimSpace(cfg.ScratchInternalURL), "/")
+	// （scratchURL / internal / scratchTarget 已在函数开头校验并解析，此处不再重复解析。）
 
-	// Scratch 容器作为**内部容器**（不对外暴露端口）时：主站在 /scratch-app/ 反代它。
-	// 浏览器因此是同源访问（无子域、无证书、无跨域），容器也不需要单独鉴权。
-	if internal != "" {
-		target, err := url.Parse(internal)
-		if err != nil || target.Host == "" {
-			return nil, fmt.Errorf("scratch internal url 不合法: %q", internal)
-		}
-		// 用 Rewrite（而非 StripPrefix）做前缀处理：Fiber 的 Use(前缀) 对挂载路径的剥离行为
-		// 在带/不带尾斜杠、带/不带查询串时并不一致，而 Rewrite 里 TrimPrefix 是幂等的——
-		// 前缀已被 Fiber 剥掉时它什么都不做，没剥掉时正好补上（曾经因此对 `/scratch-app/?x=1`
-		// 返回 19 字节的 "404 page not found"）。
+	// Scratch 容器作为**内部容器**（不对外暴露端口）时：主站在它的**公开域名根路径**上反代它。
+	//
+	// 为什么必须是"域名根"而不是路径前缀（如 /scratch-app/）：
+	// 上游 scratch-gui 的 standalone 构建把 webpack publicPath 硬编码为 "/"，运行期会以绝对路径取
+	// 懒加载 chunk（/chunks/fetch-worker.*.js、/chunks/paper-source.*.js）、块素材
+	// （/static/blocks-media/...）与教程图（/static/assets/...）。挂在路径前缀下时这些请求会打到
+	// 主站域名根，被 SPA 兜底成 index.html（表现为 "Unexpected token '<'" 与素材 404）。
+	// 因此：SCRATCH_URL 给公开地址（如 https://scratch.example.com）→ 主站按 Host 命中该地址的
+	// 请求在根路径反代到容器；只配 SCRATCH_URL 不配内部地址时，则为"子域直连容器"模式（前端直接用该地址）。
+	if scratchTarget != nil {
 		proxy := &httputil.ReverseProxy{
 			Rewrite: func(pr *httputil.ProxyRequest) {
-				pr.SetURL(target) // scheme/host
-				path := strings.TrimPrefix(pr.In.URL.Path, "/scratch-app")
-				// Fiber 的 Use(前缀) 会剥掉挂载前缀，此时 path 可能连前导斜杠都没有
-				// （如 "host.js"）；静态服务只认以 "/" 开头的路径，否则一律 404。
-				if !strings.HasPrefix(path, "/") {
-					path = "/" + path
-				}
-				pr.Out.URL.Path = path
-				if pr.Out.URL.RawPath != "" {
-					rp := strings.TrimPrefix(pr.Out.URL.RawPath, "/scratch-app")
-					if !strings.HasPrefix(rp, "/") {
-						rp = "/" + rp
-					}
-					pr.Out.URL.RawPath = rp
-				}
+				pr.SetURL(scratchTarget)         // scheme/host → 容器
+				pr.Out.URL.Path = pr.In.URL.Path // 根路径原样转发（不剥前缀）
+				pr.Out.URL.RawPath = pr.In.URL.RawPath
 				pr.Out.URL.RawQuery = pr.In.URL.RawQuery
 			},
 			ErrorHandler: func(w http.ResponseWriter, r *http.Request, perr error) {
@@ -129,8 +138,13 @@ func Open(cfg Config) (*App, error) {
 				_, _ = w.Write([]byte(`{"error":"Scratch 服务不可用：` + perr.Error() + `"}`))
 			},
 		}
-		app.Use("/scratch-app", adaptor.HTTPHandler(proxy))
-		scratchURL = "/scratch-app" // 前端同源 iframe 前缀
+		handler := adaptor.HTTPHandler(proxy)
+		app.Use(func(c *fiber.Ctx) error {
+			if !strings.EqualFold(hostOnly(c.Hostname()), scratchHost) {
+				return c.Next() // 其他域名照常走主站
+			}
+			return handler(c)
+		})
 	}
 
 	app.Get("/api/config", func(c *fiber.Ctx) error {
@@ -186,4 +200,12 @@ func mountStatics(app *fiber.App, webDist string) {
 func hasIndex(dir string) bool {
 	_, err := os.Stat(filepath.Join(dir, "index.html"))
 	return err == nil
+}
+
+// hostOnly 去掉主机名里的端口（Host 头可能带端口，比较时统一按主机名）。
+func hostOnly(host string) string {
+	if i := strings.LastIndex(host, ":"); i > 0 && !strings.Contains(host[i:], "]") {
+		return host[:i]
+	}
+	return host
 }

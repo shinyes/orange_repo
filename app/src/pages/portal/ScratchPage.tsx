@@ -173,10 +173,10 @@ export function ScratchPage() {
             在主服务上配置其内部地址即可启用：
           </p>
           <pre className="mt-3 overflow-x-auto rounded-lg bg-muted p-3 text-left font-mono text-[11px] leading-relaxed">
-{`# docker compose 中主服务环境变量
+{`# docker compose：主服务环境变量（两条一起配 = 主站在该子域根路径反代容器）
+ORANGEOJ_SCRATCH_URL=https://scratch.example.com
 ORANGEOJ_SCRATCH_INTERNAL_URL=http://orangescratch:80
-# 或使用独立子域直连
-ORANGEOJ_SCRATCH_URL=https://scratch.example.com`}
+# 只配 ORANGEOJ_SCRATCH_URL = 子域直连容器（自行暴露端口与证书）`}
           </pre>
           <p className="mt-3 text-xs text-muted-foreground">
             当前空间仍可正常使用训练 / 练习 / 刷题等其他功能。

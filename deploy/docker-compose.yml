@@ -12,10 +12,9 @@
 #
 # Scratch 编辑器（AGPL-3.0，独立容器，**内部容器模式**，可选）：
 #   · 用途：Scratch 空间里的「Scratch」创作页（离线可用，素材库打在镜像里）
-#   · 不对外暴露端口：主站反代 /scratch-app/ → 浏览器同源访问（无需子域/证书/跨域处理）
-#   · 主站侧配置：ORANGEOJ_SCRATCH_INTERNAL_URL=http://orangescratch:80
-#   · 若你更想让 Scratch 走独立子域直接访问（不经主站反代），改用：
-#       主站 ORANGEOJ_SCRATCH_URL=https://scratch.example.com + 给本服务加 ports: ["8081:80"]
+#   · 不对外暴露端口：主站按 Host 在**子域根路径**反代到本服务（无需为它单独配证书）
+#   · 主站侧配置：ORANGEOJ_SCRATCH_URL=https://scratch.example.com + ORANGEOJ_SCRATCH_INTERNAL_URL=http://orangescratch:80
+#   · 若要走独立子域直连（不经主站反代）：只配 ORANGEOJ_SCRATCH_URL，并给本服务加 ports: ["8081:80"]
 #   · 两者都留空 = 未部署：Scratch 空间页显示「未部署」提示，其余功能不受影响
 #   · 不需要 Scratch 的部署：删掉本服务与主站的 Scratch 配置即可
 services:
@@ -32,8 +31,16 @@ services:
       "-judge-workers", "2",
     ]
     environment:
-      # Scratch 编辑器容器（内部容器，不对外暴露端口）：主站反代 /scratch-app/ → 浏览器同源访问，
-      # 因此不需要子域、不需要额外证书，容器也无需单独鉴权。留空=未部署（Scratch 页显示提示）。
+      # Scratch 编辑器容器（内部容器，不对外暴露端口）：
+      #   · ORANGEOJ_SCRATCH_URL          浏览器访问用的**公开地址**（子域，如 https://scratch.example.com）
+      #   · ORANGEOJ_SCRATCH_INTERNAL_URL  容器内部地址；两者同时配置时，主站按 Host 命中该子域并在
+      #     **根路径**反代到容器（容器无需对外暴露端口，也无需为它单独配置 TLS）
+      #   · 必须挂在子域的根路径，不能用路径前缀（如 /scratch-app/）：上游编辑器 webpack publicPath
+      #     硬编码为 "/"，运行期以绝对路径取 /chunks/* 与 /static/blocks-media/*，挂前缀下必然 404
+      #   · 只配 ORANGEOJ_SCRATCH_URL 不配内部地址 = 子域直连容器（自行暴露端口 + 证书）
+      #   · 两者都不配 = 未部署（Scratch 空间页显示提示，其余功能不受影响）
+      # 反向代理侧：把该子域解析到同一台机器并转发到主服务的 8080（主站会按 Host 分流给容器）。
+      ORANGEOJ_SCRATCH_URL: "${ORANGEOJ_SCRATCH_URL:-}"
       ORANGEOJ_SCRATCH_INTERNAL_URL: "http://orangescratch:80"
     ports:
       - "8080:8080"
@@ -77,7 +84,7 @@ services:
 
   # Scratch 编辑器（AGPL-3.0，**内部容器**：不映射端口，仅主站反代访问；可选服务）
   #   · 镜像内置完整素材库（角色/造型/声音/背景），离线可用
-  #   · 主站通过 ORANGEOJ_SCRATCH_INTERNAL_URL=http://orangescratch:80 反代 /scratch-app/
+  #   · 主站按 Host 在子域根路径反代本服务（见上方 orangeoj 的 Scratch 配置说明）
   #   · 启动后自检：curl -fsS http://127.0.0.1/healthz（容器内）
   #   · 不需要 Scratch 时：删掉本服务与主站的 ORANGEOJ_SCRATCH_INTERNAL_URL 即可
   orangescratch:
