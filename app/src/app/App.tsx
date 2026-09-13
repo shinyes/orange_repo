@@ -3,18 +3,14 @@
 // 管理员（domain_admin/global_admin）同为做题界面 + 顶栏管理入口；/admin 为管理区
 // （题目管理三栏工作区 / 域管理 / 空间管理，路由化；member 访问重定向回 /）。
 import { lazy, Suspense, useEffect, useState } from 'react'
-import { BrowserRouter, Navigate, NavLink, Outlet, Route, Routes, useNavigate } from 'react-router-dom'
-import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query'
-import { BackpackIcon, ShieldIcon, UserRoundIcon } from 'lucide-react'
-import { toast } from 'sonner'
+import { BrowserRouter, Navigate, NavLink, Outlet, Route, Routes } from 'react-router-dom'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { ShieldIcon, UserRoundIcon } from 'lucide-react'
 
-import { api } from '@/api'
 import { authApi } from '@/api/auth'
 import { UNAUTHORIZED_EVENT } from '@/api/client'
 import type { User } from '@/api/types'
 import { cn } from '@/lib/utils'
-import { Button } from '@/components/ui/button'
-import { BackpackDialog } from '@/components/portal/backpack'
 import { Toaster } from '@/components/ui/sonner'
 import { Login } from '@/components/Login'
 import { MyPage } from '@/pages/portal/MyPage'
@@ -153,16 +149,10 @@ function RequireAdmin({ user, children }: { user: User; children: React.ReactNod
 
 // 非空间页的轻量顶壳：品牌 → 我的（个人入口）；管理员额外展示「管理」入口。
 // 「我的」页含账号与退出。
+// 注：书包入口已移到 Scratch 编辑器工具栏最右侧（见 app/scratch/host/host.js），
+// 主站顶栏不再放书包按钮（与 scratch.zhike.in 的布局一致）。
 function TopShell({ user, onLogout }: { user: User; onLogout: () => void }) {
   const isAdmin = user.role !== 'member'
-  const [backpackOpen, setBackpackOpen] = useState(false)
-  const navigate = useNavigate()
-  // 书包里「在 Scratch 中打开」：跳到当前空间（或第一个 Scratch 空间）的创作页并带上作品 id
-  const spacesQ = useQuery({ queryKey: ['portal-spaces'], queryFn: api.portalSpaces, enabled: backpackOpen })
-  const scratchSpaces = (spacesQ.data?.spaces ?? []).filter((s) => s.kind === 'scratch')
-  const savedSpaceId = Number(localStorage.getItem('oj:space') || 0)
-  const targetSpace =
-    scratchSpaces.find((s) => s.id === savedSpaceId)?.id ?? scratchSpaces[0]?.id ?? 0
   return (
     <div className="flex h-dvh flex-col overflow-hidden">
       <header className="shrink-0 border-b bg-background">
@@ -188,17 +178,7 @@ function TopShell({ user, onLogout }: { user: User; onLogout: () => void }) {
             </NavLink>
           )}
           <div className="flex-1" />
-          {/* 书包：Scratch 作品库（跨空间，全局；最右侧） */}
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 shrink-0 gap-1.5 rounded-full text-xs"
-            title="书包：保存的 Scratch 作品"
-            onClick={() => setBackpackOpen(true)}
-          >
-            <BackpackIcon className="size-3.5" />
-            <span className="hidden sm:inline">书包</span>
-          </Button>
+
           <NavLink
             to="/mine"
             className={({ isActive }) =>
@@ -226,17 +206,7 @@ function TopShell({ user, onLogout }: { user: User; onLogout: () => void }) {
       <main className="min-h-0 flex-1 overflow-y-auto">
         <Outlet context={{ user, onLogout }} />
       </main>
-      <BackpackDialog
-        open={backpackOpen}
-        onOpenChange={setBackpackOpen}
-        onOpenInScratch={(p) => {
-          if (!targetSpace) {
-            toast.error('还没有 Scratch 空间：请让管理员在域里创建一个「Scratch 空间」')
-            return
-          }
-          navigate(`/s/${targetSpace}/scratch?openProject=${p.id}`)
-        }}
-      />
+
     </div>
   )
 }

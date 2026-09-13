@@ -8,11 +8,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
-import { BookOpenIcon, FolderOpenIcon, HardDriveDownloadIcon, Loader2Icon, SaveIcon } from 'lucide-react'
+import { FolderOpenIcon, Loader2Icon } from 'lucide-react'
 
 import { api } from '@/api'
 import { Button } from '@/components/ui/button'
-import { BackpackPickerDialog } from '@/components/portal/backpack'
+import { BackpackDialog } from '@/components/portal/backpack'
 
 const PROTOCOL = 1
 const SCRATCH_LOCALE = 'zh-cn'
@@ -32,7 +32,6 @@ export function ScratchPage() {
   const pending = useRef<Map<number, Pending>>(new Map())
   const nextId = useRef(1)
   const [ready, setReady] = useState(false)
-  const [busy, setBusy] = useState<'save' | 'open' | null>(null)
   const [pickerOpen, setPickerOpen] = useState(false)
 
   const cfgQ = useQuery({ queryKey: ['app-config'], queryFn: api.appConfig, staleTime: 5 * 60_000 })
@@ -65,6 +64,13 @@ export function ScratchPage() {
       }
       if (msg.type === 'error') {
         toast.error(String(msg.message || 'Scratch 编辑器出错'))
+        return
+      }
+      // 编辑器工具栏右侧的按钮（书包 / 保存到书包）→ 统一由主站处理
+      // （书包数据与登录态都在主站；iframe 不直接调 API）
+      if (msg.type === 'ui' && typeof msg.action === 'string') {
+        if (msg.action === 'openBackpack') setPickerOpen(true)
+        else if (msg.action === 'saveToBackpack') void saveRef.current()
         return
       }
       if (msg.type === 'reply' && typeof msg.id === 'number') {
@@ -109,7 +115,6 @@ export function ScratchPage() {
     }
     const name = window.prompt('保存到书包：给作品起个名字', `我的作品 ${new Date().toLocaleString('zh-CN', { hour12: false })}`)
     if (name === null) return
-    setBusy('save')
     try {
       const bytes = await ask({ type: 'saveSb3' })
       if (!bytes || bytes.length === 0) throw new Error('导出内容为空')
@@ -119,13 +124,15 @@ export function ScratchPage() {
     } catch (e) {
       toast.error(e instanceof Error ? e.message : '保存失败')
     } finally {
-      setBusy(null)
+      /* 无按钮态需要复位（保存按钮在编辑器工具栏里） */
     }
   }
+  // 消息回调里要用到最新的 saveToBackpack（避免闭包捕获旧版本）
+  const saveRef = useRef<() => Promise<void>>(saveToBackpack)
+  saveRef.current = saveToBackpack
 
   // ---- 从书包打开 ----
   const openProject = useCallback(async (projectId: number, projectName: string) => {
-    setBusy('open')
     try {
       const bytes = await api.scratchProjectBytes(projectId)
       await ask({ type: 'loadSb3', bytes: new Uint8Array(bytes) }, [], 60_000)
@@ -138,7 +145,7 @@ export function ScratchPage() {
     } catch (e) {
       toast.error(e instanceof Error ? e.message : '打开失败')
     } finally {
-      setBusy(null)
+      /* 无按钮态需要复位（保存按钮在编辑器工具栏里） */
     }
   }, [ask, setParams])
 
@@ -190,71 +197,32 @@ ORANGEOJ_SCRATCH_INTERNAL_URL=http://orangescratch:80
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      {/* 顶部操作条：保存到书包 / 从书包打开 */}
-      <div className="flex flex-wrap items-center gap-2 border-b bg-card px-3 py-2">
-        <span className="text-xs text-muted-foreground">
-          {ready ? '编辑器已就绪（简体中文）' : '编辑器加载中…'}
-        </span>
-        <div className="ml-auto flex items-center gap-2">
-          <Button size="sm" variant="outline" className="h-8 text-xs" disabled={busy !== null} onClick={() => setPickerOpen(true)}>
-            <BookOpenIcon className="size-3.5" /> 从书包打开
-          </Button>
-          <Button size="sm" className="h-8 text-xs" disabled={!ready || busy !== null} onClick={() => void saveToBackpack()}>
-            {busy === 'save' ? <Loader2Icon className="size-3.5 animate-spin" /> : <SaveIcon className="size-3.5" />} 保存到书包
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-8 text-xs"
-            disabled={!ready || busy !== null}
-            title="把当前作品导出为 .sb3 下载到本机（编辑器自带的“保存到电脑”同样可用）"
-            onClick={() => void downloadCurrent()}
-          >
-            <HardDriveDownloadIcon className="size-3.5" /> 导出 .sb3
-          </Button>
+    <div className="relative h-full min-h-0">
+      {/* 编辑器占满整页（模仿 scratch.zhike.in 的独立编辑器页）；
+          书包 / 保存 按钮由宿主页注入在编辑器顶栏最右侧（见 app/scratch/host/host.js），
+          点击后经 postMessage 回到本页处理。 */}
+      {!ready && (
+        <div className="absolute inset-0 z-10 flex items-center justify-center gap-2 bg-background/70 text-xs text-muted-foreground">
+          <Loader2Icon className="size-4 animate-spin" /> Scratch 编辑器加载中…
         </div>
-      </div>
+      )}
+      <iframe
+        ref={iframeRef}
+        src={iframeSrc}
+        title="Scratch 编辑器"
+        className="h-full w-full border-0"
+        allow="microphone; camera; clipboard-read; clipboard-write; fullscreen"
+      />
 
-      <div className="relative min-h-0 flex-1">
-        {!ready && (
-          <div className="absolute inset-0 z-10 flex items-center justify-center gap-2 bg-background/70 text-xs text-muted-foreground">
-            <Loader2Icon className="size-4 animate-spin" /> Scratch 编辑器加载中…
-          </div>
-        )}
-        <iframe
-          ref={iframeRef}
-          src={iframeSrc}
-          title="Scratch 编辑器"
-          className="h-full w-full border-0"
-          allow="microphone; camera; clipboard-read; clipboard-write; fullscreen"
-        />
-      </div>
-
-      <BackpackPickerDialog
+      {/* 书包面板（工具栏「书包」按钮触发）：可直接把作品载入当前编辑器 */}
+      <BackpackDialog
         open={pickerOpen}
         onOpenChange={setPickerOpen}
-        onPick={(p) => { setPickerOpen(false); void openProject(p.id, p.name) }}
+        onOpenInScratch={(p) => { setPickerOpen(false); void openProject(p.id, p.name) }}
       />
     </div>
   )
 
-  async function downloadCurrent() {
-    try {
-      const bytes = await ask({ type: 'saveSb3' })
-      if (!bytes) return
-      const buf = bytes.slice().buffer as ArrayBuffer
-      const blob = new Blob([buf], { type: 'application/x.scratch.sb3' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `scratch-${Date.now()}.sb3`
-      a.click()
-      URL.revokeObjectURL(url)
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : '导出失败')
-    }
-  }
 }
 
 function Center({ children }: { children: React.ReactNode }) {
