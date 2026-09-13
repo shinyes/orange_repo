@@ -10,6 +10,14 @@
   </style>
   <!-- 尽早开始拉主包（16.4MB → gzip 约 5.5MB），别等解析到下面的 script 才开始 -->
   <link rel="preload" href="./scratch-gui-standalone.js" as="script" fetchpriority="high">
+  <script>
+    // 上游 standalone 产物把 webpack publicPath 写死成 "/"，导致 chunk 一律去域名根取
+    // （/chunks/*），挂在 /scratch-app/ 这类路径前缀下时会 404 或被主站 SPA 兜底成 HTML。
+    // 镜像构建时已把该赋值改为读取本变量（见 scratch/Dockerfile），这里按当前页面目录注入：
+    //   /scratch-app/  → "/scratch-app/"（同源前缀模式）
+    //   /              → "/"（子域根路径模式）
+    window.__ORANGEOJ_PUBLIC_PATH__ = location.pathname.replace(/[^/]*$/, '')
+  </script>
 </head>
 <body>
   <div id="app"></div>

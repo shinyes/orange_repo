@@ -24,6 +24,7 @@ WORKDIR /build
 COPY app/scratch/package.json app/scratch/package-lock.json ./
 RUN npm install --global=false --no-audit --no-fund --legacy-peer-deps
 COPY app/scratch/host ./host
+# 1) 组装静态产物（含块素材的 default/ 与 high-contrast/ 主题目录）
 RUN set -eux; \
     mkdir -p /out/static/blocks-media/default /out/static/blocks-media/high-contrast /out/chunks; \
     cp node_modules/@scratch/scratch-gui/dist/scratch-gui-standalone.js /out/; \
@@ -37,6 +38,28 @@ RUN set -eux; \
     test -f /out/static/blocks-media/default/repeat.svg; \
     test -f /out/static/blocks-media/default/zoom-in.svg; \
     test -f /out/static/blocks-media/high-contrast/repeat.svg
+
+# 2) 把上游写死的 webpack publicPath 改为运行期可注入（宿主页 index.html 注入
+#    window.__ORANGEOJ_PUBLIC_PATH__）。产物里这类赋值有两处（顶层运行时与嵌套运行时）：
+#      __webpack_require__.p="/"                ← 顶层
+#      __nested_webpack_require_108080__.p="/"  ← 嵌套（注意这里是 webpack_require_ 单下划线）
+#    只改顶层时，嵌套运行时加载的 chunk（fetch-worker 等）仍会去域名根取 → 404/被 SPA 兜底成 HTML。
+#    补丁不完整或上游结构变化时直接构建失败（宁可构建失败，也不要产出坏镜像）。
+RUN set -eux; \
+    node -e " \
+      const fs=require('fs'); \
+      const f='/out/scratch-gui-standalone.js'; \
+      let s=fs.readFileSync(f,'utf8'); \
+      const re=/([A-Za-z_$][\w$]*webpack_require[\w$]*)\.p=\"\/\"/g; \
+      const before=(s.match(re)||[]).length; \
+      if(before<1) throw new Error('未找到 publicPath 赋值，上游产物结构可能已变化'); \
+      s=s.replace(re, '\$1.p=(typeof window!==\"undefined\"\&\&window.__ORANGEOJ_PUBLIC_PATH__)||\"/\"'); \
+      const left=(s.match(re)||[]).length; \
+      if(left!==0) throw new Error('publicPath 替换不完整，剩余 '+left+' 处'); \
+      fs.writeFileSync(f,s); \
+      console.log('publicPath 已改为运行期注入（替换 '+before+' 处）'); \
+    "; \
+    grep -c '__ORANGEOJ_PUBLIC_PATH__' /out/scratch-gui-standalone.js
 
 # ---------- 2) 运行时：静态服务 + 素材库校验 ----------
 # 素材完整性按仓库清单校验：数量少于 manifest.tsv 的行数即构建失败——

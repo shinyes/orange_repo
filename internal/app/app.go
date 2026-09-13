@@ -65,28 +65,29 @@ func Open(cfg Config) (*App, error) {
 
 	// 0) Scratch 反代配置先解析（在打开数据库之前，避免配置错误时漏掉已打开的库句柄）。
 	//
-	// 配置不全时**只告警不拦启动**：Scratch 是可选功能，配错了应该退化为"未部署"，
-	// 而不是让整个服务起不来（曾把"只配内部地址"当硬错误，直接把线上服务拦死过一次）。
+	// 两种可用形态（配置不全一律只告警、不拦启动——Scratch 是可选功能）：
+	//   · 内部地址 + 公开子域 → 主站按 Host 命中该子域并在**根路径**反代容器（容器不暴露端口）
+	//   · 只配内部地址       → 主站在**同源路径前缀** /scratch-app/ 反代容器（无需子域/DNS/证书）
+	// 前缀模式成立的前提：镜像构建时已把上游写死的 webpack publicPath 改为运行期可注入
+	// （见 scratch/Dockerfile；宿主页注入 window.__ORANGEOJ_PUBLIC_PATH__），否则 chunk 会去
+	// 域名根取，被主站 SPA 兜底成 HTML（"Unexpected token '<'"）。
 	scratchURL := strings.TrimRight(strings.TrimSpace(cfg.ScratchURL), "/")
 	internal := strings.TrimRight(strings.TrimSpace(cfg.ScratchInternalURL), "/")
 	var scratchTarget *url.URL
-	var scratchHost string
+	var scratchHost string // 非空 = 子域根路径模式
+	scratchPrefix := false // true = 同源前缀模式（/scratch-app）
 	if internal != "" {
-		switch {
-		case scratchURL == "":
-			warnf("已配置 ORANGEOJ_SCRATCH_INTERNAL_URL 但缺少公开地址 ORANGEOJ_SCRATCH_URL；" +
-				"已忽略内部地址，Scratch 视为未部署（其余功能不受影响）。" +
-				"要启用请补上公开子域，例如 ORANGEOJ_SCRATCH_URL=https://scratch.example.com")
-		default:
-			target, err := url.Parse(internal)
-			public, perr := url.Parse(scratchURL)
-			switch {
-			case err != nil || target.Host == "":
-				warnf("ORANGEOJ_SCRATCH_INTERNAL_URL 不合法（%q）：已忽略，Scratch 视为未部署", internal)
-			case perr != nil || public.Host == "":
-				warnf("ORANGEOJ_SCRATCH_URL 不合法（%q）：已忽略，Scratch 视为未部署", scratchURL)
-			default:
-				scratchTarget = target
+		target, err := url.Parse(internal)
+		if err != nil || target.Host == "" {
+			warnf("ORANGEOJ_SCRATCH_INTERNAL_URL 不合法（%q）：已忽略，Scratch 视为未部署", internal)
+		} else {
+			scratchTarget = target
+			if scratchURL == "" {
+				scratchPrefix = true
+			} else if public, perr := url.Parse(scratchURL); perr != nil || public.Host == "" {
+				warnf("ORANGEOJ_SCRATCH_URL 不合法（%q）：改用同源前缀模式提供 Scratch", scratchURL)
+				scratchPrefix = true
+			} else {
 				scratchHost = hostOnly(public.Host)
 			}
 		}
@@ -122,21 +123,25 @@ func Open(cfg Config) (*App, error) {
 	// 公开运行时配置（无需登录）：前端据此决定 Scratch 空间页是嵌 iframe 还是显示"未部署"。
 	// （scratchURL / internal / scratchTarget 已在函数开头校验并解析，此处不再重复解析。）
 
-	// Scratch 容器作为**内部容器**（不对外暴露端口）时：主站在它的**公开域名根路径**上反代它。
-	//
-	// 为什么必须是"域名根"而不是路径前缀（如 /scratch-app/）：
-	// 上游 scratch-gui 的 standalone 构建把 webpack publicPath 硬编码为 "/"，运行期会以绝对路径取
-	// 懒加载 chunk（/chunks/fetch-worker.*.js、/chunks/paper-source.*.js）、块素材
-	// （/static/blocks-media/...）与教程图（/static/assets/...）。挂在路径前缀下时这些请求会打到
-	// 主站域名根，被 SPA 兜底成 index.html（表现为 "Unexpected token '<'" 与素材 404）。
-	// 因此：SCRATCH_URL 给公开地址（如 https://scratch.example.com）→ 主站按 Host 命中该地址的
-	// 请求在根路径反代到容器；只配 SCRATCH_URL 不配内部地址时，则为"子域直连容器"模式（前端直接用该地址）。
+	// Scratch 容器作为**内部容器**（不对外暴露端口）时，主站反代它。两种挂载方式：
+	//   · 子域根路径（配了 ORANGEOJ_SCRATCH_URL）：按 Host 命中，路径原样转发。
+	//     上游产物的路径都以 "/" 为基准，挂在域名根上最自然。
+	//   · 同源前缀（只配 ORANGEOJ_SCRATCH_INTERNAL_URL）：挂在 /scratch-app/。
+	//     这要求镜像里已把上游写死的 publicPath 改为运行期注入（Dockerfile 已做），
+	//     宿主页据此把 chunk 请求指回前缀内，因此无需子域/DNS/证书。
 	if scratchTarget != nil {
 		proxy := &httputil.ReverseProxy{
 			Rewrite: func(pr *httputil.ProxyRequest) {
-				pr.SetURL(scratchTarget)         // scheme/host → 容器
-				pr.Out.URL.Path = pr.In.URL.Path // 根路径原样转发（不剥前缀）
-				pr.Out.URL.RawPath = pr.In.URL.RawPath
+				pr.SetURL(scratchTarget) // scheme/host → 容器
+				path := pr.In.URL.Path
+				if scratchPrefix {
+					path = strings.TrimPrefix(path, "/scratch-app")
+					if !strings.HasPrefix(path, "/") {
+						path = "/" + path
+					}
+				}
+				pr.Out.URL.Path = path
+				pr.Out.URL.RawPath = ""
 				pr.Out.URL.RawQuery = pr.In.URL.RawQuery
 			},
 			ErrorHandler: func(w http.ResponseWriter, r *http.Request, perr error) {
@@ -147,12 +152,17 @@ func Open(cfg Config) (*App, error) {
 			},
 		}
 		handler := adaptor.HTTPHandler(proxy)
-		app.Use(func(c *fiber.Ctx) error {
-			if !strings.EqualFold(hostOnly(c.Hostname()), scratchHost) {
-				return c.Next() // 其他域名照常走主站
-			}
-			return handler(c)
-		})
+		if scratchPrefix {
+			app.Use("/scratch-app", handler)
+			scratchURL = "/scratch-app" // 前端同源 iframe 前缀
+		} else {
+			app.Use(func(c *fiber.Ctx) error {
+				if !strings.EqualFold(hostOnly(c.Hostname()), scratchHost) {
+					return c.Next() // 其他域名照常走主站
+				}
+				return handler(c)
+			})
+		}
 	}
 
 	app.Get("/api/config", func(c *fiber.Ctx) error {

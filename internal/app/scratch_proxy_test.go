@@ -123,25 +123,31 @@ func TestScratchContainerProxiedByHost(t *testing.T) {
 		t.Fatalf("仅配公开地址时不应反代，实际 body=%.60q", string(b))
 	}
 
-	// ⑦ 配了内部地址但没给公开地址 → **只告警不拦启动**：服务照常可用，Scratch 视为未部署。
-	// （曾经把这种情况当硬错误，直接把线上服务拦死；可选功能配置不全不应导致整站起不来。）
-	partial, err := app.Open(app.Config{
+	// ⑦ 只配内部地址 → **同源前缀模式**：挂在 /scratch-app/，无需子域/DNS/证书。
+	prefixMode, err := app.Open(app.Config{
 		DataDir:            t.TempDir(),
 		WebDist:            web,
 		ScratchInternalURL: container.URL,
 	})
 	if err != nil {
-		t.Fatalf("只配内部地址时应正常启动（仅告警），实际报错：%v", err)
+		t.Fatalf("只配内部地址时应正常启动（同源前缀模式），实际报错：%v", err)
 	}
-	defer partial.Close()
-	if code, body := getFrom(partial, "orangeoj.test.example", "/api/config"); code != http.StatusOK || strings.Contains(body, `"scratchUrl":"http`) {
-		t.Fatalf("未配公开地址时不应下发 scratchUrl：code=%d body=%.120q", code, body)
+	defer prefixMode.Close()
+	if code, body := getFrom(prefixMode, "orangeoj.test.example", "/api/config"); code != http.StatusOK || !strings.Contains(body, `"/scratch-app"`) {
+		t.Fatalf("/api/config 应下发同源前缀：code=%d body=%.120q", code, body)
 	}
-	if code, body := getFrom(partial, scratchHost, "/"); code != http.StatusOK || !strings.Contains(body, "main-site-spa") {
-		t.Fatalf("未配公开地址时不应反代：code=%d body=%.60q", code, body)
+	if code, body := getFrom(prefixMode, "orangeoj.test.example", "/scratch-app/"); code != http.StatusOK || !strings.Contains(body, "scratch-editor-host") {
+		t.Fatalf("前缀根路径未反代到容器：code=%d body=%.60q", code, body)
+	}
+	if code, body := getFrom(prefixMode, "orangeoj.test.example", "/scratch-app/chunks/fetch-worker.abc.js"); code != http.StatusOK || !strings.Contains(body, "onmessage") {
+		t.Fatalf("前缀下的 chunk 未反代到容器：code=%d body=%.60q", code, body)
+	}
+	// 主站自身路径不受影响
+	if code, body := getFrom(prefixMode, "orangeoj.test.example", "/"); code != http.StatusOK || !strings.Contains(body, "main-site-spa") {
+		t.Fatalf("前缀模式影响了主站根路径：code=%d body=%.60q", code, body)
 	}
 
-	// ⑧ 内部地址非法 → 同样只告警，不影响启动
+	// ⑧ 内部地址非法 → 只告警，不影响启动
 	invalidTarget, err := app.Open(app.Config{
 		DataDir:            t.TempDir(),
 		WebDist:            web,
