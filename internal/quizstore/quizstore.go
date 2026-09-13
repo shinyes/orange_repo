@@ -214,6 +214,20 @@ func (s *Store) migrate() error {
 			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 			PRIMARY KEY(practice_id, user_id)
 		);`,
+		// ---------- 休息时间小游戏成绩（每人每游戏一条：最高分 + 游玩次数；榜单按 game 维度） ----------
+		`CREATE TABLE IF NOT EXISTS game_scores (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			game TEXT NOT NULL,                                  -- 游戏标识（与前端注册表一致）
+			user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			domain_id INTEGER,                                   -- 提交时所在空间所属域（NULL=无域；用于本域榜单）
+			best_score INTEGER NOT NULL DEFAULT 0,
+			plays INTEGER NOT NULL DEFAULT 1,
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			UNIQUE(game, user_id)
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_game_scores_rank ON game_scores(game, best_score DESC);`,
+		`CREATE INDEX IF NOT EXISTS idx_game_scores_domain ON game_scores(game, domain_id, best_score DESC);`,
 	}
 	for _, stmt := range stmts {
 		if _, err := s.DB.Exec(stmt); err != nil {

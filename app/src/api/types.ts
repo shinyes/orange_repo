@@ -623,3 +623,29 @@ export interface SubmissionPoll {
 
 // 客观题提交载荷统一形式（单选=number 索引，判断=boolean）。
 export type ObjectiveAnswer = number | boolean
+
+// ---- 休息时间小游戏 ----
+export interface GameRankRow {
+  rank: number
+  userId: number
+  userName: string
+  domainId?: number
+  bestScore: number
+  plays: number
+  isMe?: boolean
+}
+
+export interface GameRankView {
+  scope: 'domain' | 'all'
+  game: string
+  domainId: number
+  domainName: string
+  rows: GameRankRow[]
+  myBest: number
+  myPlays: number
+  myRank?: number
+  myRow?: GameRankRow
+  /** 本域榜单：用户没有任何空间归属时为 true（榜单为空，不退化成全域） */
+  noDomain?: boolean
+  scopeHint?: string
+}

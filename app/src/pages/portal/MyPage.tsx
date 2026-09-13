@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate, useOutletContext } from 'react-router-dom'
-import { KeyRoundIcon, LayoutGridIcon, LogOutIcon } from 'lucide-react'
+import { GamepadIcon, KeyRoundIcon, LayoutGridIcon, LogOutIcon } from 'lucide-react'
 import { toast } from 'sonner'
 
 import type { ShellContext } from '@/app/App'
@@ -67,6 +67,11 @@ export function MyPage() {
           <Button variant="outline" className="w-full min-h-10 justify-start" onClick={() => setPwOpen(true)}>
             <KeyRoundIcon className="size-4" />
             修改密码
+          </Button>
+          <Button variant="outline" className="w-full min-h-10 justify-start" onClick={() => navigate('/break')}>
+            <GamepadIcon className="size-4" />
+            休息时间
+            <span className="ml-auto text-xs text-muted-foreground">小游戏 · 排行榜</span>
           </Button>
           <Button
             variant="ghost"

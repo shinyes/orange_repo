@@ -153,6 +153,9 @@ func (s *Server) RegisterRoutes(app *fiber.App) {
 	portal.Get("/quiz/:qid/problem", s.handlePortalQuizProblem)
 	portal.Post("/quiz/:qid/answer", s.handlePortalQuizAnswer)
 	portal.Post("/quiz/:qid/reset", s.handlePortalQuizReset)
+	// 休息时间小游戏：成绩提交 + 榜单（本域/全域；game 维度，新增游戏无需改接口）
+	portal.Post("/game/:game/score", s.handleGameScoreSubmit)
+	portal.Get("/game/:game/rank", s.handleGameRank)
 	// 全局错题集
 	portal.Get("/wrong-book", s.handleWrongBook)
 	portal.Get("/wrong-book/next", s.handleWrongNext)

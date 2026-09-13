@@ -1,0 +1,45 @@
+/* 小恐龙内联适配样式：上游 index.css 是按整页错误页写的（.offline 作用域 + 绝对定位），
+   这里只保留嵌入所需的最小规则，并加上像素风渲染。 */
+.dino-stage {
+  position: relative;
+}
+
+/* 上游把容器设为 absolute（整页布局），嵌入到我们的面板里要回到文档流 */
+.dino-stage .runner-container {
+  position: relative;
+  width: 100%;
+  max-width: 600px;
+  height: 150px;
+  overflow: hidden;
+}
+
+.dino-stage .runner-canvas {
+  position: relative;
+  display: block;
+  max-width: 600px;
+  /* 像素风：放大不模糊 */
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+/* 像素风外框：直角 + 2px 描边（与小恐龙同一视觉语言） */
+.pixel-frame {
+  border: 2px solid #2b2b2b;
+  box-shadow: 4px 4px 0 0 rgba(43, 43, 43, 0.18);
+}
+
+.pixel-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Courier New', monospace;
+  letter-spacing: 0.02em;
+}
+
+/* 榜单表头扫描线，贴近街机观感 */
+.pixel-scanlines {
+  background-image: repeating-linear-gradient(
+    to bottom,
+    rgba(43, 43, 43, 0.06) 0,
+    rgba(43, 43, 43, 0.06) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+}

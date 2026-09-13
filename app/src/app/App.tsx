@@ -26,6 +26,7 @@ import { QuizList } from '@/pages/portal/QuizList'
 import { QuizSolve } from '@/pages/portal/QuizSolve'
 import { WrongBookPage } from '@/pages/portal/WrongBookPage'
 import { RankPage } from '@/pages/portal/RankPage'
+import { BreakPage } from '@/pages/break/BreakPage'
 import { AdminLayout } from '@/pages/admin/AdminLayout'
 
 // 重量级页面懒加载，不进首屏主包（做题页 + 管理区各页）。
@@ -92,6 +93,8 @@ export default function App() {
               <Route path="/" element={<TopShell user={user} onLogout={onLogout} />}>
                 <Route index element={<SpacePicker user={user} />} />
                 <Route path="mine" element={<MyPage />} />
+                {/* 休息时间：小游戏 + 榜单（登录即可访问，不依赖空间） */}
+                <Route path="break" element={<BreakPage />} />
                 <Route path="problem/:problemId" element={<ProblemSolvePage />} />
               </Route>
 

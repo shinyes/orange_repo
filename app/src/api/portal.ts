@@ -6,6 +6,7 @@
 import { req, json } from './client'
 import type {
   CodeLang,
+  GameRankView,
   ObjectiveAnswer,
   OjDraft,
   OjProblem,
@@ -33,6 +34,19 @@ export const portalApi = {
   portalSpaces: () => req<{ spaces: PortalSpace[] }>('/api/portal/spaces'),
   portalSpaceHome: (spaceId: number | string) => req<SpaceHome>(`/api/portal/space/${spaceId}/home`),
   portalRank: (domainId: number | string) => req<RankView>(`/api/portal/rank?domainId=${domainId}`),
+
+  // ---- 休息时间小游戏（榜单 game 维度，新增游戏无需改接口） ----
+  /** 提交一局成绩（服务端只保留最高分） */
+  gameScoreSubmit: (game: string, score: number, spaceId?: number) =>
+    req<{ bestScore: number; isNewBest: boolean; score: number; domainId: number; rankDomain: number; rankAll: number }>(
+      `/api/portal/game/${game}/score`,
+      json({ method: 'POST', body: JSON.stringify({ score, spaceId: spaceId ?? 0 }) }),
+    ),
+  /** 榜单：scope=domain（本域榜单）| all（全域榜单） */
+  gameRank: (game: string, scope: 'domain' | 'all', spaceId?: number) =>
+    req<GameRankView>(
+      `/api/portal/game/${game}/rank?scope=${scope}${spaceId ? `&spaceId=${spaceId}` : ''}`,
+    ),
 
   // ---- 门户：空间训练 ----
   portalTraining: (spaceId: number | string, trainingId: number | string) =>
