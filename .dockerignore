@@ -4,6 +4,9 @@ data
 docs
 app/node_modules
 app/dist
+# Scratch 子构建的依赖与产物：容器构建时会在镜像内安装/生成，无需（也不该）作为构建上下文上传
+app/scratch/node_modules
+app/scratch/dist
 *.exe
 *.zip
 *.tar.gz

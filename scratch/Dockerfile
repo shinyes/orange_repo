@@ -15,10 +15,11 @@
 #   docker build -f scratch/Dockerfile -t orangeoj-scratch .
 
 # ---------- 1) 取 scratch-gui 产物 + 宿主页 ----------
-FROM node:22-bookworm-slim AS web
+# 版本对齐主 Dockerfile：node 24（与本地验证环境一致）+ npm install 用 lockfile 保证可复现
+FROM node:24.15-bookworm-slim AS web
 WORKDIR /build
 # 只用宿主页与外层依赖清单；--global=false 必须显式加，避免宿主 npm 配置把包装到全局
-COPY app/scratch/package.json ./package.json
+COPY app/scratch/package.json app/scratch/package-lock.json ./
 RUN npm install --global=false --no-audit --no-fund --legacy-peer-deps
 COPY app/scratch/host ./host
 RUN set -eux; \
@@ -36,7 +37,11 @@ RUN set -eux; \
 #      然后把该目录作为构建上下文的一部分（--build-arg 或直接 COPY）打进镜像；
 #   b) 把该目录挂载到运行中的容器：-v /path/scratch-assets:/usr/share/nginx/html/static/scratch-assets
 # 可用 --build-arg ASSET_MIRROR_REQUIRED=1 让"素材为空"直接构建失败（CI 建议开启）。
-FROM golang:1.24-bookworm AS assets
+# 版本必须与 go.mod 的 go 指令一致（当前 go 1.25.5）——用 1.24 会报
+# "go.mod requires go >= 1.25.5 (running go 1.24.x; GOTOOLCHAIN=local)" 直接构建失败。
+# 说明：该阶段只编译 cmd/scratchassets（纯标准库，无第三方依赖），但要能访问 HTTPS
+# 下载素材，故用带 CA 证书的 bookworm 变体。
+FROM golang:1.25-bookworm AS assets
 WORKDIR /src
 ARG ASSET_MIRROR_REQUIRED=0
 COPY go.mod go.sum ./
