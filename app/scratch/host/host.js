@@ -88,45 +88,121 @@
 
   var setToolbarEnabled = injectToolbar()
 
-  // ---- 素材存储：指向本容器内的本地镜像（/static/scratch-assets/<md5ext>），完全离线 ----
-  // 说明：官方 LegacyStorage 会把素材指向 assets.scratch.mit.edu；这里用公开的 addWebStore
-  // 换成同容器相对路径，因此编辑器运行期不访问外网。
-  var storage = new GUI.ScratchStorage()
+  // ---- 素材存储：本地镜像 + 自带默认作品（完全离线）----
+  //
+  // 背景：不传 storage 时 GUI 会崩（它要求 props.storage 是完整的 GUIStorage 形状，含 scratchStorage）；
+  // 自己 new 一个裸 ScratchStorage 又会缺**内置默认作品** → 加载 projectId="0" 报 "Could not find
+  // project" → VM 里一个 target 都没有（舞台空白、右下角没有角色/背景缩略图，线上出现过）。
+  //
+  // 因此这里自建：ScratchStorage + 用上游导出的 GUI.buildDefaultProject 把默认作品（猫 + 空白背景 +
+  // 两个声音）塞进内置助手，与上游 LegacyStorage.cacheDefaultProject 的做法一致。
+  // GUI 在切换语言时会回调 setTranslatorFunction，我们借此用**真的翻译函数**重建一次，
+  // 使默认作品里的名字（角色1/造型1/背景1/我的变量…）跟随界面语言。
   var ASSET_BASE = 'static/scratch-assets/'
   function assetUrl(asset) {
     return ASSET_BASE + asset.assetId + '.' + asset.dataFormat
   }
-  storage.addWebStore(
-    [GUI.AssetType.ImageVector, GUI.AssetType.ImageBitmap, GUI.AssetType.Sound],
+  function noop() {}
+
+  var scratchStorage = new GUI.ScratchStorage()
+  // 默认作品里的名字：自己给中文。GUI 回调过来的翻译函数在挂载早期仍是英文（实测时序不可控），
+  // 所以不依赖它；键就是上游的消息 id，{index} 为序号占位。
+  var DEFAULT_NAMES_ZH = {
+    'gui.defaultProject.variable': '我的变量',
+    'gui.defaultProject.pop': '啵',
+    'gui.defaultProject.meow': '喵',
+    'gui.sharedMessages.sprite': '角色{index}',
+    'gui.sharedMessages.costume': '造型{index}',
+    'gui.sharedMessages.backdrop': '背景{index}'
+  }
+  function defaultProjectTranslator(msgObj, values) {
+    var id = msgObj && msgObj.id
+    var fallback = (msgObj && msgObj.defaultMessage) || ''
+    if (locale !== 'zh-cn' || !id || !DEFAULT_NAMES_ZH[id]) return fallback
+    // 翻译函数按 react-intl 风格调用：translator(msgObj, values) —— 序号在第二个参数里
+    var vals = values || (msgObj && msgObj.values) || {}
+    var index = vals.index != null ? String(vals.index) : ''
+    return DEFAULT_NAMES_ZH[id].replace('{index}', index)
+  }
+  function cacheDefaultProject() {
+    if (typeof GUI.buildDefaultProject !== 'function') return null
+    var assets = GUI.buildDefaultProject(defaultProjectTranslator)
+    assets.forEach(function (a) {
+      scratchStorage.builtinHelper._store(
+        scratchStorage.AssetType[a.assetType],
+        scratchStorage.DataFormat[a.dataFormat],
+        a.data,
+        a.id
+      )
+    })
+    return assets
+  }
+  cacheDefaultProject()
+
+  // 素材只走本容器内的本地镜像（不访问 assets.scratch.mit.edu）
+  scratchStorage.addWebStore(
+    [scratchStorage.AssetType.ImageVector, scratchStorage.AssetType.ImageBitmap, scratchStorage.AssetType.Sound],
     assetUrl
   )
 
-  var editorConfig = {
-    storage: {
-      scratchStorage: storage,
-      // 主站不用编辑器的"保存到服务器"：保存走 vm.saveProjectSb3() + 主站书包接口
-      saveProject: function () {
-        return Promise.reject(new Error('项目保存由 OrangeOJ 书包处理'))
-      }
-    }
+  // 默认作品（猫 + 空白背景 + 两个声音）由我们自己加载：GUI 在语言就绪时会回调
+  // setTranslatorFunction，那时才能拿到**真正的翻译函数**，默认作品里的名字才会是中文
+  // （角色1 / 造型1 / 背景1 / 我的变量…）。因此**不传 projectId**，改在这里 loadProject，
+  // 时机与文案都可控（上游 projectId="0" 走 storage 加载，我们自建 storage 时没有内置助手条目）。
+  var defaultProjectLoaded = false
+  function loadDefaultProject() {
+    var vm = window.__ORANGEOJ_VM__
+    if (!vm || defaultProjectLoaded) return
+    var assets = cacheDefaultProject()
+    if (!assets || !assets.length) return
+    defaultProjectLoaded = true
+    Promise.resolve(vm.loadProject(assets[0].data)).catch(function (e) {
+      defaultProjectLoaded = false
+      post('error', { message: '默认作品加载失败：' + (e && e.message ? e.message : String(e)) })
+    })
   }
+
+  var guiStorage = {
+    scratchStorage: scratchStorage,
+    takeSnapshot: noop,
+    setProjectHost: noop,
+    setProjectToken: noop,
+    setProjectMetadata: noop,
+    setAssetHost: noop,
+    setBackpackHost: noop,
+    // GUI 切换语言时会回调；默认作品的名字由我们自己给（见 defaultProjectTranslator），这里只补一次加载
+    setTranslatorFunction: function () {
+      loadDefaultProject()
+    },
+    getLibraryAssetUrl: function (assetId, dataFormat) { return ASSET_BASE + assetId + '.' + dataFormat },
+    // 编辑器的"保存到服务器"不可用：本站保存走 vm.saveProjectSb3() + 主站书包接口
+    saveProject: function () { return Promise.reject(new Error('项目保存由 OrangeOJ 书包处理')) },
+    cloudVariables: { createProvider: function () { return null } }
+  }
+
+  var editorConfig = { storage: guiStorage }
 
   var state = new GUI.EditorState({ locale: locale }, function () { return editorConfig })
   var root = GUI.createStandaloneRoot(state, container)
 
   root.render({
     locale: locale,
+    // projectId="0" = 加载内置默认作品（猫 + 空白背景）。上游 standalone 就是这么用的；
+    // 不传的话 VM 里一个 target 都没有 → 舞台空白、右下角没有角色/背景缩略图。
+    projectId: '0',
     onVmInit: function (vm) {
       window.__ORANGEOJ_VM__ = vm
+      // setTranslatorFunction 通常在 VM 之前被调用，这里补一次默认作品加载
+      loadDefaultProject()
       try {
         setToolbarEnabled(true)
       } catch (e) { /* 忽略 */ }
       post('vm-ready', { locale: locale })
     },
-    canSave: false,       // 隐藏"保存到服务器"（书包由主站顶栏负责）
+    canSave: false,       // 隐藏"保存到服务器"（书包由主站工具栏负责）
     showComingSoon: false,
     enableCommunity: false,
-    backpackVisible: false // 编辑器自带书包隐藏：本站书包在主站顶栏
+    backpackVisible: false // 编辑器自带书包隐藏：本站书包在编辑器工具栏右侧
   })
 
   // ---- 主站命令通道 ----

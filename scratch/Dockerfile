@@ -35,9 +35,12 @@ RUN set -eux; \
     cp -r node_modules/scratch-blocks/media/. /out/static/blocks-media/; \
     cp -r node_modules/scratch-blocks/media/. /out/static/blocks-media/default/; \
     cp -r node_modules/scratch-blocks/media/. /out/static/blocks-media/high-contrast/; \
+    cp -r node_modules/@scratch/scratch-gui/dist/static/. /out/static/; \
     test -f /out/static/blocks-media/default/repeat.svg; \
     test -f /out/static/blocks-media/default/zoom-in.svg; \
-    test -f /out/static/blocks-media/high-contrast/repeat.svg
+    test -f /out/static/blocks-media/high-contrast/repeat.svg; \
+    test -d /out/static/assets; \
+    test "$(find /out/static/assets -type f | wc -l)" -gt 200
 
 # 2) 把上游写死的 webpack publicPath 改为运行期可注入（宿主页 index.html 注入
 #    window.__ORANGEOJ_PUBLIC_PATH__）。产物里这类赋值有两处（顶层运行时与嵌套运行时）：
