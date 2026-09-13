@@ -11,6 +11,7 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -26,7 +27,12 @@ import (
 	"time"
 )
 
-const assetBase = "https://assets.scratch.mit.edu/internalapi/asset/%s/get/"
+// assetHosts 素材源主机（按顺序回退）：官方主站与 CDN 都是同一套 internalapi 路径。
+// 某些网络/CI 出口对其中之一不可达，回退能显著提高抓取成功率。
+var assetHosts = []string{
+	"https://assets.scratch.mit.edu/internalapi/asset/%s/get/",
+	"https://cdn.assets.scratch.mit.edu/internalapi/asset/%s/get/",
+}
 
 var md5extRe = regexp.MustCompile(`^[0-9a-f]{32}\.[a-z0-9]{2,5}$`)
 
@@ -35,6 +41,8 @@ func main() {
 	outDir := flag.String("out", filepath.Join("data", "scratch-assets"), "素材落盘目录")
 	workers := flag.Int("workers", 8, "并发下载数")
 	limit := flag.Int("limit", 0, "只下载前 N 个（0=全部；用于冒烟测试）")
+	timeoutSec := flag.Int("timeout", 20, "单个素材的请求超时（秒）")
+	listPath := flag.String("list", "", "只生成下载清单（TSV：URL<TAB>文件名）到该路径，不下载")
 	flag.Parse()
 
 	files, err := os.ReadDir(*libDir)
@@ -69,6 +77,26 @@ func main() {
 	}
 	fmt.Printf("素材库引用资源 %d 个（去重后）\n", len(ids))
 
+	// 只出清单：给"人工/第三方下载器"用的模式（某些网络下 CI 抓不到素材源）
+	if strings.TrimSpace(*listPath) != "" {
+		f, err := os.Create(*listPath)
+		if err != nil {
+			fmt.Println("创建清单失败:", err)
+			os.Exit(1)
+		}
+		defer f.Close()
+		bw := bufio.NewWriter(f)
+		for _, id := range ids {
+			fmt.Fprintf(bw, "%s\t%s\n", fmt.Sprintf(assetHosts[0], id), id)
+		}
+		if err := bw.Flush(); err != nil {
+			fmt.Println("写入清单失败:", err)
+			os.Exit(1)
+		}
+		fmt.Printf("清单已写入 %s（每行：URL<TAB>文件名；可用 scratch-assets/fetch-assets.ps1 批量下载）\n", *listPath)
+		return
+	}
+
 	if err := os.MkdirAll(*outDir, 0o755); err != nil {
 		fmt.Println("创建输出目录失败:", err)
 		os.Exit(1)
@@ -76,7 +104,10 @@ func main() {
 
 	var done, skipped, failed int64
 	var bytes int64
-	client := &http.Client{Timeout: 60 * time.Second}
+	var consecutiveFail int64 // 连续失败计数：网络整体不可达时快速退出，避免逐个大超时拖垮构建
+	var lastErrMu sync.Mutex
+	var lastErrMsg string
+	client := &http.Client{Timeout: time.Duration(*timeoutSec) * time.Second}
 	sem := make(chan struct{}, *workers)
 	var wg sync.WaitGroup
 	var failMu sync.Mutex
@@ -96,7 +127,21 @@ func main() {
 			defer func() { <-sem }()
 			data, err := fetch(client, id)
 			if err != nil {
-				atomic.AddInt64(&failed, 1)
+				if atomic.AddInt64(&failed, 1) == 1 {
+					// 首个失败单独提示，便于一眼看出是网络问题还是个别资源缺失
+					fmt.Println("  首个失败:", id, err)
+				}
+				lastErrMu.Lock()
+				lastErrMsg = id + ": " + err.Error()
+				lastErrMu.Unlock()
+				if atomic.AddInt64(&consecutiveFail, 1) >= 25 {
+					lastErrMu.Lock()
+					msg := lastErrMsg
+					lastErrMu.Unlock()
+					fmt.Printf("连续 %d 个素材下载失败，判定素材源不可达（最新错误：%s）\n", 25, msg)
+					fmt.Println("提示：可在有网络的机器上抓取后放入 scratch-assets/，或用 --build-arg ASSET_BUNDLE_URL 提供素材包")
+					os.Exit(3)
+				}
 				failMu.Lock()
 				if len(failures) < 40 {
 					failures = append(failures, id+": "+err.Error())
@@ -104,6 +149,7 @@ func main() {
 				failMu.Unlock()
 				return
 			}
+			atomic.StoreInt64(&consecutiveFail, 0)
 			tmp := dst + ".part"
 			if err := os.WriteFile(tmp, data, 0o644); err != nil {
 				atomic.AddInt64(&failed, 1)
@@ -152,34 +198,40 @@ func collect(v any, out map[string]bool) {
 	}
 }
 
-// fetch 下载单个素材（带 3 次重试）。
+// fetch 下载单个素材：在多个素材源之间回退，每个源重试 2 次。
 func fetch(client *http.Client, id string) ([]byte, error) {
 	var lastErr error
-	for attempt := 0; attempt < 3; attempt++ {
-		if attempt > 0 {
-			time.Sleep(time.Duration(attempt) * 700 * time.Millisecond)
-		}
-		resp, err := client.Get(fmt.Sprintf(assetBase, id))
-		if err != nil {
-			lastErr = err
-			continue
-		}
-		if resp.StatusCode != http.StatusOK {
+	for _, host := range assetHosts {
+		for attempt := 0; attempt < 2; attempt++ {
+			if attempt > 0 {
+				time.Sleep(time.Duration(attempt) * 700 * time.Millisecond)
+			}
+			resp, err := client.Get(fmt.Sprintf(host, id))
+			if err != nil {
+				lastErr = err
+				continue
+			}
+			if resp.StatusCode != http.StatusOK {
+				_ = resp.Body.Close()
+				lastErr = fmt.Errorf("HTTP %d", resp.StatusCode)
+				if resp.StatusCode == http.StatusNotFound {
+					// 素材确实不存在（库 JSON 引用了不存在的资源）：换源也没用，直接返回
+					return nil, lastErr
+				}
+				continue
+			}
+			data, err := io.ReadAll(resp.Body)
 			_ = resp.Body.Close()
-			lastErr = fmt.Errorf("HTTP %d", resp.StatusCode)
-			continue
+			if err != nil {
+				lastErr = err
+				continue
+			}
+			if len(data) == 0 {
+				lastErr = fmt.Errorf("空响应")
+				continue
+			}
+			return data, nil
 		}
-		data, err := io.ReadAll(resp.Body)
-		_ = resp.Body.Close()
-		if err != nil {
-			lastErr = err
-			continue
-		}
-		if len(data) == 0 {
-			lastErr = fmt.Errorf("空响应")
-			continue
-		}
-		return data, nil
 	}
 	return nil, lastErr
 }

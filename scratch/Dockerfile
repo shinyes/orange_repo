@@ -44,19 +44,28 @@ RUN set -eux; \
 FROM golang:1.25-bookworm AS assets
 WORKDIR /src
 ARG ASSET_MIRROR_REQUIRED=0
+# 可选：素材包 URL（tar.gz）。CI 出口访问不到官方 CDN 时，可把一次抓好的素材包挂到
+# GitHub Release（或任意可下载地址），用 --build-arg ASSET_BUNDLE_URL=... 让构建直接离线供料。
+# 例：ASSET_BUNDLE_URL=https://github.com/<owner>/<repo>/releases/download/scratch-assets-v1/scratch-assets.tar.gz
+ARG ASSET_BUNDLE_URL=
 COPY go.mod go.sum ./
 COPY cmd ./cmd
 RUN go build -o /usr/local/bin/scratchassets ./cmd/scratchassets
 COPY --from=web /build/node_modules/@scratch/scratch-gui/src/lib/libraries /lib
 # 可选：本地已抓取的素材（scratch-assets/ 目录，默认只有 README）——
 # 先铺进目标目录，工具会把已存在的文件当"已下载"跳过，只联网补齐缺失部分。
-# 这样"构建机访问不到官方 CDN"时，可以先在能联网的机器上抓一次再构建。
 COPY scratch-assets /local-assets
 RUN set -eux; \
     mkdir -p /scratch-assets; \
     cp -r /local-assets/. /scratch-assets/ 2>/dev/null || true; \
+    if [ -n "$ASSET_BUNDLE_URL" ]; then \
+      echo "下载素材包: $ASSET_BUNDLE_URL"; \
+      curl -fsSL --retry 3 --connect-timeout 20 "$ASSET_BUNDLE_URL" -o /tmp/assets.tar.gz \
+        && tar xzf /tmp/assets.tar.gz -C /scratch-assets \
+        || echo "警告：素材包下载/解包失败，继续走联网抓取"; \
+    fi; \
     local_count=$(find /scratch-assets -type f ! -name 'README.md' | wc -l); \
-    echo "本地预置素材文件数: $local_count"; \
+    echo "预置素材文件数（本地目录 + 素材包）: $local_count"; \
     /usr/local/bin/scratchassets -lib /lib -out /scratch-assets -workers 12 \
       || /usr/local/bin/scratchassets -lib /lib -out /scratch-assets -workers 4 \
       || true; \
@@ -65,11 +74,12 @@ RUN set -eux; \
     echo "$count" > /scratch-assets/asset-count.txt; \
     if [ "$count" -eq 0 ]; then \
       echo "警告：素材库为空——编辑器核心功能可用，但角色/造型/声音素材库将缺失。"; \
-      echo "     可在能联网的机器上执行 go run ./cmd/scratchassets -out ./scratch-assets 后重新构建，" \
-           "或把该目录挂载到容器：-v /path/scratch-assets:/usr/share/nginx/html/static/scratch-assets" >&2; \
+      echo "     解决：在有网络的机器上执行 go run ./cmd/scratchassets -out ./scratch-assets，" \
+           "把结果放进仓库 scratch-assets/ 目录；或用 --build-arg ASSET_BUNDLE_URL=<素材包URL>。" >&2; \
     fi; \
     if [ "$ASSET_MIRROR_REQUIRED" = "1" ] && [ "$count" -lt 100 ]; then \
-      echo "错误：素材库镜像不完整（$count 个文件）——构建机无法访问 assets.scratch.mit.edu，或需先本地预置素材目录" >&2; \
+      echo "错误：素材库镜像不完整（$count 个文件）——构建机无法访问素材源，或需预置素材/素材包；" >&2; \
+      echo "     抓取失败明细见上方 '失败:' 行（最多 40 条）" >&2; \
       exit 1; \
     fi
 
