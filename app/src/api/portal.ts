@@ -111,8 +111,11 @@ export const portalApi = {
   ojPoll: (submissionId: number, trainingId?: number) =>
     req<SubmissionPoll>(`/api/oj/submission/${submissionId}/poll${trainingId ? `?trainingId=${trainingId}` : ''}`),
   /** 提交历史：trainingId/practiceId 可选——省略=全局；>0=仅对应上下文内提交。 */
-  ojSubmissions: (id: number, trainingId?: number, practiceId?: number) =>
-    req<{ submissions: Submission[] }>(`/api/oj/problem/${id}/submissions${
-      trainingId ? `?trainingId=${trainingId}` : practiceId ? `?practiceId=${practiceId}` : ''
-    }`),
+  ojSubmissions: (id: number, trainingId?: number, practiceId?: number, scope?: 'all') =>
+    req<{ submissions: Submission[]; scope?: string }>(
+      `/api/oj/problem/${id}/submissions?${[
+        trainingId ? `trainingId=${trainingId}` : practiceId ? `practiceId=${practiceId}` : '',
+        scope === 'all' ? 'scope=all' : '',
+      ].filter(Boolean).join('&')}`,
+    ),
 }

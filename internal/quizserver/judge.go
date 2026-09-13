@@ -314,7 +314,8 @@ func (s *Server) gradeObjective(problemType string, problemID int64, answer json
 	return false, errors.New("不支持的题型")
 }
 
-// handleOJSubmissions GET /api/oj/problem/:id/submissions（本人历史）。
+// handleOJSubmissions GET /api/oj/problem/:id/submissions（本人历史；
+// 管理员可加 ?scope=all 查看全部成员，带用户名）。
 func (s *Server) handleOJSubmissions(c *fiber.Ctx) error {
 	user := currentUser(c)
 	problemID, err := paramID(c, "id")
@@ -340,6 +341,17 @@ func (s *Server) handleOJSubmissions(c *fiber.Ctx) error {
 			practiceID = pid
 		}
 	}
+	// 管理端：查看全部成员的提交（含用户名）。非管理员即便传 scope=all 也只返回本人（不报错、不越权）。
+	if strings.EqualFold(strings.TrimSpace(c.Query("scope")), "all") && isAdminRole(user.Role) {
+		list, err := s.QS.ListSubmissionsAllUsers(problemID, trainingID, practiceID)
+		if err != nil {
+			return respondError(c, fiber.StatusInternalServerError, err.Error())
+		}
+		if list == nil {
+			list = []quizstore.Submission{}
+		}
+		return respondData(c, fiber.StatusOK, fiber.Map{"submissions": list, "scope": "all"})
+	}
 	list, err := s.QS.ListSubmissions(user.ID, problemID, trainingID, practiceID)
 	if err != nil {
 		return respondError(c, fiber.StatusInternalServerError, err.Error())
@@ -347,7 +359,7 @@ func (s *Server) handleOJSubmissions(c *fiber.Ctx) error {
 	if list == nil {
 		list = []quizstore.Submission{}
 	}
-	return respondData(c, fiber.StatusOK, fiber.Map{"submissions": list})
+	return respondData(c, fiber.StatusOK, fiber.Map{"submissions": list, "scope": "self"})
 }
 
 // handleOJSubmissionPoll GET /api/oj/submission/:id/poll

@@ -38,6 +38,7 @@ import { cn } from '@/lib/utils'
 import { langLabel, verdictCls, verdictText } from './oj-utils'
 import { cloudDraftIsNewer, localDraftTime, markLocalDraftTime, resolveStarter, saveDraftDebounced, syncLocalDraftTime, useCloudDraft, useSpaceDefaultLang } from '@/lib/use-programming-workspace'
 import { CONSOLE_DEFAULT_H, useConsoleResize } from '@/hooks/use-console-resize'
+import { usePortalSession } from '@/pages/portal/portal-context'
 
 const DRAFT_KEY = 'oj-draft'
 
@@ -645,20 +646,36 @@ function CustomInputDialog({ open, onOpenChange, value, onChange, onSubmit, busy
 
 function SubmissionHistoryDialog({ problemId, practiceId, open, onOpenChange }: { problemId: number; practiceId?: number; open: boolean; onOpenChange: (v: boolean) => void }) {
   const [selected, setSelected] = useState<Submission | null>(null)
+  // 管理员可查看全部成员的提交（带用户名）；普通成员只看自己
+  const { user } = usePortalSession()
+  const isAdmin = user.role !== 'member'
+  const [scope, setScope] = useState<'self' | 'all'>('all')
+  const effectiveScope = isAdmin ? scope : 'self'
   const submissionsQ = useQuery({
-    queryKey: ['oj-submissions', practiceId ? 'p' : 'g', problemId, practiceId ?? 0],
-    queryFn: () => api.ojSubmissions(problemId, undefined, practiceId),
+    queryKey: ['oj-submissions', practiceId ? 'p' : 'g', problemId, practiceId ?? 0, effectiveScope],
+    queryFn: () => api.ojSubmissions(problemId, undefined, practiceId, effectiveScope === 'all' ? 'all' : undefined),
     enabled: open,
   })
   const list = submissionsQ.data?.submissions ?? []
   const [tab, setTab] = useState('code')
   const [caseIdx, setCaseIdx] = useState(0)
+  const showUser = effectiveScope === 'all'
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) { setSelected(null); setTab('code'); setCaseIdx(0) } onOpenChange(v) }}>
       <DialogContent className="flex max-h-[85vh] flex-col sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>测评记录</DialogTitle>
+          {isAdmin && !selected && (
+            <div className="mt-1 flex gap-1.5">
+              <Button size="xs" variant={scope === 'all' ? 'default' : 'outline'} onClick={() => setScope('all')}>
+                全部成员
+              </Button>
+              <Button size="xs" variant={scope === 'self' ? 'default' : 'outline'} onClick={() => setScope('self')}>
+                仅我的
+              </Button>
+            </div>
+          )}
         </DialogHeader>
         <div className="min-h-0 flex-1 overflow-hidden">
           {selected ? (
@@ -687,6 +704,11 @@ function SubmissionHistoryDialog({ problemId, practiceId, open, onOpenChange }: 
                   <span className={cn('rounded-md border px-1.5 py-0.5 text-xs font-medium', verdictCls(s.verdict))}>{verdictText(s.verdict)}</span>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-xs text-muted-foreground">
+                      {showUser && (
+                        <span className="mr-1.5 rounded bg-muted px-1.5 py-0.5 text-[11px] text-foreground">
+                          {s.userName || `用户 #${s.userId ?? '?'}`}
+                        </span>
+                      )}
                       #{s.id} · {submitTypeText(s.submitType)} · {langLabel(s.language)} · {new Date(s.createdAt).toLocaleString()}
                     </p>
                   </div>

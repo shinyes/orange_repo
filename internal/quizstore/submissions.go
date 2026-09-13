@@ -31,6 +31,9 @@ type Submission struct {
 	CaseDetails  []judge.CaseResult `json:"caseDetails,omitempty"`
 	CreatedAt    time.Time          `json:"createdAt"`
 	FinishedAt   *time.Time         `json:"finishedAt,omitempty"`
+	// 管理端「全部成员」记录视图回带（成员查自己的记录时不填）
+	UserID   int64  `json:"userId,omitempty"`
+	UserName string `json:"userName,omitempty"`
 }
 
 // CreateProgrammingSubmission 事务内写入 submissions(queued) + judge_jobs(queued)。
@@ -123,10 +126,12 @@ func (s *Store) LoadSubmission(ctx context.Context, submissionID int64) (*judge.
 
 // ListSubmissions 某学生某题的提交历史（倒序，上限 50）。
 // trainingId>0 仅返回该训练内的提交；practiceId>0 仅返回该练习内的提交（上下文×题隔离）。
+// 注意：必须带回 source_code —— 测评记录详情直接用列表里的源码渲染，
+// 漏选该列会让「代码」页永远显示“无代码”（历史缺陷）。
 func (s *Store) ListSubmissions(userID, problemID, trainingId, practiceId int64) ([]Submission, error) {
 	var rows *sql.Rows
 	var err error
-	base := `SELECT id,problem_id,question_type,language,input_data,submit_type,status,verdict,
+	const base = `SELECT id,problem_id,question_type,language,source_code,input_data,submit_type,status,verdict,
 			time_ms,memory_kib,score,stdout,stderr,case_details_json,created_at,finished_at
 			FROM submissions WHERE user_id=? AND problem_id=?`
 	switch {
@@ -146,9 +151,53 @@ func (s *Store) ListSubmissions(userID, problemID, trainingId, practiceId int64)
 		var sub Submission
 		var stderr, stdout, details string
 		var finished sql.NullTime
-		if err := rows.Scan(&sub.ID, &sub.ProblemID, &sub.QuestionType, &sub.Language, &sub.InputData,
+		if err := rows.Scan(&sub.ID, &sub.ProblemID, &sub.QuestionType, &sub.Language, &sub.SourceCode, &sub.InputData,
 			&sub.SubmitType, &sub.Status, &sub.Verdict, &sub.TimeMS, &sub.MemoryKiB, &sub.Score,
 			&stdout, &stderr, &details, &sub.CreatedAt, &finished); err != nil {
+			return nil, err
+		}
+		sub.Stdout = stdout
+		sub.Stderr = stderr
+		if finished.Valid {
+			sub.FinishedAt = &finished.Time
+		}
+		_ = json.Unmarshal([]byte(details), &sub.CaseDetails)
+		out = append(out, sub)
+	}
+	return out, rows.Err()
+}
+
+// ListSubmissionsAllUsers 某题全部成员的提交历史（管理端查看，倒序，上限 100）。
+// 带出提交者 id/用户名（JOIN users，与 quizstore 同库）；上下文过滤同 ListSubmissions。
+// 权限由调用方（handler）确认：仅管理员可走此路径。
+func (s *Store) ListSubmissionsAllUsers(problemID, trainingId, practiceId int64) ([]Submission, error) {
+	var rows *sql.Rows
+	var err error
+	const base = `SELECT s.id,s.problem_id,s.question_type,s.language,s.source_code,s.input_data,s.submit_type,
+			s.status,s.verdict,s.time_ms,s.memory_kib,s.score,s.stdout,s.stderr,s.case_details_json,
+			s.created_at,s.finished_at,s.user_id,COALESCE(u.username,'')
+			FROM submissions s LEFT JOIN users u ON u.id=s.user_id
+			WHERE s.problem_id=?`
+	switch {
+	case trainingId > 0:
+		rows, err = s.DB.Query(base+` AND s.training_id=? ORDER BY s.id DESC LIMIT 100`, problemID, trainingId)
+	case practiceId > 0:
+		rows, err = s.DB.Query(base+` AND s.practice_id=? ORDER BY s.id DESC LIMIT 100`, problemID, practiceId)
+	default:
+		rows, err = s.DB.Query(base+` ORDER BY s.id DESC LIMIT 100`, problemID)
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []Submission{}
+	for rows.Next() {
+		var sub Submission
+		var stderr, stdout, details string
+		var finished sql.NullTime
+		if err := rows.Scan(&sub.ID, &sub.ProblemID, &sub.QuestionType, &sub.Language, &sub.SourceCode, &sub.InputData,
+			&sub.SubmitType, &sub.Status, &sub.Verdict, &sub.TimeMS, &sub.MemoryKiB, &sub.Score,
+			&stdout, &stderr, &details, &sub.CreatedAt, &finished, &sub.UserID, &sub.UserName); err != nil {
 			return nil, err
 		}
 		sub.Stdout = stdout

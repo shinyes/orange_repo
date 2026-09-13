@@ -31,6 +31,7 @@ import { cn } from '@/lib/utils'
 import { cloudDraftIsNewer, genericStarter, localDraftTime, markLocalDraftTime, resolveStarter, saveDraftDebounced, syncLocalDraftTime, useCloudDraft, useSpaceDefaultLang } from '@/lib/use-programming-workspace'
 import { CONSOLE_DEFAULT_H, useConsoleResize } from '@/hooks/use-console-resize'
 import { langLabel } from '@/pages/oj/oj-utils'
+import { usePortalSession } from '@/pages/portal/portal-context'
 
 const DRAFT_PREFIX = 'orangeoj:draft:'
 
@@ -366,9 +367,14 @@ function SubmissionHistoryDialog({ open, onOpenChange, problemId, trainingId }: 
   problemId: number
   trainingId: number
 }) {
+  // 管理员可查看全部成员的提交（带用户名）；普通成员只看自己
+  const { user } = usePortalSession()
+  const isAdmin = user.role !== 'member'
+  const [scope, setScope] = useState<'self' | 'all'>('all')
+  const effectiveScope = isAdmin ? scope : 'self'
   const submissionsQ = useQuery({
-    queryKey: ['oj-submissions', 't', problemId, trainingId],
-    queryFn: () => api.ojSubmissions(problemId, trainingId),
+    queryKey: ['oj-submissions', 't', problemId, trainingId, effectiveScope],
+    queryFn: () => api.ojSubmissions(problemId, trainingId, undefined, effectiveScope === 'all' ? 'all' : undefined),
     enabled: open,
   })
   const list = submissionsQ.data?.submissions ?? []
@@ -382,6 +388,7 @@ function SubmissionHistoryDialog({ open, onOpenChange, problemId, trainingId }: 
     lastOpen.current = false
   }
   const selectedSub = selected ?? null
+  const showUser = effectiveScope === 'all'
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -393,11 +400,27 @@ function SubmissionHistoryDialog({ open, onOpenChange, problemId, trainingId }: 
                 <ChevronLeftIcon className="size-4" />
               </Button>
             )}
-            {selectedSub ? `提交 #${selectedSub.id}` : '测评记录'}
+            {selectedSub
+              ? `提交 #${selectedSub.id}${showUser && selectedSub.userName ? ` · ${selectedSub.userName}` : ''}`
+              : '测评记录'}
           </DialogTitle>
           <DialogDescription>
-            {selectedSub ? '该次提交的代码与逐用例判定结果' : '本训练内该题的提交记录（点击条目查看详情）'}
+            {selectedSub
+              ? '该次提交的代码与逐用例判定结果'
+              : isAdmin
+                ? '本训练内该题的提交记录（可选「全部成员」，含提交者用户名）'
+                : '本训练内该题的提交记录（点击条目查看详情）'}
           </DialogDescription>
+          {isAdmin && !selectedSub && (
+            <div className="mt-1 flex gap-1.5">
+              <Button size="xs" variant={scope === 'all' ? 'default' : 'outline'} onClick={() => setScope('all')}>
+                全部成员
+              </Button>
+              <Button size="xs" variant={scope === 'self' ? 'default' : 'outline'} onClick={() => setScope('self')}>
+                仅我的
+              </Button>
+            </div>
+          )}
         </DialogHeader>
 
         {selectedSub ? (
@@ -411,7 +434,7 @@ function SubmissionHistoryDialog({ open, onOpenChange, problemId, trainingId }: 
         ) : (
           <div className="max-h-[60vh] overflow-y-auto">
             {list.map((s) => (
-              <HistoryRow key={s.id} sub={s} onClick={() => setSelected(s)} />
+              <HistoryRow key={s.id} sub={s} showUser={showUser} onClick={() => setSelected(s)} />
             ))}
           </div>
         )}
@@ -427,7 +450,8 @@ function SubmissionHistoryDialog({ open, onOpenChange, problemId, trainingId }: 
 }
 
 // 列表行：灰色图标 + 「提交 #id · verdict」主行 + 元信息副行（verdict 纯文本，无彩色徽章）
-function HistoryRow({ sub, onClick }: { sub: Submission; onClick: () => void }) {
+// showUser=true（管理端全部成员视图）时，主行前显示提交者用户名。
+function HistoryRow({ sub, onClick, showUser }: { sub: Submission; onClick: () => void; showUser?: boolean }) {
   const cases = sub.caseDetails ?? []
   const passCount = cases.filter((c) => c.verdict === 'AC' || c.verdict === 'OK').length
   return (
@@ -439,6 +463,11 @@ function HistoryRow({ sub, onClick }: { sub: Submission; onClick: () => void }) 
       <HistoryIcon className="size-4 shrink-0 text-muted-foreground/60" />
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium">
+          {showUser && (
+            <span className="mr-1.5 rounded bg-muted px-1.5 py-0.5 text-[11px] font-normal text-foreground">
+              {sub.userName || `用户 #${sub.userId ?? '?'}`}
+            </span>
+          )}
           提交 #{sub.id} · {verdictText(sub.verdict)}
         </p>
         <p className="truncate text-xs text-muted-foreground">

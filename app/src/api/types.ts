@@ -602,6 +602,9 @@ export interface Submission {
   caseDetails?: CaseDetail[]
   createdAt: string
   finishedAt?: string | null
+  /** 管理端「全部成员」视图回带：提交者 id/用户名 */
+  userId?: number
+  userName?: string
 }
 
 export interface SubmissionPoll {
