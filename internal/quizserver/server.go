@@ -166,6 +166,8 @@ func (s *Server) RegisterRoutes(app *fiber.App) {
 	portal.Get("/scratch/projects/:id/file", s.handleScratchProjectFile)
 	portal.Get("/scratch/projects/:id/raw", s.handleScratchProjectRaw)
 	portal.Put("/scratch/projects/:id/content", s.handleScratchProjectContentPut)
+	// 关闭浏览器/切后台时用 navigator.sendBeacon 保存，它只能发 POST
+	portal.Post("/scratch/projects/:id/content", s.handleScratchProjectContentPut)
 	portal.Patch("/scratch/projects/:id", s.handleScratchProjectUpdate)
 	portal.Delete("/scratch/projects/:id", s.handleScratchProjectDelete)
 	portal.Post("/game/:game/score", s.handleGameScoreSubmit)

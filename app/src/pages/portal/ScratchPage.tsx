@@ -40,6 +40,7 @@ export function ScratchPage() {
   const savingRef = useRef(false)
   const currentProjectRef = useRef<{ id: number; name: string } | null>(null)
   const lastHashRef = useRef(0)
+  const lastBytesRef = useRef<Uint8Array | null>(null)
   readyRef.current = ready
 
   const cfgQ = useQuery({ queryKey: ['app-config'], queryFn: api.appConfig, staleTime: 5 * 60_000 })
@@ -143,50 +144,101 @@ export function ScratchPage() {
   const saveRef = useRef<() => Promise<void>>(saveToBackpack)
   saveRef.current = saveToBackpack
 
+  // ---- 实时暂存 / 保存 ----
+  // 做法：每 25 秒向编辑器要一次当前工程（sb3），用轻量哈希判断是否有变化；
+  // 有变化就覆盖写回（首次会创建「（自动暂存）」作品，之后一直覆盖同一个作品，
+  // 从书包打开的作品则直接覆盖原作品）。状态显示在编辑器工具栏左侧。
+  // saveCurrent(force)：force=true 时无论哈希是否变化都写一次（退出/关闭页面用）。
+  const saveCurrent = useCallback(
+    async (force: boolean) => {
+      if (!readyRef.current || savingRef.current) return false
+      savingRef.current = true
+      setSaving(true)
+      try {
+        const bytes = await ask({ type: 'saveSb3' })
+        if (!bytes || bytes.length === 0) return false
+        const h = hashBytes(bytes)
+        lastBytesRef.current = bytes
+        if (!force && h === lastHashRef.current) return false // 没有改动，跳过
+        const buf = bytes.slice().buffer as ArrayBuffer
+        if (currentProjectRef.current) {
+          await api.updateScratchProjectContent(currentProjectRef.current.id, buf)
+        } else {
+          const res = await api.uploadScratchProject('（自动暂存）', buf)
+          currentProjectRef.current = { id: res.id, name: '（自动暂存）' }
+        }
+        lastHashRef.current = h
+        setSavedAt(new Date())
+        void qc.invalidateQueries({ queryKey: ['scratch-projects'] })
+        return true
+      } catch (e) {
+        if (force) toast.error(e instanceof Error ? e.message : '保存失败')
+        return false
+      } finally {
+        savingRef.current = false
+        setSaving(false)
+      }
+    },
+    [ask, qc],
+  )
+  const saveNowRef = useRef(saveCurrent)
+  saveNowRef.current = saveCurrent
+
   // ---- 退出编辑器（编辑器工具栏最右侧的「退出」按钮）----
+  // 点击退出 = 保存 + 返回：等待保存完成（失败会提示），避免"点了退出结果改动丢了"
   function exitEditor() {
-    void autosaveRef.current() // 退出前尽力暂存一次
-    navigate(`/s/${spaceId}/training`)
+    void (async () => {
+      await saveNowRef.current(true)
+      navigate(`/s/${spaceId}/training`)
+    })()
   }
   const exitRef = useRef(exitEditor)
   exitRef.current = exitEditor
 
-  // ---- 实时暂存 ----
-  // 做法：每 25 秒向编辑器要一次当前工程（sb3），用轻量哈希判断是否有变化；
-  // 有变化就覆盖写回（首次会创建「（自动暂存）」作品，之后一直覆盖同一个作品，
-  // 从书包打开的作品则直接覆盖原作品）。状态显示在编辑器工具栏左侧。
   const autosaveRef = useRef<() => Promise<void>>(async () => {})
-  autosaveRef.current = async function autosave() {
-    if (!readyRef.current || savingRef.current) return
-    savingRef.current = true
-    setSaving(true)
-    try {
-      const bytes = await ask({ type: 'saveSb3' })
-      if (!bytes || bytes.length === 0) return
-      let h = 2166136261
-      for (let i = 0; i < bytes.length; i += 97) {
-        h ^= bytes[i]
-        h = Math.imul(h, 16777619)
-      }
-      if (h === lastHashRef.current) return // 没有改动，跳过
-      const buf = bytes.slice().buffer as ArrayBuffer
-      if (currentProjectRef.current) {
-        await api.updateScratchProjectContent(currentProjectRef.current.id, buf)
-      } else {
-        const res = await api.uploadScratchProject('（自动暂存）', buf)
-        currentProjectRef.current = { id: res.id, name: '（自动暂存）' }
-      }
-      lastHashRef.current = h
-      const now = new Date()
-      setSavedAt(now)
-      void qc.invalidateQueries({ queryKey: ['scratch-projects'] })
-    } catch {
-      /* 暂存失败不打扰用户：下一轮会再试 */
-    } finally {
-      savingRef.current = false
-      setSaving(false)
-    }
+  autosaveRef.current = async () => {
+    await saveNowRef.current(false)
   }
+
+  // ---- 关闭页面 / 切到后台时兜底保存 ----
+  // 说明：页面卸载时来不及做 postMessage 往返（取不到编辑器里的工程），
+  // 所以用最近一次拿到的字节（lastBytesRef）作为内容，通过 navigator.sendBeacon 发出——
+  // 它是浏览器专门为"离开页面时仍要送达"设计的，且会带上 Cookie（同源）。
+  // 后端为此额外提供 POST /content（sendBeacon 只能发 POST）。
+  useEffect(() => {
+    function flush() {
+      const bytes = lastBytesRef.current
+      if (!bytes || bytes.length === 0) return
+      if (hashBytes(bytes) === lastHashRef.current) return // 无改动
+      const blob = new Blob([bytes.slice().buffer as ArrayBuffer], { type: 'application/octet-stream' })
+      const pid = currentProjectRef.current?.id
+      try {
+        if (pid) {
+          navigator.sendBeacon(`/api/portal/scratch/projects/${pid}/content`, blob)
+        } else {
+          // 还没有对应作品：用 keepalive 请求创建一个暂存作品
+          void fetch(`/api/portal/scratch/projects?name=${encodeURIComponent('（自动暂存）')}`, {
+            method: 'POST',
+            credentials: 'include',
+            keepalive: true,
+            headers: { 'Content-Type': 'application/octet-stream' },
+            body: blob,
+          })
+        }
+      } catch {
+        /* 忽略：已经尽力 */
+      }
+    }
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') flush()
+    }
+    window.addEventListener('pagehide', flush)
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      window.removeEventListener('pagehide', flush)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
+  }, [])
 
   // 定时暂存（编辑器就绪后开始）
   useEffect(() => {
@@ -310,4 +362,13 @@ function Center({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex h-full items-center justify-center text-xs text-muted-foreground">{children}</div>
   )
+}
+// hashBytes：FNV-1a 抽样哈希（只用来判断"工程是否变化"，不做安全用途）
+function hashBytes(bytes: Uint8Array): number {
+  let h = 2166136261
+  for (let i = 0; i < bytes.length; i += 97) {
+    h ^= bytes[i]
+    h = Math.imul(h, 16777619)
+  }
+  return h
 }
