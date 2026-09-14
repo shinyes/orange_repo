@@ -127,9 +127,9 @@ export function BackpackDialog({ open, onOpenChange, onOpenInScratch }: {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[85vh] flex-col sm:max-w-3xl">
+      <DialogContent className="flex max-h-[85vh] flex-col rounded-2xl border-slate-200 shadow-xl sm:max-w-3xl">
         <DialogHeader>
-          <DialogTitle>书包</DialogTitle>
+          <DialogTitle className="flex items-center gap-2 text-[#4c97ff]">`n            <span className="inline-flex size-7 items-center justify-center rounded-lg bg-[#4c97ff]/10 text-base">🎒</span>`n            书包`n          </DialogTitle>
           <DialogDescription>
             保存的 Scratch 作品（服务端存储，含图片与声音素材；换设备也能打开）。
             {usage && ` 已用 ${formatBytes(usage.usedBytes)} / ${formatBytes(usage.quotaBytes)}。`}
@@ -138,7 +138,7 @@ export function BackpackDialog({ open, onOpenChange, onOpenInScratch }: {
 
         <div className="flex min-h-0 flex-1 gap-3">
           {/* 文件夹栏 */}
-          <div className="w-44 shrink-0 space-y-1 overflow-y-auto rounded-lg border p-2">
+          <div className="w-44 shrink-0 space-y-1 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50/70 p-2">
             <button
               type="button"
               className={`flex w-full items-center gap-1.5 rounded px-1.5 py-1 text-left text-xs ${folderId === undefined ? 'bg-accent' : 'hover:bg-muted'}`}

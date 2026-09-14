@@ -216,6 +216,49 @@ func (s *Server) handleScratchProjectFile(c *fiber.Ctx) error {
 	return c.SendStream(f, scratchSendSize(p.UUID, p.Size, f))
 }
 
+// handleScratchProjectContentPut PUT /api/portal/scratch/projects/:id/content
+// 覆盖工程内容（实时暂存）：与原文件同路径写入，不新增作品记录。
+func (s *Server) handleScratchProjectContentPut(c *fiber.Ctx) error {
+	user := currentUser(c)
+	id, err := paramID(c, "id")
+	if err != nil {
+		return respondError(c, fiber.StatusBadRequest, "invalid project id")
+	}
+	p, err := s.QS.GetScratchProject(user.ID, id)
+	if err != nil {
+		return scratchErr(c, err)
+	}
+	body := c.Body()
+	if len(body) == 0 {
+		return respondError(c, fiber.StatusBadRequest, "工程内容为空")
+	}
+	if len(body) > quizstore.MaxScratchProjectBytes {
+		return respondError(c, fiber.StatusBadRequest,
+			fmt.Sprintf("工程过大（单个上限 %d MB）", quizstore.MaxScratchProjectBytes>>20))
+	}
+	if len(body) < 4 || body[0] != 'P' || body[1] != 'K' {
+		return respondError(c, fiber.StatusBadRequest, "不是有效的 Scratch 工程文件（.sb3）")
+	}
+	if err := validateSb3(body); err != nil {
+		return respondError(c, fiber.StatusBadRequest, "工程文件不完整或已损坏："+err.Error())
+	}
+	sum := sha256.Sum256(body)
+	if err := s.QS.UpdateScratchProjectContent(user.ID, id, int64(len(body)), hex.EncodeToString(sum[:])); err != nil {
+		return scratchErr(c, err)
+	}
+	// 内容先落新文件再原子替换：避免写一半造成文件损坏（那会导致"打开作品失败"）
+	path := s.scratchFilePath(user.ID, p.UUID)
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, body, 0o644); err != nil {
+		return respondError(c, fiber.StatusInternalServerError, "写入工程文件失败")
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		_ = os.Remove(tmp)
+		return respondError(c, fiber.StatusInternalServerError, "替换工程文件失败")
+	}
+	return respondData(c, fiber.StatusOK, fiber.Map{"id": id, "size": len(body)})
+}
+
 // handleScratchProjectUpdate PATCH /api/portal/scratch/projects/:id {name?, folderId?}
 func (s *Server) handleScratchProjectUpdate(c *fiber.Ctx) error {
 	user := currentUser(c)

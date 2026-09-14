@@ -285,7 +285,32 @@ func (s *Store) CreateScratchProject(userID int64, uuid, name string, folderID *
 	return res.LastInsertId()
 }
 
-// UpdateScratchProject 改名/移动（写回内容会新增记录，不在此处）。
+// UpdateScratchProjectContent 覆盖工程内容（实时暂存用：同一作品反复写入，不新增记录）。
+// 大小仍受单文件上限与用户配额约束（配额按“替换后的总量”计算）。
+func (s *Store) UpdateScratchProjectContent(userID, projectID int64, size int64, sha256 string) error {
+	p, err := s.GetScratchProject(userID, projectID)
+	if err != nil {
+		return err
+	}
+	if size <= 0 {
+		return errors.New("工程内容为空")
+	}
+	if size > MaxScratchProjectBytes {
+		return fmt.Errorf("工程过大（单个上限 %d MB）", MaxScratchProjectBytes>>20)
+	}
+	used, err := s.ScratchUsage(userID)
+	if err != nil {
+		return err
+	}
+	if used-p.Size+size > ScratchUserQuotaBytes {
+		return fmt.Errorf("书包空间不足（上限 %d MB）", ScratchUserQuotaBytes>>20)
+	}
+	_, err = s.DB.Exec(`UPDATE scratch_projects SET size=?, sha256=?, updated_at=CURRENT_TIMESTAMP WHERE id=? AND user_id=?`,
+		size, sha256, projectID, userID)
+	return err
+}
+
+// UpdateScratchProject 改名/移动（写回内容用 UpdateScratchProjectContent）。
 func (s *Store) UpdateScratchProject(userID, projectID int64, name *string, folderID *int64) error {
 	if _, err := s.GetScratchProject(userID, projectID); err != nil {
 		return err

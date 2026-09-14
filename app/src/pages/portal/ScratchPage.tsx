@@ -33,6 +33,14 @@ export function ScratchPage() {
   const nextId = useRef(1)
   const [ready, setReady] = useState(false)
   const [pickerOpen, setPickerOpen] = useState(false)
+  // 实时暂存状态
+  const [savedAt, setSavedAt] = useState<Date | null>(null)
+  const [saving, setSaving] = useState(false)
+  const readyRef = useRef(false)
+  const savingRef = useRef(false)
+  const currentProjectRef = useRef<{ id: number; name: string } | null>(null)
+  const lastHashRef = useRef(0)
+  readyRef.current = ready
 
   const cfgQ = useQuery({ queryKey: ['app-config'], queryFn: api.appConfig, staleTime: 5 * 60_000 })
   const baseUrl = (cfgQ.data?.scratchUrl ?? '').replace(/\/$/, '')
@@ -66,11 +74,12 @@ export function ScratchPage() {
         toast.error(String(msg.message || 'Scratch 编辑器出错'))
         return
       }
-      // 编辑器工具栏右侧的按钮（书包 / 保存到书包）→ 统一由主站处理
+      // 编辑器工具栏右侧的按钮（书包 / 保存 / 退出）→ 统一由主站处理
       // （书包数据与登录态都在主站；iframe 不直接调 API）
       if (msg.type === 'ui' && typeof msg.action === 'string') {
         if (msg.action === 'openBackpack') setPickerOpen(true)
         else if (msg.action === 'saveToBackpack') void saveRef.current()
+        else if (msg.action === 'exit') exitRef.current()
         return
       }
       if (msg.type === 'reply' && typeof msg.id === 'number') {
@@ -119,6 +128,9 @@ export function ScratchPage() {
       const bytes = await ask({ type: 'saveSb3' })
       if (!bytes || bytes.length === 0) throw new Error('导出内容为空')
       const res = await api.uploadScratchProject(name.trim() || '未命名作品', bytes.buffer as ArrayBuffer)
+      currentProjectRef.current = { id: res.id, name: name.trim() || '未命名作品' }
+      lastHashRef.current = 0
+      setSavedAt(new Date())
       toast.success(`已保存到书包（${(res.size / 1024).toFixed(0)} KB）`)
       void qc.invalidateQueries({ queryKey: ['scratch-projects'] })
     } catch (e) {
@@ -131,11 +143,80 @@ export function ScratchPage() {
   const saveRef = useRef<() => Promise<void>>(saveToBackpack)
   saveRef.current = saveToBackpack
 
+  // ---- 退出编辑器（编辑器工具栏最右侧的「退出」按钮）----
+  function exitEditor() {
+    void autosaveRef.current() // 退出前尽力暂存一次
+    navigate(`/s/${spaceId}/training`)
+  }
+  const exitRef = useRef(exitEditor)
+  exitRef.current = exitEditor
+
+  // ---- 实时暂存 ----
+  // 做法：每 25 秒向编辑器要一次当前工程（sb3），用轻量哈希判断是否有变化；
+  // 有变化就覆盖写回（首次会创建「（自动暂存）」作品，之后一直覆盖同一个作品，
+  // 从书包打开的作品则直接覆盖原作品）。状态显示在编辑器工具栏左侧。
+  const autosaveRef = useRef<() => Promise<void>>(async () => {})
+  autosaveRef.current = async function autosave() {
+    if (!readyRef.current || savingRef.current) return
+    savingRef.current = true
+    setSaving(true)
+    try {
+      const bytes = await ask({ type: 'saveSb3' })
+      if (!bytes || bytes.length === 0) return
+      let h = 2166136261
+      for (let i = 0; i < bytes.length; i += 97) {
+        h ^= bytes[i]
+        h = Math.imul(h, 16777619)
+      }
+      if (h === lastHashRef.current) return // 没有改动，跳过
+      const buf = bytes.slice().buffer as ArrayBuffer
+      if (currentProjectRef.current) {
+        await api.updateScratchProjectContent(currentProjectRef.current.id, buf)
+      } else {
+        const res = await api.uploadScratchProject('（自动暂存）', buf)
+        currentProjectRef.current = { id: res.id, name: '（自动暂存）' }
+      }
+      lastHashRef.current = h
+      const now = new Date()
+      setSavedAt(now)
+      void qc.invalidateQueries({ queryKey: ['scratch-projects'] })
+    } catch {
+      /* 暂存失败不打扰用户：下一轮会再试 */
+    } finally {
+      savingRef.current = false
+      setSaving(false)
+    }
+  }
+
+  // 定时暂存（编辑器就绪后开始）
+  useEffect(() => {
+    if (!ready) return
+    const timer = window.setInterval(() => {
+      void autosaveRef.current()
+    }, 25_000)
+    // 打开作品后也先记一次基线，避免刚打开就立刻"暂存"
+    const t = window.setTimeout(() => void autosaveRef.current(), 8_000)
+    return () => {
+      window.clearInterval(timer)
+      window.clearTimeout(t)
+    }
+  }, [ready])
+
+  // 把暂存状态显示到编辑器工具栏（跨源：通过 postMessage 通知宿主页）
+  useEffect(() => {
+    const frame = iframeRef.current
+    if (!frame || !frame.contentWindow) return
+    const text = saving ? '自动暂存中…' : savedAt ? `已自动暂存 ${savedAt.toLocaleTimeString('zh-CN', { hour12: false }).slice(0, 5)}` : ''
+    frame.contentWindow.postMessage({ source: 'orangeoj-host', protocol: PROTOCOL, type: 'status', text }, targetOrigin)
+  }, [saving, savedAt, targetOrigin])
+
   // ---- 从书包打开 ----
   const openProject = useCallback(async (projectId: number, projectName: string) => {
     try {
       const bytes = await api.scratchProjectBytes(projectId)
       await ask({ type: 'loadSb3', bytes: new Uint8Array(bytes) }, [], 60_000)
+      currentProjectRef.current = { id: projectId, name: projectName }
+      lastHashRef.current = 0 // 刚载入：下一轮暂存会建立新基线
       toast.success(`已载入《${projectName}》`)
       setParams((prev) => {
         const next = new URLSearchParams(prev)

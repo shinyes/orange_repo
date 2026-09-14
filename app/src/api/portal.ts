@@ -85,7 +85,13 @@ export const portalApi = {
     if (!res.ok) throw new Error(`读取工程失败（${res.status}）`)
     return res.arrayBuffer()
   },
-  updateScratchProject: (id: number, patch: { name?: string; folderId?: number }) =>
+  // 覆盖保存（实时暂存用）：同一作品写回内容，不新增记录
+  updateScratchProjectContent: (id: number, bytes: ArrayBuffer) =>
+    req<{ id: number; size: number }>(`/api/portal/scratch/projects/${id}/content`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/octet-stream' },
+      body: bytes,
+    }),  updateScratchProject: (id: number, patch: { name?: string; folderId?: number }) =>
     req<void>(`/api/portal/scratch/projects/${id}`, json({ method: 'PATCH', body: JSON.stringify(patch) })),
   deleteScratchProject: (id: number) => req<void>(`/api/portal/scratch/projects/${id}`, { method: 'DELETE' }),
 

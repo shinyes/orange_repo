@@ -165,6 +165,7 @@ func (s *Server) RegisterRoutes(app *fiber.App) {
 	portal.Post("/scratch/projects", s.handleScratchProjectUpload)
 	portal.Get("/scratch/projects/:id/file", s.handleScratchProjectFile)
 	portal.Get("/scratch/projects/:id/raw", s.handleScratchProjectRaw)
+	portal.Put("/scratch/projects/:id/content", s.handleScratchProjectContentPut)
 	portal.Patch("/scratch/projects/:id", s.handleScratchProjectUpdate)
 	portal.Delete("/scratch/projects/:id", s.handleScratchProjectDelete)
 	portal.Post("/game/:game/score", s.handleGameScoreSubmit)

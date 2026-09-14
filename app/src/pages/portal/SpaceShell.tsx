@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react'
-import { NavLink, Outlet, useNavigate, useOutletContext, useParams } from 'react-router-dom'
+import { NavLink, Outlet, useLocation, useNavigate, useOutletContext, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { UserRoundIcon, FolderKanbanIcon, ClipboardListIcon, BookOpenIcon, TrophyIcon, ArrowLeftIcon, BlocksIcon } from 'lucide-react'
 
@@ -15,6 +15,9 @@ export function SpaceShell({ user, onLogout }: { user: User; onLogout: () => voi
   const { spaceId } = useParams()
   const sid = Number(spaceId)
   const navigate = useNavigate()
+  const location = useLocation()
+  // Scratch 创作页整屏交给编辑器：隐藏本站顶栏（编辑器工具栏最右侧提供「退出」按钮）
+  const isScratchEditor = location.pathname.replace(/\/+$/, '').endsWith('/scratch')
   const spacesQ = useQuery({ queryKey: ['portal-spaces'], queryFn: api.portalSpaces })
   const spaces = spacesQ.data?.spaces ?? null
 
@@ -94,6 +97,7 @@ export function SpaceShell({ user, onLogout }: { user: User; onLogout: () => voi
   return (
     <div className="flex h-dvh flex-col overflow-hidden">
       {/* 顶栏（单行）：返回 + 空间名 + 训练/练习/刷题/排行榜 + 我的 */}
+      {!isScratchEditor && (
       <header className="shrink-0 border-b bg-background">
         <div className="mx-auto flex h-11 w-full max-w-5xl items-center gap-1 px-2 lg:px-3">
           <NavLink
@@ -147,9 +151,10 @@ export function SpaceShell({ user, onLogout }: { user: User; onLogout: () => voi
           </NavLink>
         </div>
       </header>
+      )}
 
-      {/* 内容区 */}
-      <main className="min-h-0 flex-1 overflow-y-auto">
+      {/* 内容区（编辑器页整屏、不滚动） */}
+      <main className={cn('min-h-0 flex-1', isScratchEditor ? 'overflow-hidden' : 'overflow-y-auto')}>
         <Outlet context={{ user, space, onLogout }} />
       </main>
     </div>

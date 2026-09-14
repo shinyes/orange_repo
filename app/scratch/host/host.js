@@ -46,6 +46,8 @@
       '#orangeoj-scratch-toolbar button.primary:hover{background:#4280d7;border-color:#4280d7}',
       '#orangeoj-scratch-toolbar button[disabled]{opacity:.55;cursor:default}',
       '#orangeoj-scratch-toolbar svg{width:15px;height:15px;fill:currentColor}',
+      '#orangeoj-scratch-status{font-size:12px;color:#8a93a6;margin-right:2px;white-space:nowrap}',
+      '#orangeoj-scratch-toolbar button.danger:hover{background:#fff1f0;border-color:rgba(255,102,102,.6);color:#e34d4d}',
     ].join('')
     document.head.appendChild(css)
 
@@ -65,6 +67,8 @@
 
     var ICON_BAG = 'M10 4h4a2 2 0 0 1 2 2v1h1a3 3 0 0 1 3 3v7a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3v-7a3 3 0 0 1 3-3h1V6a2 2 0 0 1 2-2zm0 3h4V6h-4v1z'
     var ICON_SAVE = 'M5 3h11l3 3v15H5V3zm3 2v5h7V5H8zm-1 9h10v5H7v-5z'
+    // 退出（门 + 右箭头）
+    var ICON_EXIT = 'M10 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h5v-2H5V5h5V3zm5.6 4.6L14.2 9l2 2H9v2h7.2l-2 2 1.4 1.4L20 12l-4.4-4.4z'
 
     var bagBtn = makeButton('书包', '打开我的书包（已保存的作品）', false, ICON_BAG, function () {
       post('ui', { action: 'openBackpack' })
@@ -72,12 +76,31 @@
     var saveBtn = makeButton('保存到书包', '把当前作品保存到书包（服务端，含图片与声音素材）', true, ICON_SAVE, function () {
       post('ui', { action: 'saveToBackpack' })
     })
+    var exitBtn = makeButton('退出', '退出编辑器，返回本站', false, ICON_EXIT, function () {
+      post('ui', { action: 'exit' })
+    })
+    // 实时暂存状态（由主站回传）：在工具栏左侧显示"暂存中…/已暂存 HH:MM"
+    var status = document.createElement('span')
+    status.id = 'orangeoj-scratch-status'
+    status.textContent = ''
+    exitBtn.className = 'danger'
+    bar.appendChild(status)
     bar.appendChild(bagBtn)
     bar.appendChild(saveBtn)
+    bar.appendChild(exitBtn)
     document.body.appendChild(bar)
-    return function (enabled) {
-      bagBtn.disabled = !enabled
-      saveBtn.disabled = !enabled
+    return {
+      setEnabled: function (enabled) {
+        bagBtn.disabled = !enabled
+        saveBtn.disabled = !enabled
+        exitBtn.disabled = !enabled
+      },
+      setStatus: function (text) {
+        status.textContent = text || ''
+      },
+      setSaveLabel: function (text) {
+        saveBtn.querySelector('span').textContent = text || '保存到书包'
+      }
     }
   }
 
@@ -86,7 +109,8 @@
     return
   }
 
-  var setToolbarEnabled = injectToolbar()
+  var toolbar = injectToolbar()
+  var setToolbarEnabled = function (on) { toolbar.setEnabled(on) }
 
   // ---- 素材存储：本地镜像 + 自带默认作品（完全离线）----
   //
@@ -210,6 +234,13 @@
     if (ev.origin !== parentOrigin) return
     var msg = ev.data || {}
     if (msg.source !== 'orangeoj-host') return
+    // 主站回传的暂存状态 → 显示在工具栏左侧（"自动暂存中…/已自动暂存 HH:MM"）
+    if (msg.type === 'status') {
+      try {
+        toolbar.setStatus(msg.text)
+      } catch (e) { /* 忽略 */ }
+      return
+    }
     var vm = window.__ORANGEOJ_VM__
     if (msg.type === 'ping') {
       post('reply', { id: msg.id, ok: true, protocol: PROTOCOL })
