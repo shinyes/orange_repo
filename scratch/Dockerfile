@@ -20,6 +20,10 @@
 # ---------- 1) 取 scratch-gui 产物 + 宿主页 ----------
 FROM node:24.15-bookworm-slim AS web
 WORKDIR /build
+# BUILD_VERSION：发布时传 tag（见 .github/workflows/release.yml），用于给固定文件名的资源加 ?v=，
+# 使每次发布的 URL 都不同 —— 这样即使某些客户端曾把旧镜像的 immutable 响应缓存一年，
+# 新版本也不会被旧缓存挡住（历史坑：主包/host.js 固定文件名 + 旧 nginx 一年强缓存）。
+ARG BUILD_VERSION=dev
 # --global=false 显式加上：某些宿主 npm 配置默认 global=true，会把包装到全局而不是本地
 COPY app/scratch/package.json app/scratch/package-lock.json ./
 RUN npm install --global=false --no-audit --no-fund --legacy-peer-deps
@@ -40,7 +44,10 @@ RUN set -eux; \
     test -f /out/static/blocks-media/default/zoom-in.svg; \
     test -f /out/static/blocks-media/high-contrast/repeat.svg; \
     test -d /out/static/assets; \
-    test "$(find /out/static/assets -type f | wc -l)" -gt 200
+    test "$(find /out/static/assets -type f | wc -l)" -gt 200; \
+    sed -i "s|\./scratch-gui-standalone\.js|./scratch-gui-standalone.js?v=${BUILD_VERSION}|g; s|\./host\.js|./host.js?v=${BUILD_VERSION}|g" /out/index.html; \
+    grep -q "scratch-gui-standalone.js?v=${BUILD_VERSION}" /out/index.html; \
+    grep -q "host.js?v=${BUILD_VERSION}" /out/index.html
 
 # 2) 把上游写死的 webpack publicPath 改为运行期可注入（宿主页 index.html 注入
 #    window.__ORANGEOJ_PUBLIC_PATH__）。产物里这类赋值有两处（顶层运行时与嵌套运行时）：
@@ -49,20 +56,26 @@ RUN set -eux; \
 #    只改顶层时，嵌套运行时加载的 chunk（fetch-worker 等）仍会去域名根取 → 404/被 SPA 兜底成 HTML。
 #    补丁不完整或上游结构变化时直接构建失败（宁可构建失败，也不要产出坏镜像）。
 RUN set -eux; \
-    node -e " \
+    BUILD_VERSION="${BUILD_VERSION}" node -e " \
       const fs=require('fs'); \
       const f='/out/scratch-gui-standalone.js'; \
+      const v=process.env.BUILD_VERSION||'dev'; \
       let s=fs.readFileSync(f,'utf8'); \
       const re=/([A-Za-z_$][\w$]*webpack_require[\w$]*)\.p=\"\/\"/g; \
       const before=(s.match(re)||[]).length; \
       if(before<1) throw new Error('未找到 publicPath 赋值，上游产物结构可能已变化'); \
-      s=s.replace(re, '\$1.p=(typeof window!==\"undefined\"\&\&window.__ORANGEOJ_PUBLIC_PATH__)||\"/\"'); \
+      s=s.replace(re, '\$1.p=(window.__ORANGEOJ_PUBLIC_PATH__=window.__ORANGEOJ_PUBLIC_PATH__||function(){try{var u=(document.currentScript\&\&document.currentScript.src)||\"\";u=u.split(\"?\")[0];var i=u.lastIndexOf(\"/\");return i>=0?u.slice(0,i+1):\"/\"}catch(e){return \"/\"}}())'); \
       const left=(s.match(re)||[]).length; \
       if(left!==0) throw new Error('publicPath 替换不完整，剩余 '+left+' 处'); \
+      const workerRef='.'+'/extension-worker.js'; \
+      const wbefore=s.split('\"'+workerRef+'\"').length-1; \
+      if(wbefore<1) throw new Error('未找到 extension-worker.js 引用，上游产物结构可能已变化'); \
+      s=s.split('\"'+workerRef+'\"').join('\"'+workerRef+'?v='+v+'\"'); \
       fs.writeFileSync(f,s); \
-      console.log('publicPath 已改为运行期注入（替换 '+before+' 处）'); \
+      console.log('publicPath 已改为运行期推断（替换 '+before+' 处）；extension-worker 引用 '+wbefore+' 处已加 ?v='+v); \
     "; \
-    grep -c '__ORANGEOJ_PUBLIC_PATH__' /out/scratch-gui-standalone.js
+    grep -c '__ORANGEOJ_PUBLIC_PATH__' /out/scratch-gui-standalone.js; \
+    grep -c "extension-worker.js?v=" /out/scratch-gui-standalone.js
 
 # ---------- 2) 运行时：静态服务 + 素材库校验 ----------
 # 素材完整性按仓库清单校验：数量少于 manifest.tsv 的行数即构建失败——

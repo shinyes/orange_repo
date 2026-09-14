@@ -129,6 +129,8 @@ jobs:
           file: ./scratch/Dockerfile
           push: true
           platforms: linux/amd64
+          build-args: |
+            BUILD_VERSION=${{ github.ref_name }}
           tags: ${{ steps.meta-scratch.outputs.tags }}
           labels: ${{ steps.meta-scratch.outputs.labels }}
           cache-from: type=gha,scope=release-scratch
