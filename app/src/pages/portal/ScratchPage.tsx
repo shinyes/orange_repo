@@ -41,6 +41,7 @@ export function ScratchPage() {
   const currentProjectRef = useRef<{ id: number; name: string } | null>(null)
   const lastHashRef = useRef(0)
   const lastBytesRef = useRef<Uint8Array | null>(null)
+  const dirtyTimerRef = useRef<number | null>(null)
   readyRef.current = ready
 
   const cfgQ = useQuery({ queryKey: ['app-config'], queryFn: api.appConfig, staleTime: 5 * 60_000 })
@@ -81,6 +82,13 @@ export function ScratchPage() {
         if (msg.action === 'openBackpack') setPickerOpen(true)
         else if (msg.action === 'saveToBackpack') void saveRef.current()
         else if (msg.action === 'exit') exitRef.current()
+        else if (msg.action === 'dirty') {
+          // 编辑器有改动 → 5 秒防抖后保存一次（避免频繁序列化，也保证"改完立刻关页面"不丢）
+          if (dirtyTimerRef.current) window.clearTimeout(dirtyTimerRef.current)
+          dirtyTimerRef.current = window.setTimeout(() => {
+            void saveNowRef.current(false)
+          }, 5_000)
+        }
         return
       }
       if (msg.type === 'reply' && typeof msg.id === 'number') {
@@ -230,7 +238,9 @@ export function ScratchPage() {
       }
     }
     const onVisibility = () => {
-      if (document.visibilityState === 'hidden') flush()
+      if (document.visibilityState !== 'hidden') return
+      // 先尝试正常保存一次（切后台时异步请求通常来得及），失败/来不及再由 beacon 兜底
+      void saveNowRef.current(false).finally(() => flush())
     }
     window.addEventListener('pagehide', flush)
     document.addEventListener('visibilitychange', onVisibility)

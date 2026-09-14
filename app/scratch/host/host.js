@@ -218,6 +218,15 @@
       window.__ORANGEOJ_VM__ = vm
       // setTranslatorFunction 通常在 VM 之前被调用，这里补一次默认作品加载
       loadDefaultProject()
+      // 编辑器一有改动就通知主站（主站 5 秒防抖后保存）：
+      // 这样"改完立刻关页面"也在保护范围内，而不是等 25 秒轮询
+      try {
+        if (typeof vm.on === 'function') {
+          vm.on('PROJECT_CHANGED', function () {
+            post('ui', { action: 'dirty' })
+          })
+        }
+      } catch (e) { /* 忽略 */ }
       try {
         setToolbarEnabled(true)
       } catch (e) { /* 忽略 */ }
