@@ -4,10 +4,14 @@
 package quizserver
 
 import (
+	"archive/zip"
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -156,6 +160,11 @@ func (s *Server) handleScratchProjectUpload(c *fiber.Ctx) error {
 	if len(body) < 4 || body[0] != 'P' || body[1] != 'K' {
 		return respondError(c, fiber.StatusBadRequest, "不是有效的 Scratch 工程文件（.sb3）")
 	}
+	// 进一步校验 zip 结构完整且含 project.json：截断/损坏的文件若被存下，
+	// 之后"从书包打开"会在编辑器里报奇怪的解析错误（如 Non-ascii character in FixedAsciiString）。
+	if err := validateSb3(body); err != nil {
+		return respondError(c, fiber.StatusBadRequest, "工程文件不完整或已损坏："+err.Error())
+	}
 	// 配额预检（文件写完再校验会留下垃圾文件）
 	used, err := s.QS.ScratchUsage(user.ID)
 	if err != nil {
@@ -204,7 +213,7 @@ func (s *Server) handleScratchProjectFile(c *fiber.Ctx) error {
 	c.Set(fiber.HeaderContentType, "application/octet-stream")
 	c.Set(fiber.HeaderContentDisposition,
 		fmt.Sprintf(`attachment; filename="%s.sb3"`, sanitizeFilename(p.Name)))
-	return c.SendStream(f, int(p.Size))
+	return c.SendStream(f, scratchSendSize(p.UUID, p.Size, f))
 }
 
 // handleScratchProjectUpdate PATCH /api/portal/scratch/projects/:id {name?, folderId?}
@@ -258,8 +267,25 @@ func (s *Server) handleScratchProjectRaw(c *fiber.Ctx) error {
 		return respondError(c, fiber.StatusNotFound, "工程文件不存在")
 	}
 	defer f.Close()
-	c.Set(fiber.HeaderContentType, "application/octet-stream")
-	return c.SendStream(f, int(p.Size))
+	// 编辑器靠这段字节直接解析 zip：长度必须与真实文件一致，否则会被截断，
+	// Scratch VM 会抛 "Non-ascii character in FixedAsciiString" 这类解析错误。
+	c.Set(fiber.HeaderContentType, "application/x-scratch.sb3")
+	return c.SendStream(f, scratchSendSize(p.UUID, p.Size, f))
+}
+
+// scratchSendSize 返回应当发送的字节数：以**文件实际大小**为准。
+// 历史数据/异常写入可能让库中记录的 size 与磁盘文件不一致；此时若仍按记录值设置
+// Content-Length，浏览器会报 ERR_CONTENT_LENGTH_MISMATCH 并截断数据，
+// 表现为"打开书包里的作品失败"（VM 解析 zip 报 Non-ascii character in FixedAsciiString）。
+func scratchSendSize(uuid string, recorded int64, f *os.File) int {
+	if info, err := f.Stat(); err == nil {
+		if info.Size() != recorded {
+			log.Printf("[scratch] 工程 %s 记录大小 %d 与文件实际 %d 不一致，按实际大小发送",
+				uuid, recorded, info.Size())
+		}
+		return int(info.Size())
+	}
+	return int(recorded)
 }
 
 // scratchErr 数据层错误 → HTTP：不存在/非本人 → 404；其余按 400（容量/命名等业务错误）。
@@ -282,4 +308,29 @@ func sanitizeFilename(name string) string {
 		name = string([]rune(name)[:80])
 	}
 	return name
+}
+
+// validateSb3 校验 .sb3（zip）结构完整且包含 project.json。
+// 只做"能否安全打开"的检查：条目可读、project.json 存在且非空。
+func validateSb3(body []byte) error {
+	zr, err := zip.NewReader(bytes.NewReader(body), int64(len(body)))
+	if err != nil {
+		return errors.New("zip 结构无法解析")
+	}
+	for _, f := range zr.File {
+		if f.Name != "project.json" {
+			continue
+		}
+		rc, err := f.Open()
+		if err != nil {
+			return errors.New("project.json 无法读取")
+		}
+		defer rc.Close()
+		n, err := io.Copy(io.Discard, io.LimitReader(rc, 1<<20))
+		if err != nil || n == 0 {
+			return errors.New("project.json 为空或损坏")
+		}
+		return nil
+	}
+	return errors.New("缺少 project.json")
 }
