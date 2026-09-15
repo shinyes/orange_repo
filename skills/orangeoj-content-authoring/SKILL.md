@@ -273,6 +273,11 @@ TypeTrueFalse    ProblemType = "true_false"
 ```
 
 - 键名必须是 `answer`，值是 JSON 布尔（`internal/zipio/zipio.go:499-521`）。
+- **不要写 `options`**：判断题的作答界面固定渲染「正确 / 错误」两个按钮
+  （`app/src/components/portal/objective.tsx:91,121` 只在 `single_choice` 分支渲染 `options`），
+  写了不会被使用，反而容易让题面重复。
+- **解析写 `solutions[].markdown`**：说明为什么对/错、常见混淆点（见 `examples/problem-true-false.json`）。
+  题干里不要塞答案，`answerJson` 只放布尔值。
 - 容错键：`answer` / `correct` / `correctAnswer` / `value` 任一命中即取用，并统一写成 `answer`
   （`internal/zipio/zipio.go:504`）。
 - 值容错（`internal/zipio/zipio.go:589-605`）：`true/1/"yes"/"对"/"正确"` → `true`；
@@ -282,8 +287,12 @@ TypeTrueFalse    ProblemType = "true_false"
 
 ### 2.5 最小可用题目示例
 
-见 `examples/problem-programming.json` 与 `examples/problem-objective.json`。
-以下是最小可提交载荷（可直接复制）：
+见 `examples/problem-programming.json`、`examples/problem-objective.json`（单选）与
+`examples/problem-true-false.json`（判断，含解析写法）。以下是最小可提交载荷（可直接复制）：
+
+> **判断题的"解释"写在哪**：写在 `solutions[].markdown`（题解/解析区），不要写进 `statementMd`
+> 或 `answerJson`。`answerJson` 只放布尔答案（`{"answer": true|false}`）；`markdown` 里说明
+> 为什么对/错、以及常见混淆点。见 `examples/problem-true-false.json`。
 
 ```json
 {
@@ -811,6 +820,8 @@ curl -sS -b cookies.txt -o roundtrip.zip http://localhost:8080/api/export/traini
 | `400 solutions must be a JSON array` | `solutions` 写成对象 `{...}` | 写成数组 `[{...}]` |
 | 客观题永远判不对 | `answerIndex` 越界/答案文本对不上 → **静默保留原值** | 用 0-based 整数下标，且 `0 ≤ idx < options.length` |
 | 判断题答案不生效 | 写了 `"answer":"是"` / `"T"` | 用布尔 `true` / `false` |
+| 判断题写了 `options` | 界面固定渲染「正确/错误」，`options` 不生效 | 判断题 `bodyJson` 留空 `{}`，答案放 `answerJson.answer` |
+| 判断题没有解析 | 只填了答案，学生看不到为什么 | 解析写进 `solutions[].markdown`（见 `examples/problem-true-false.json`） |
 | 提交后只用样例判分 | 只写了 `samples`，没写 `testCases` | 补 `testCases` |
 | 章节为空 / 少了题目 | `trainingPlan.json` 的 `problemIds` 下标越界或写成了数据库 id | 用 0-based 数组下标 |
 | `auto` 导成了练习 | 写了 `trainingPlan.json` 但 `chapters: []` | 至少一个章节 |
@@ -843,7 +854,7 @@ curl -sS -b cookies.txt -o roundtrip.zip http://localhost:8080/api/export/traini
 - [ ] 编程题：`answerJson` 是 `{}`。
 - [ ] 单选题：`options` 是**纯文本**数组（无 `A.` 前缀），`answerIndex` 是 0-based 且
       `0 <= answerIndex < options.length`。
-- [ ] 判断题：`answerJson.answer` 是 JSON 布尔。
+- [ ] 判断题：`answerJson.answer` 是 JSON 布尔；`bodyJson` 为空（不写 `options`）；解析已写进 `solutions[].markdown`。
 - [ ] `solutions` 是数组；`language` 用 `cpp` / `python`。
 - [ ] 标签用 `/` 分层，且与 `GET /api/tags` 里已有前缀一致（避免 `Python` 与 `python` 并存）。
 - [ ] 父子层级写成了**一个**数组元素（`["入门/数组"]`），而不是两个平级元素。

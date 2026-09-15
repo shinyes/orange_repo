@@ -12,6 +12,7 @@ orangeoj-content-authoring/
 └── examples/
     ├── problem-programming.json          # 编程题完整载荷
     ├── problem-objective.json            # 单选题完整载荷
+    ├── problem-true-false.json           # 判断题完整载荷（含 solutions[].markdown 解析写法）
     ├── training-plan.json                # trainingPlan.json（两章节，下标引用）
     ├── practice-plan.json                # 平铺练习的 trainingPlan.json
     ├── zip-layout.md                     # ZIP 目录树 / manifest / 校验规则速查

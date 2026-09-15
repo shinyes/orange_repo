@@ -1,0 +1,16 @@
+{
+  "uuid": "0199a1f0-0001-7000-8000-000000000003",
+  "type": "true_false",
+  "title": "在 Python 中，元组（tuple）创建后可以修改其中的元素。",
+  "tags": ["Python/基础", "Python/元组"],
+  "statementMd": "在 Python 中，元组（tuple）创建后可以修改其中的元素。\n\n> 提示：判断题只需在 `answerJson.answer` 写 JSON 布尔值（`true` / `false`），解析写在 `solutions[].markdown`，会显示在题解区。\n",
+  "bodyJson": {},
+  "answerJson": { "answer": false },
+  "solutions": [
+    {
+      "language": "python",
+      "code": "t = (1, 2, 3)\nt[0] = 9        # TypeError: 'tuple' object does not support item assignment\n\n# 想要可变就用列表：\nlst = [1, 2, 3]\nlst[0] = 9      # OK\n",
+      "markdown": "**答案：错误。**\n\n元组是**不可变**序列：创建后不能增删元素，也不能对已有下标赋值，`t[0] = 9` 会抛 `TypeError`。\n\n常见混淆点：\n- 若元组里装的是**可变对象**（如 `t = ([1, 2],)`），可以修改那个对象的内容 `t[0].append(3)`——变的不是元组本身，而是它引用的列表。\n- 不做原地修改的\"修改\"是可以的：`t2 = t + (4,)` 会生成**新**元组，原元组不变。\n"
+    }
+  ]
+}
