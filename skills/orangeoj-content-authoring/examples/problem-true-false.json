@@ -2,10 +2,15 @@
   "uuid": "0199a1f0-0001-7000-8000-000000000003",
   "type": "true_false",
   "title": "在 Python 中，元组（tuple）创建后可以修改其中的元素。",
-  "tags": ["Python/基础", "Python/元组"],
-  "statementMd": "在 Python 中，元组（tuple）创建后可以修改其中的元素。\n\n> 提示：判断题只需在 `answerJson.answer` 写 JSON 布尔值（`true` / `false`），解析写在 `solutions[].markdown`，会显示在题解区。\n",
+  "tags": [
+    "Python/基础",
+    "Python/元组"
+  ],
+  "statementMd": "在 Python 中，元组（tuple）创建后可以修改其中的元素。\n",
   "bodyJson": {},
-  "answerJson": { "answer": false },
+  "answerJson": {
+    "answer": false
+  },
   "solutions": [
     {
       "language": "python",

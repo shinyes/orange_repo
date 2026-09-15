@@ -2,8 +2,11 @@
   "uuid": "0199a1f0-0001-7000-8000-000000000002",
   "type": "single_choice",
   "title": "关于 Python 列表，下列描述错误的是？",
-  "tags": ["Python/基础", "Python/列表"],
-  "statementMd": "关于 Python 中的列表 `list`，下列描述**错误**的是（　）\n\n> 提示：选项以数组下标 `answerIndex` 标记正确答案，选项文本**不要**自带 `A.` `B.` 前缀，界面会自动编号。\n",
+  "tags": [
+    "Python/基础",
+    "Python/列表"
+  ],
+  "statementMd": "关于 Python 中的列表 `list`，下列描述**错误**的是（　）\n",
   "bodyJson": {
     "options": [
       "列表是可变序列，可以原地修改元素",
@@ -12,7 +15,9 @@
       "列表可以嵌套，元素本身也可以是列表"
     ]
   },
-  "answerJson": { "answerIndex": 2 },
+  "answerJson": {
+    "answerIndex": 2
+  },
   "solutions": [
     {
       "language": "python",
