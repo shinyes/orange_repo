@@ -170,15 +170,19 @@ func (s *Server) ImportZipData(data []byte, mode, nameHint string, folderID, dom
 			return nil, fiber.NewError(fiber.StatusBadRequest, fmt.Sprintf("题目 %q: %v", payload.Title, err))
 		}
 		prob := model.Problem{
-			UUID:           payload.UUID,
-			DomainID:       domainID,
-			Type:           model.ProblemType(payload.Type),
-			Title:          payload.Title,
-			Tags:           payload.Tags,
-			StatementMD:    payload.StatementMD,
-			BodyJSON:       payload.BodyJSON,
-			AnswerJSON:     payload.AnswerJSON,
-			Solutions:      payload.Solutions,
+			UUID:        payload.UUID,
+			DomainID:    domainID,
+			Type:        model.ProblemType(payload.Type),
+			Title:       payload.Title,
+			Tags:        payload.Tags,
+			StatementMD: payload.StatementMD,
+			BodyJSON:    payload.BodyJSON,
+			AnswerJSON:  payload.AnswerJSON,
+			Solutions:   payload.Solutions,
+			// 初始代码必须一起落库：此前漏拷，导致 ZIP 导入的题目静默丢失 starterCpp/starterPy
+			//（payload 里有值，见上方构造；手工建题路径 problems.go 一直有拷）
+			StarterCpp:     payload.StarterCpp,
+			StarterPy:      payload.StarterPy,
 			TimeLimitMS:    payload.TimeLimitMS,
 			MemoryLimitMiB: payload.MemoryLimitMiB,
 		}

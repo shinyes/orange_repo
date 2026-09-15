@@ -1,0 +1,35 @@
+{
+  "uuid": "0199a1f0-0001-7000-8000-000000000001",
+  "type": "programming",
+  "title": "两数之和",
+  "tags": ["入门/顺序结构", "入门/输入输出"],
+  "statementMd": "给定两个整数 $a$ 与 $b$，输出它们的和。\n\n**数据范围**\n\n$1 \\le a, b \\le 10^9$，结果可能超过 32 位整数范围，请使用 64 位整数（C++ 用 `long long`，Python 无需处理）。\n\n![示意图](/api/uploads/example-sum.png)\n",
+  "bodyJson": {
+    "inputFormat": "一行两个整数 $a$ 与 $b$，用一个空格分隔。",
+    "outputFormat": "一行一个整数，表示 $a+b$。",
+    "samples": [
+      { "input": "1 2", "output": "3" }
+    ],
+    "testCases": [
+      { "input": "1 2", "output": "3" },
+      { "input": "1000000000 1000000000", "output": "2000000000" }
+    ]
+  },
+  "answerJson": {},
+  "solutions": [
+    {
+      "language": "cpp",
+      "code": "#include <iostream>\nint main() {\n    long long a, b;\n    std::cin >> a >> b;\n    std::cout << a + b << std::endl;\n    return 0;\n}\n",
+      "markdown": "直接读入两个数相加即可。注意用 `long long`，`int` 在 $10^9+10^9$ 时会溢出。"
+    },
+    {
+      "language": "python",
+      "code": "a, b = map(int, input().split())\nprint(a + b)\n",
+      "markdown": "Python 整数无溢出问题。"
+    }
+  ],
+  "starterCpp": "#include <iostream>\nusing namespace std;\n\nint main() {\n    // 在此作答\n    return 0;\n}\n",
+  "starterPy": "# 在此作答\n",
+  "timeLimitMs": 1000,
+  "memoryLimitMiB": 256
+}

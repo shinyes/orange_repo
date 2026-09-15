@@ -1,0 +1,11 @@
+{
+  "uuid": "0199a1f0-0001-7000-8000-0000000000a1",
+  "title": "第 1 周训练：输入输出与列表",
+  "description": "本周训练覆盖顺序结构与 Python 列表基础，先做热身，再进入巩固。",
+  "tags": ["训练计划", "第1周"],
+  "chapters": [
+    { "title": "热身", "orderNo": 1, "problemIds": [0] },
+    { "title": "巩固", "orderNo": 2, "problemIds": [1] },
+    { "title": "挑战（示例空章节）", "orderNo": 3, "problemIds": [] }
+  ]
+}

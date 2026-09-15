@@ -1,0 +1,23 @@
+{
+  "uuid": "0199a1f0-0001-7000-8000-000000000002",
+  "type": "single_choice",
+  "title": "关于 Python 列表，下列描述错误的是？",
+  "tags": ["Python/基础", "Python/列表"],
+  "statementMd": "关于 Python 中的列表 `list`，下列描述**错误**的是（　）\n\n> 提示：选项以数组下标 `answerIndex` 标记正确答案，选项文本**不要**自带 `A.` `B.` 前缀，界面会自动编号。\n",
+  "bodyJson": {
+    "options": [
+      "列表是可变序列，可以原地修改元素",
+      "列表支持通过下标访问，下标从 0 开始",
+      "列表的长度一旦创建就不能改变",
+      "列表可以嵌套，元素本身也可以是列表"
+    ]
+  },
+  "answerJson": { "answerIndex": 2 },
+  "solutions": [
+    {
+      "language": "python",
+      "code": "lst = [1, 2, 3]\nlst.append(4)      # 长度变为 4\nlst.pop()          # 长度回到 3\nprint(len(lst))    # 3\n",
+      "markdown": "列表是**可变**序列，`append` / `pop` / `insert` 等都会改变长度，因此「长度不能改变」的说法错误。"
+    }
+  ]
+}
